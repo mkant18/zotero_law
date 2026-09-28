@@ -618,3 +618,245 @@ describe("wlSvcReadEnvelope - no token in result", function() {
     assert.equal(str.indexOf("TEST-PEI-0001"), -1);
   });
 });
+
+
+// Results come from a vm context (different realm); compare plain copies.
+function plain(v) { return JSON.parse(JSON.stringify(v)); }
+
+// ---- expect map on requests ----
+
+describe("wlSvcBuildRequests - expect map", function() {
+  var config = { guid: GUID, relatedInfoHost: HOST };
+
+  it("A expect mirrors the options in its URL", function() {
+    var reqs = wlSvcBuildRequests(config, SECRETS, "standard");
+    assert.deepEqual(plain(reqs[0].expect), {
+      history: "true",
+      parallelCiteRule: "westReporterOnly",
+      subStyle: "LegalBriefs",
+      underline: "false",
+      bold: "false",
+      italicize: "false"
+    });
+  });
+
+  it("B expect mirrors the options in its URL", function() {
+    var reqs = wlSvcBuildRequests(config, SECRETS, "standard");
+    assert.equal(reqs[1].expect.history, "false");
+    assert.equal(reqs[1].expect.parallelCiteRule, "allReporter");
+  });
+
+  it("every expect entry appears as key=value in the URL", function() {
+    var reqs = wlSvcBuildRequests(config, SECRETS, "texas");
+    reqs.forEach(function(r) {
+      Object.keys(r.expect).forEach(function(k) {
+        assert.ok(r.url.indexOf("&" + k + "=" + r.expect[k]) !== -1, k);
+      });
+    });
+  });
+
+  it("expect maps are independent objects per request", function() {
+    var reqs = wlSvcBuildRequests(config, SECRETS, "standard");
+    assert.notEqual(reqs[0].expect, reqs[1].expect);
+  });
+});
+
+// ---- echo checks and robustness ----
+
+function makeStdEnvelope(request, forms) {
+  return {
+    responses: [
+      {
+        request: request,
+        forms: forms || [{ name: "long", text: { "text/plain": "Long TEST text" } }]
+      }
+    ]
+  };
+}
+
+var ECHO_EXPECT = {
+  history: "true",
+  parallelCiteRule: "westReporterOnly",
+  subStyle: "LegalBriefs",
+  underline: "false",
+  bold: "false",
+  italicize: "false"
+};
+
+describe("wlSvcReadEnvelope - echo checks", function() {
+  it("matching echo → ok and style returned", function() {
+    var json = makeStdEnvelope({
+      styleId: "standard", history: "true", parallelCiteRule: "westReporterOnly", subStyle: "LegalBriefs",
+      underline: "false", bold: "false", italicize: "false"
+    });
+    var result = wlSvcReadEnvelope(json, ["standard"], ECHO_EXPECT);
+    assert.equal(result.ok, true);
+    assert.equal(result.styles.standard.long, "Long TEST text");
+  });
+
+  it("mismatched parallelCiteRule → echo-mismatch reason, style omitted, no missing-style duplicate", function() {
+    var json = makeStdEnvelope({ styleId: "standard", parallelCiteRule: "TEST-OTHER-RULE" });
+    var result = wlSvcReadEnvelope(json, ["standard"], ECHO_EXPECT);
+    assert.equal(result.ok, false);
+    assert.deepEqual(plain(result.reviewReasons), ["echo-mismatch:standard:parallelCiteRule"]);
+    assert.equal(result.styles.standard, undefined);
+  });
+
+  it("reasons never contain option values", function() {
+    var json = makeStdEnvelope({ styleId: "standard", parallelCiteRule: "TEST-OTHER-RULE", history: "TEST-HIST" });
+    var result = wlSvcReadEnvelope(json, ["standard"], ECHO_EXPECT);
+    var str = JSON.stringify(result);
+    assert.equal(str.indexOf("TEST-OTHER-RULE"), -1);
+    assert.equal(str.indexOf("TEST-HIST"), -1);
+    assert.equal(str.indexOf("westReporterOnly"), -1);
+  });
+
+  it("mismatch on one wanted style keeps the other style usable", function() {
+    var json = {
+      responses: [
+        { request: { styleId: "texas", history: "false" }, forms: [{ name: "long", text: { "text/plain": "Texas TEST" } }] },
+        { request: { styleId: "standard", history: "true" }, forms: [{ name: "long", text: { "text/plain": "Std TEST" } }] }
+      ]
+    };
+    var result = wlSvcReadEnvelope(json, ["texas", "standard"], ECHO_EXPECT);
+    assert.equal(result.ok, false);
+    assert.deepEqual(plain(result.reviewReasons), ["echo-mismatch:texas:history"]);
+    assert.equal(result.styles.texas, undefined);
+    assert.equal(result.styles.standard.long, "Std TEST");
+  });
+
+  it("boolean echo equals string expectation (true/'true', false/'false', case-insensitive)", function() {
+    var json = makeStdEnvelope({ styleId: "standard", history: true, underline: false, bold: "FALSE" });
+    var result = wlSvcReadEnvelope(json, ["standard"], ECHO_EXPECT);
+    assert.equal(result.ok, true);
+    assert.ok(result.styles.standard);
+  });
+
+  it("boolean echo that contradicts the expectation is a mismatch", function() {
+    var json = makeStdEnvelope({ styleId: "standard", history: false });
+    var result = wlSvcReadEnvelope(json, ["standard"], ECHO_EXPECT);
+    assert.deepEqual(plain(result.reviewReasons), ["echo-mismatch:standard:history"]);
+  });
+
+  it("absent echo keys are not a failure", function() {
+    var json = makeStdEnvelope({ styleId: "standard" });
+    var result = wlSvcReadEnvelope(json, ["standard"], ECHO_EXPECT);
+    assert.equal(result.ok, true);
+    assert.equal(result.styles.standard.long, "Long TEST text");
+  });
+
+  it("null echoed value is treated as absent", function() {
+    var json = makeStdEnvelope({ styleId: "standard", parallelCiteRule: null });
+    var result = wlSvcReadEnvelope(json, ["standard"], ECHO_EXPECT);
+    assert.equal(result.ok, true);
+  });
+
+  it("echoed keys not in expect are ignored", function() {
+    var json = makeStdEnvelope({ styleId: "standard", somethingElse: "x" });
+    var result = wlSvcReadEnvelope(json, ["standard"], ECHO_EXPECT);
+    assert.equal(result.ok, true);
+  });
+
+  it("backward compatible: 2-arg call ignores echoed options", function() {
+    var json = makeStdEnvelope({ styleId: "standard", parallelCiteRule: "TEST-OTHER-RULE" });
+    var result = wlSvcReadEnvelope(json, ["standard"]);
+    assert.equal(result.ok, true);
+    assert.equal(result.styles.standard.long, "Long TEST text");
+  });
+
+  it("request expect from wlSvcBuildRequests round-trips through the reader", function() {
+    var reqs = wlSvcBuildRequests({ guid: GUID, relatedInfoHost: HOST }, SECRETS, "standard");
+    var echoed = Object.assign({ styleId: "standard" }, reqs[0].expect);
+    var result = wlSvcReadEnvelope(makeStdEnvelope(echoed), reqs[0].styleIds, reqs[0].expect);
+    assert.equal(result.ok, true);
+    echoed.parallelCiteRule = "allReporter";
+    result = wlSvcReadEnvelope(makeStdEnvelope(echoed), reqs[0].styleIds, reqs[0].expect);
+    assert.deepEqual(plain(result.reviewReasons), ["echo-mismatch:standard:parallelCiteRule"]);
+  });
+});
+
+describe("wlSvcReadEnvelope - malformed input never throws", function() {
+  [null, undefined, "TEST-STRING", 42, [], true].forEach(function(bad) {
+    it("json = " + JSON.stringify(bad) + " → malformed-envelope", function() {
+      var result = wlSvcReadEnvelope(bad, ["standard"], ECHO_EXPECT);
+      assert.equal(result.ok, false);
+      assert.deepEqual(plain(result.reviewReasons), ["malformed-envelope"]);
+      assert.deepEqual(plain(result.styles), {});
+    });
+  });
+
+  it("responses missing → malformed-envelope", function() {
+    var result = wlSvcReadEnvelope({}, ["standard"]);
+    assert.equal(result.ok, false);
+    assert.deepEqual(plain(result.reviewReasons), ["malformed-envelope"]);
+  });
+
+  it("responses not an array → malformed-envelope", function() {
+    var result = wlSvcReadEnvelope({ responses: { request: { styleId: "standard" } } }, ["standard"]);
+    assert.equal(result.ok, false);
+    assert.deepEqual(plain(result.reviewReasons), ["malformed-envelope"]);
+  });
+
+  it("non-object response entries → malformed-envelope plus missing-style", function() {
+    var result = wlSvcReadEnvelope({ responses: [null, 5, "x"] }, ["standard"]);
+    assert.equal(result.ok, false);
+    assert.ok(result.reviewReasons.indexOf("malformed-envelope") !== -1);
+    assert.ok(result.reviewReasons.indexOf("missing-style:standard") !== -1);
+  });
+
+  it("request not an object → response skipped, wanted style missing", function() {
+    var result = wlSvcReadEnvelope({ responses: [{ request: "standard", forms: [] }] }, ["standard"]);
+    assert.equal(result.ok, false);
+    assert.deepEqual(plain(result.reviewReasons), ["missing-style:standard"]);
+  });
+
+  it("forms not an array → missing-form long", function() {
+    var json = { responses: [{ request: { styleId: "standard" }, forms: "TEST-NOT-ARRAY" }] };
+    var result = wlSvcReadEnvelope(json, ["standard"]);
+    assert.equal(result.ok, false);
+    assert.deepEqual(plain(result.reviewReasons), ["missing-form:standard:long"]);
+  });
+
+  it("malformed form entries and missing form.text do not throw", function() {
+    var json = makeStdEnvelope({ styleId: "standard" }, [
+      null,
+      "TEST-STRING",
+      { name: "short" },
+      { name: "short", text: "TEST-NOT-OBJECT" },
+      { name: "short", text: { "text/plain": 7 } },
+      { name: "long", text: { "text/plain": "Long TEST text" } }
+    ]);
+    var result = wlSvcReadEnvelope(json, ["standard"]);
+    assert.equal(result.ok, false);
+    assert.deepEqual(plain(result.reviewReasons), ["malformed-envelope"]);
+    assert.equal(result.styles.standard.long, "Long TEST text");
+    assert.deepEqual(plain(result.styles.standard.shorts), ["", "", ""]);
+  });
+
+  it("long form with no text → missing-form long", function() {
+    var json = makeStdEnvelope({ styleId: "standard" }, [{ name: "long" }]);
+    var result = wlSvcReadEnvelope(json, ["standard"]);
+    assert.equal(result.ok, false);
+    assert.deepEqual(plain(result.reviewReasons), ["missing-form:standard:long"]);
+    assert.equal(result.styles.standard.long, null);
+  });
+
+  it("no long form for selected style → missing-form:<id>:long", function() {
+    var json = makeStdEnvelope({ styleId: "standard" }, [{ name: "short", text: { "text/plain": "Short TEST" } }]);
+    var result = wlSvcReadEnvelope(json, ["standard"]);
+    assert.equal(result.ok, false);
+    assert.deepEqual(plain(result.reviewReasons), ["missing-form:standard:long"]);
+  });
+
+  it("enhanced-only style (westlaw inventory) is not flagged", function() {
+    var json = makeStdEnvelope({ styleId: "westlaw" }, [{ name: "enhanced", text: { "text/plain": "Enhanced TEST" } }]);
+    var result = wlSvcReadEnvelope(json, ["westlaw"]);
+    assert.equal(result.ok, true);
+    assert.equal(result.styles.westlaw.enhanced, "Enhanced TEST");
+  });
+
+  it("non-array wantedStyleIds → malformed-envelope", function() {
+    var result = wlSvcReadEnvelope(makeStdEnvelope({ styleId: "standard" }), "standard");
+    assert.deepEqual(plain(result.reviewReasons), ["malformed-envelope"]);
+  });
+});

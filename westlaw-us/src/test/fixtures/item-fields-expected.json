@@ -1,0 +1,123 @@
+{
+  "_note": "Hand-built from reports/20-ASTRA-ARCHITECTURE.md section 5 (field contract) and section 11 golden targets G1/G2/G4/G5/G7, applied to the synthetic inputs in golden-inputs.mjs. Not generated from mapper output. 'extra' is listed as its individual lines (the mapper emits them joined by \\n). Version string is the explicit test option passed to wlMapToZoteroFields.",
+  "G1": {
+    "itemType": "case",
+    "caseName": "Sanchez v. Liggett & Myers, Inc.",
+    "court": "5th Cir.",
+    "dateDecided": "1999-08-25",
+    "docketNumber": "No. 98-40679",
+    "reporter": "F.3d",
+    "reporterVolume": "187",
+    "firstPage": "486",
+    "history": "",
+    "shortTitle": "Sanchez",
+    "url": "https://1.next.westlaw.com/Document/I1234567890abcdef1234567890abcdef/View/FullText.html",
+    "extra": [
+      "Westlaw alternate WL citation: 1999 WL 652310",
+      "Westlaw court (raw): United States Court of Appeals, Fifth Circuit.",
+      "Westlaw profile: standard",
+      "Westlaw status: validated-profile",
+      "Westlaw translator: 0.0.0-test"
+    ],
+    "tags": [],
+    "creators": [],
+    "attachments": [],
+    "notes": []
+  },
+  "G2": {
+    "itemType": "case",
+    "caseName": "United States v. Philip Morris USA, Inc.",
+    "court": "D.D.C.",
+    "dateDecided": "2006-06-01",
+    "docketNumber": "",
+    "reporter": "F. Supp. 2d",
+    "reporterVolume": "449",
+    "firstPage": "1",
+    "history": "aff'd in part, vacated in part, 566 F.3d 1095 (D.C. Cir. 2009)",
+    "shortTitle": "Philip Morris USA, Inc.",
+    "url": "https://1.next.westlaw.com/Document/I22222222222222222222222222222222/View/FullText.html",
+    "extra": [
+      "Westlaw court (raw): United States District Court for the District of Columbia.",
+      "Westlaw profile: standard",
+      "Westlaw status: validated-profile",
+      "Westlaw translator: 0.0.0-test"
+    ],
+    "tags": [],
+    "creators": [],
+    "attachments": [],
+    "notes": []
+  },
+  "G4": {
+    "itemType": "case",
+    "caseName": "Miele v. Am. Tobacco Co.",
+    "court": "App. Div.",
+    "dateDecided": "2003-06-15",
+    "docketNumber": "",
+    "reporter": "N.Y.S.2d",
+    "reporterVolume": "770",
+    "firstPage": "386",
+    "history": "",
+    "shortTitle": "Miele",
+    "url": "https://1.next.westlaw.com/Document/Iabcdef1234567890abcdef1234567890/View/FullText.html",
+    "extra": [
+      "Westlaw parallel citation: 2 A.D.3d 799",
+      "Westlaw alternate WL citation: 2003 WL 23099090",
+      "Westlaw court (raw): Supreme Court of New York, Appellate Division.",
+      "Westlaw profile: standard",
+      "Westlaw status: validated-profile",
+      "Westlaw translator: 0.0.0-test"
+    ],
+    "tags": [],
+    "creators": [],
+    "attachments": [],
+    "notes": []
+  },
+  "G5": {
+    "itemType": "case",
+    "caseName": "Rogers v. R.J. Reynolds Tobacco Co.",
+    "court": "Tex. App.\u2014Beaumont",
+    "dateDecided": "1988-10-06",
+    "docketNumber": "No. 09-87-120 CV",
+    "reporter": "S.W.2d",
+    "reporterVolume": "761",
+    "firstPage": "788",
+    "history": "disapproved of by Triplex Commc'ns, Inc. v. Riley, 900 S.W.2d 716 (Tex. 1995)",
+    "shortTitle": "Rogers",
+    "url": "https://1.next.westlaw.com/Document/I55555555555555555555555555555555/View/FullText.html",
+    "extra": [
+      "Genre: writ denied",
+      "Westlaw court (raw): Court of Appeals of Texas, Beaumont.",
+      "Westlaw profile: texas",
+      "Westlaw status: validated-profile",
+      "Westlaw translator: 0.0.0-test"
+    ],
+    "tags": [],
+    "creators": [],
+    "attachments": [],
+    "notes": []
+  },
+  "G7": {
+    "itemType": "case",
+    "caseName": "Example v. Sample",
+    "court": "D. Kan.",
+    "dateDecided": "2024-03-01",
+    "docketNumber": "No. 24-123",
+    "reporter": "WL",
+    "reporterVolume": "2024",
+    "firstPage": "1234567",
+    "history": "",
+    "shortTitle": "Example",
+    "url": "https://1.next.westlaw.com/Document/I77777777777777777777777777777777/View/FullText.html",
+    "extra": [
+      "Medium: Westlaw",
+      "Westlaw court (raw): United States District Court for the District of Kansas.",
+      "Westlaw profile: standard",
+      "Westlaw status: validated-profile",
+      "Westlaw translator: 0.0.0-test"
+    ],
+    "tags": [],
+    "creators": [],
+    "attachments": [],
+    "notes": []
+  }
+}

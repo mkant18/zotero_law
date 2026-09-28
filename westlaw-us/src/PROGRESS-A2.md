@@ -25,3 +25,12 @@
 - Added 3 regression tests: D1 unparsed segment, D2 party-name No. not treated as docket, D2 docket stripped from name
 - Status: 39/39 pass
 - Combined with text + reporters: 105/105 pass
+
+## Step 6: R4 round-trip fix (task W1)
+- Defect: `wlCiteRoundTrip` dropped dockets and the full parenthetical date for WL forms (false `round-trip-mismatch` on G7); pin was always recomposed as `, at <pin>` even for bare pins (`486, 490`) and mid-run pins.
+- `wlCiteParseParentheticalStandard`: `dateText` is now the full date token (`Mar. 1, 2024`) instead of the month only.
+- `wlCiteParseStandardForm` / `wlCiteParseTexasForm`: new ParsedLongForm fields `dateText` (string|null; full date token when the parenthetical carries one), `pinAfter` (index of the citation the pinpoint follows, null if no pin), `pinAt` (true when the pin was written `at <pin>`). `date`, `year`, `pin`, `dockets` unchanged.
+- New helper `wlCitePeelDockets` (shared by standard + texas): `Nos. 1-2, 3-4` -> `["Nos. 1-2", "3-4"]`; bare numbers only count as dockets after a `No./Nos.` segment.
+- `wlCiteRoundTrip` recomposes: name + dockets + citations (pin at its original position) + `(court dateText|year[, suffix])` + `, history`; still exact equality against `wlTextClean(original)`.
+- Tests: 10 new in `test/cite-parse.test.mjs` (R4-1..R4-4c, multi-docket, party-name bare numbers, 2 negatives). cite-parse 49/49.
+- Status: complete

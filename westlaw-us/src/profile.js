@@ -36,7 +36,7 @@ var wlProfT10 = {
   "north dakota": "N.D.",
   "ohio": "Ohio",
   "oklahoma": "Okla.",
-  "oregon": "Ore.",
+  "oregon": "Or.",
   "pennsylvania": "Pa.",
   "puerto rico": "P.R.",
   "rhode island": "R.I.",
@@ -160,14 +160,16 @@ var wlProfIntermediateAppellateMap = {
   "michigan": "Mich. Ct. App.",
   "ohio": "Ohio Ct. App.",
   "arizona": "Ariz. Ct. App.",
-  "colorado": "Colo. Ct. App.",
+  "colorado": "Colo. App.",
   "iowa": "Iowa Ct. App.",
   "kansas": "Kan. Ct. App.",
+  // Open question: the Court of Appeals of Kentucky was the state's highest court before 1976; classification
+  // has no decision date, so this line is always mapped as intermediate (Ky. Ct. App.).
   "kentucky": "Ky. Ct. App.",
   "minnesota": "Minn. Ct. App.",
   "north carolina": "N.C. Ct. App.",
   "new mexico": "N.M. Ct. App.",
-  "oregon": "Ore. Ct. App.",
+  "oregon": "Or. Ct. App.",
   "south carolina": "S.C. Ct. App.",
   "tennessee": "Tenn. Ct. App.",
   "utah": "Utah Ct. App.",
@@ -438,8 +440,9 @@ var wlProfCourtTable = [
     res: { system: "state", level: "supreme", state: "MD", circuit: null, district: null, bluebook: "Md.", confidence: "table" }
   },
   {
+    // Maryland's highest court until the December 2022 rename to the Supreme Court of Maryland.
     re: /^court of appeals of maryland$/,
-    res: { system: "state", level: "intermediate", state: "MD", circuit: null, district: null, bluebook: "Md.", confidence: "table" }
+    res: { system: "state", level: "supreme", state: "MD", circuit: null, district: null, bluebook: "Md.", confidence: "table" }
   },
   {
     re: /^appellate court of maryland$/,
@@ -448,6 +451,14 @@ var wlProfCourtTable = [
   {
     re: /^court of appeals of new york$/,
     res: { system: "state", level: "supreme", state: "NY", circuit: null, district: null, bluebook: "N.Y.", confidence: "table" }
+  },
+  {
+    re: /^supreme court of appeals of west virginia$/,
+    res: { system: "state", level: "supreme", state: "WV", circuit: null, district: null, bluebook: "W. Va.", confidence: "table" }
+  },
+  {
+    re: /^district of columbia court of appeals$/,
+    res: { system: "state", level: "supreme", state: "DC", circuit: null, district: null, bluebook: "D.C.", confidence: "table" }
   },
   {
     re: /^court of criminal appeals of texas$/,
@@ -478,13 +489,76 @@ var wlProfCourtTable = [
     res: { system: "state", level: "intermediate", state: "IL", circuit: null, district: null, bluebook: "Ill. App. Ct.", confidence: "table" }
   },
   {
-    re: /^court of appeals of (georgia|michigan|ohio|arizona|colorado|iowa|kansas|kentucky|minnesota|north carolina|new mexico|oregon|south carolina|tennessee|utah|washington|wisconsin|missouri|indiana|nebraska)(?:,\s*\d+(?:st|nd|rd|th)?\s+district)?$/,
+    re: /^court of appeals of (georgia|michigan|colorado|iowa|kansas|kentucky|minnesota|north carolina|new mexico|oregon|south carolina|utah|wisconsin|indiana|nebraska)(?:,\s*\d+(?:st|nd|rd|th)?\s+district)?$/,
     res: function(m) {
       var stateName = m[1].toLowerCase();
       var bluebook = wlProfIntermediateAppellateMap[stateName] || null;
       var state = bluebook ? (wlProfStateCodes[stateName] || null) : null;
       return { system: "state", level: "intermediate", state: state, circuit: null, district: null, bluebook: bluebook, confidence: "table" };
     }
+  },
+  // State court lines added for the court-table backlog. Every pattern is full-match; a trailing
+  // district/division/county qualifier is accepted only where written out in that pattern. The qualifier
+  // is not carried into the abbreviation (same convention as Ill. App. Ct. and Cal. Ct. App.).
+  {
+    re: /^supreme court of pennsylvania(?:,\s*(?:eastern|middle|western)\s+district)?$/,
+    res: { system: "state", level: "supreme", state: "PA", circuit: null, district: null, bluebook: "Pa.", confidence: "table" }
+  },
+  {
+    re: /^superior court of pennsylvania$/,
+    res: { system: "state", level: "intermediate", state: "PA", circuit: null, district: null, bluebook: "Pa. Super. Ct.", confidence: "table" }
+  },
+  {
+    re: /^commonwealth court of pennsylvania$/,
+    res: { system: "state", level: "intermediate", state: "PA", circuit: null, district: null, bluebook: "Pa. Commw. Ct.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of ohio(?:,\s*(?:1st|2nd|3rd|[4-9]th|1[0-2]th|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth)\s+district(?:,\s*[a-z]+(?:\s+[a-z]+)?\s+county)?)?$/,
+    res: { system: "state", level: "intermediate", state: "OH", circuit: null, district: null, bluebook: "Ohio Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^district court of appeal of florida(?:,\s*(?:1st|2nd|3rd|[4-6]th|first|second|third|fourth|fifth|sixth)\s+district)?$/,
+    res: { system: "state", level: "intermediate", state: "FL", circuit: null, district: null, bluebook: "Fla. Dist. Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^superior court of new jersey, appellate division$/,
+    res: { system: "state", level: "intermediate", state: "NJ", circuit: null, district: null, bluebook: "N.J. Super. Ct. App. Div.", confidence: "table" }
+  },
+  {
+    re: /^court of appeal of louisiana(?:,\s*(?:1st|2nd|3rd|[4-5]th|first|second|third|fourth|fifth)\s+circuit)?$/,
+    res: { system: "state", level: "intermediate", state: "LA", circuit: null, district: null, bluebook: "La. Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of virginia$/,
+    res: { system: "state", level: "intermediate", state: "VA", circuit: null, district: null, bluebook: "Va. Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^court of special appeals of maryland$/,
+    res: { system: "state", level: "intermediate", state: "MD", circuit: null, district: null, bluebook: "Md. Ct. Spec. App.", confidence: "table" }
+  },
+  {
+    re: /^appellate court of connecticut$/,
+    res: { system: "state", level: "intermediate", state: "CT", circuit: null, district: null, bluebook: "Conn. App. Ct.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of tennessee(?:,\s*at\s+(?:nashville|knoxville|jackson))?$/,
+    res: { system: "state", level: "intermediate", state: "TN", circuit: null, district: null, bluebook: "Tenn. Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^court of criminal appeals of tennessee(?:,\s*at\s+(?:nashville|knoxville|jackson))?$/,
+    res: { system: "state", level: "intermediate", state: "TN", circuit: null, district: null, bluebook: "Tenn. Crim. App.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of missouri(?:,\s*(?:eastern|western|southern)\s+district)?$/,
+    res: { system: "state", level: "intermediate", state: "MO", circuit: null, district: null, bluebook: "Mo. Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of washington(?:,\s*division\s+(?:1|2|3|one|two|three))?$/,
+    res: { system: "state", level: "intermediate", state: "WA", circuit: null, district: null, bluebook: "Wash. Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of arizona(?:,\s*division\s+(?:1|2|one|two))?$/,
+    res: { system: "state", level: "intermediate", state: "AZ", circuit: null, district: null, bluebook: "Ariz. Ct. App.", confidence: "table" }
   },
   {
     re: /^united states bankruptcy court for the (.+)$/,

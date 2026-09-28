@@ -409,6 +409,156 @@ describe("translator - doWeb A 401 → metadata-only", function() {
   });
 });
 
+describe("translator - doWeb envelope echo mismatch", function() {
+  it("wrong echoed parallelCiteRule → review reason, metadata-only item from DOM facts, no throw", async function() {
+    var doc = makeSanchezDoc();
+    var mismatched = {
+      status: 200,
+      body: JSON.stringify({
+        responses: [
+          {
+            request: { styleId: "standard", parallelCiteRule: "TEST-WRONG-RULE" },
+            forms: [
+              { name: "long", text: { "text/plain": "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999)" } }
+            ]
+          }
+        ]
+      }),
+      headers: { "content-type": "application/json" }
+    };
+    var result = await runDoWeb(doc, mismatched);
+
+    var fz = result.fz;
+    assert.equal(fz.items.length, 1, "item still saved");
+    var item = fz.items[0];
+    assert.equal(item._completeCalled, true);
+    assert.equal(item.caseName, "Sanchez v. Liggett & Myers, Inc.", "case name from DOM header");
+    assert.equal(item.reporter, "F.3d", "citation from DOM facts");
+    assert.ok(item.extra.indexOf("echo-mismatch:standard:parallelCiteRule") !== -1, "review reason recorded");
+    assert.equal(item.extra.indexOf("TEST-WRONG-RULE"), -1, "option value never recorded");
+    assert.ok(item.tags.some(function(t) { return t.tag === "Westlaw: needs citation review"; }), "review tag");
+    assert.ok(fz.debugStrings.some(function(d) { return d.indexOf("A=echo-mismatch") !== -1 && d.indexOf("status=metadata-only") !== -1; }),
+      "debug shows bounded category and metadata-only status");
+  });
+});
+
+// ---- Non-echo envelope review reasons reach the saved item (W5) ----
+// B is registered first so its URL (which also contains styleIDs=standard) is routed to the B mock.
+async function runDoWebRouted(doc, mockA, mockB) {
+  var fz = makeFakeZotero();
+  var fzu = makeFakeZU();
+  var ctx = loadBuiltFile(fz, fzu);
+  if (mockB) fzu.setMockResponse("styleIDs=westlaw", mockB);
+  if (mockA) fzu.setMockResponse("styleIDs=standard", mockA);
+  await ctx.doWeb(doc, doc.location.href);
+  return { fz, fzu, ctx };
+}
+
+function jsonResponse(obj) {
+  return { status: 200, body: JSON.stringify(obj), headers: { "content-type": "application/json" } };
+}
+
+var W5_LONG = "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999)";
+var W5_ENHANCED = "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999), No. 98-40679, 1999 WL 652310";
+
+function w5StandardResponse() {
+  return {
+    request: { styleId: "standard" },
+    forms: [
+      { name: "long", text: { "text/plain": W5_LONG } },
+      { name: "short", text: { "text/plain": "Sanchez, 187 F.3d 486" } },
+      { name: "short", text: { "text/plain": "187 F.3d 486" } }
+    ]
+  };
+}
+
+function w5WestlawResponse() {
+  return { request: { styleId: "westlaw" }, forms: [{ name: "enhanced", text: { "text/plain": W5_ENHANCED } }] };
+}
+
+function w5ReviewLines(item) {
+  return item.extra.split("\n").filter(function(l) { return l.indexOf("Westlaw review: ") === 0; });
+}
+
+function w5HasReviewTag(item) {
+  return item.tags.some(function(t) { return t.tag === "Westlaw: needs citation review"; });
+}
+
+describe("translator - doWeb envelope review reasons (non-echo)", function() {
+  it("A responses not an array -> classified unexpected-envelope by the fetch layer, DOM item, needs-review tag, no throw", async function() {
+    var result = await runDoWebRouted(makeSanchezDoc(),
+      jsonResponse({ responses: "TEST-NOT-AN-ARRAY" }),
+      jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
+
+    assert.equal(result.fz.items.length, 1, "item still saved");
+    var item = result.fz.items[0];
+    assert.equal(item._completeCalled, true);
+    assert.equal(item.caseName, "Sanchez v. Liggett & Myers, Inc.", "case name from DOM header");
+    assert.equal(item.reporter, "F.3d", "citation from DOM facts");
+    assert.ok(w5ReviewLines(item).indexOf("Westlaw review: service-unexpected-envelope") !== -1);
+    assert.ok(item.extra.indexOf("Westlaw status: metadata-only") !== -1, "metadata-only");
+    assert.equal(item.extra.indexOf("TEST-NOT-AN-ARRAY"), -1, "response content never recorded");
+    assert.ok(w5HasReviewTag(item), "review tag");
+  });
+
+  it("A responses holds only a non-object entry -> malformed-envelope + missing-style:standard, DOM item, unverified, review tag", async function() {
+    var result = await runDoWebRouted(makeSanchezDoc(),
+      jsonResponse({ responses: ["TEST-JUNK-ENTRY"] }),
+      jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
+
+    assert.equal(result.fz.items.length, 1, "item still saved");
+    var item = result.fz.items[0];
+    assert.equal(item._completeCalled, true);
+    assert.equal(item.caseName, "Sanchez v. Liggett & Myers, Inc.", "case name from DOM header");
+    assert.equal(item.reporter, "F.3d", "citation from DOM facts");
+    var lines = w5ReviewLines(item);
+    assert.equal(lines.filter(function(l) { return l === "Westlaw review: malformed-envelope"; }).length, 1);
+    assert.ok(lines.indexOf("Westlaw review: missing-style:standard") !== -1, "primary style missing is recorded");
+    assert.ok(item.extra.indexOf("Westlaw status: validated-profile") === -1, "never validated");
+    assert.ok(item.extra.indexOf("Westlaw status: unverified-profile") !== -1);
+    assert.equal(item.extra.indexOf("TEST-JUNK-ENTRY"), -1, "response content never recorded");
+    assert.ok(w5HasReviewTag(item), "review tag");
+  });
+
+  it("B missing westlaw style -> missing-style:westlaw, primary data from A still used", async function() {
+    var result = await runDoWebRouted(makeSanchezDoc(),
+      jsonResponse({ responses: [w5StandardResponse()] }),
+      jsonResponse({ responses: [w5StandardResponse()] }));
+
+    var item = result.fz.items[0];
+    assert.equal(item.caseName, "Sanchez v. Liggett & Myers, Inc.");
+    assert.equal(item.shortTitle, "Sanchez", "short name comes from the A envelope");
+    assert.equal(item.reporter, "F.3d");
+    var lines = w5ReviewLines(item);
+    assert.deepEqual(lines, ["Westlaw review: missing-style:westlaw"], "only the missing B style is reported");
+    assert.ok(item.extra.indexOf("Westlaw status: validated-profile") === -1, "not validated");
+    assert.ok(w5HasReviewTag(item), "review tag");
+  });
+
+  it("duplicate style in an envelope -> duplicate-style reason recorded exactly once", async function() {
+    var result = await runDoWebRouted(makeSanchezDoc(),
+      jsonResponse({ responses: [w5StandardResponse(), w5StandardResponse(), w5StandardResponse()] }),
+      jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
+
+    var item = result.fz.items[0];
+    assert.equal(item.shortTitle, "Sanchez");
+    var lines = w5ReviewLines(item);
+    assert.deepEqual(lines, ["Westlaw review: duplicate-style:standard"], "recorded once despite two duplicates");
+    assert.ok(w5HasReviewTag(item), "review tag");
+  });
+
+  it("clean envelopes add no review reasons (regression)", async function() {
+    var result = await runDoWebRouted(makeSanchezDoc(),
+      jsonResponse({ responses: [w5StandardResponse()] }),
+      jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
+
+    var item = result.fz.items[0];
+    assert.deepEqual(w5ReviewLines(item), [], "no review lines");
+    assert.ok(item.extra.indexOf("Westlaw status: validated-profile") !== -1, "validated");
+    assert.equal(w5HasReviewTag(item), false, "no review tag");
+  });
+});
+
 describe("translator - doWeb GUID change → identity-changed", function() {
   it("handles identity-changed when GUID differs after requests", async function() {
     var doc = makeSanchezDoc({ guid: "I1234567890abcdef1234567890abcdef" });

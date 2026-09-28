@@ -19,7 +19,7 @@ function wlCiteParseParentheticalStandard(content) {
   var dm = content.match(wlCiteMonthRe);
   if (dm) {
     var dateStr = wlTextParseUSDate(dm[2] + ' ' + dm[3] + ', ' + dm[4]);
-    return { court: dm[1].trim().replace(/,$/, ''), year: dm[4], date: dateStr, dateText: dm[2], parentheticalSuffix: '' };
+    return { court: dm[1].trim().replace(/,$/, ''), year: dm[4], date: dateStr, dateText: content.substring(dm[1].length).trim(), parentheticalSuffix: '' };
   }
 
   // Try Texas form: <court> <year>, <status>
@@ -55,6 +55,38 @@ function wlCiteParseParentheticalTexas(content) {
     return { court: '', year: ym[1], date: null, dateText: null, parentheticalSuffix: '' };
   }
   return { court: '', year: '', date: null, dateText: null, parentheticalSuffix: '' };
+}
+
+// Peel trailing docket segments ("No. 24-123", or "Nos. 1-2, 3-4" as ["Nos. 1-2", "3-4"]) off the
+// text before the first citation anchor. Segments keep their original text. Bare numbers only count
+// as dockets when a "No./Nos." segment precedes them; otherwise they stay in the name.
+function wlCitePeelDockets(beforeAnchor) {
+  var rest = beforeAnchor.replace(/,\s*$/, '');
+  var docketRe = /^(Nos?\. [0-9A-Za-z][\w\-\/:. ]*)$/;
+  var bareDocketRe = /^[0-9][\w\-\/:.]*$/;
+  var dockets = [];
+  var pendingBare = [];
+  while (true) {
+    var lastComma = rest.lastIndexOf(', ');
+    if (lastComma === -1) break;
+    var lastSegment = rest.substring(lastComma + 2);
+    if (docketRe.test(lastSegment)) {
+      dockets = [lastSegment].concat(pendingBare, dockets);
+      pendingBare = [];
+      rest = rest.substring(0, lastComma);
+    } else if (bareDocketRe.test(lastSegment)) {
+      pendingBare.unshift(lastSegment);
+      rest = rest.substring(0, lastComma);
+    } else {
+      break;
+    }
+  }
+  if (pendingBare.length > 0) {
+    // Bare numbers with no preceding "No./Nos." segment belong to the name.
+    rest = rest + ', ' + pendingBare.join(', ');
+    pendingBare = [];
+  }
+  return { name: rest, dockets: dockets };
 }
 
 function wlCiteBuildCitation(anchor) {
@@ -119,6 +151,8 @@ function wlCiteParseStandardForm(text) {
   // Build main citation run: first anchor + every anchor separated by ", " or ", <pin>, "
   var mainRun = [anchors[0]];
   var pin = null;
+  var pinAfter = null;
+  var pinAt = false;
   var pinFound = false;
 
   for (var i = 1; i < anchors.length; i++) {
@@ -131,6 +165,8 @@ function wlCiteParseStandardForm(text) {
       var pinMatch = sep.match(/^,\s*(\*?\d+(?:-\d+)?)\s*,\s*$/);
       if (pinMatch) {
         pin = pinMatch[1];
+        pinAfter = i - 1;
+        pinAt = false;
         pinFound = true;
         mainRun.push(anchors[i]);
       } else {
@@ -149,24 +185,9 @@ function wlCiteParseStandardForm(text) {
   var nameEnd = mainRun[0].index;
   var beforeName = cleaned.substring(0, nameEnd);
   // Strip trailing separator before first anchor, then peel off dockets from the end
-  var nameCandidates = beforeName.replace(/,\s*$/, '');
-  var dockets = [];
-  var docketRe = /^(Nos?\. [0-9A-Za-z][\w\-\/:. ]*)$/;
-  var changed = true;
-  while (changed) {
-    changed = false;
-    var lastComma = nameCandidates.lastIndexOf(', ');
-    if (lastComma === -1) break;
-    var lastSegment = nameCandidates.substring(lastComma + 2);
-    if (docketRe.test(lastSegment)) {
-      dockets.unshift(lastSegment);
-      nameCandidates = nameCandidates.substring(0, lastComma);
-      changed = true;
-    } else {
-      break;
-    }
-  }
-  var name = nameCandidates;
+  var peeled = wlCitePeelDockets(beforeName);
+  var dockets = peeled.dockets;
+  var name = peeled.name;
 
   // Find main parenthetical: first balanced ( … ) immediately after the main run
   var runEnd = mainRun[mainRun.length - 1].index + mainRun[mainRun.length - 1].length;
@@ -187,6 +208,8 @@ function wlCiteParseStandardForm(text) {
       var pinAfterMatch = textToParen.match(/(?:,\s*|at\s+)(\*\d+(?:-\d+)?|\d+(?:-\d+)?)(?=\s*(?:,|\(|$))/);
       if (pinAfterMatch) {
         pin = pinAfterMatch[1];
+        pinAfter = mainRun.length - 1;
+        pinAt = pinAfterMatch[0].charAt(0) === 'a';
       } else {
         // No valid pin found. Check for an unparsed citation segment between the last citation and the parenthetical.
         var unparsedMatch = textToParen.match(/^(?:,\s*|at\s+)(.+)$/);
@@ -249,9 +272,12 @@ function wlCiteParseStandardForm(text) {
     dockets: dockets,
     citations: citations,
     pin: pin,
+    pinAfter: pinAfter,
+    pinAt: pinAt,
     court: parenParsed.court,
     year: parenParsed.year,
     date: parenParsed.date,
+    dateText: parenParsed.dateText,
     parentheticalSuffix: parenParsed.parentheticalSuffix,
     history: history,
     unparsedTail: "",
@@ -269,6 +295,8 @@ function wlCiteParseTexasForm(text) {
   // Build main citation run
   var mainRun = [anchors[0]];
   var pin = null;
+  var pinAfter = null;
+  var pinAt = false;
   var pinFound = false;
 
   for (var i = 1; i < anchors.length; i++) {
@@ -281,6 +309,8 @@ function wlCiteParseTexasForm(text) {
       var pinMatch = sep.match(/^,\s*(\*?\d+(?:-\d+)?)\s*,\s*$/);
       if (pinMatch) {
         pin = pinMatch[1];
+        pinAfter = i - 1;
+        pinAt = false;
         pinFound = true;
         mainRun.push(anchors[i]);
       } else {
@@ -295,24 +325,9 @@ function wlCiteParseTexasForm(text) {
   // Also strip any docket region from the end of the name (same logic as standard form).
   var nameEnd = mainRun[0].index;
   var beforeName = cleaned.substring(0, nameEnd);
-  var nameCandidates = beforeName.replace(/,\s*$/, '');
-  var dockets = [];
-  var docketRe = /^(Nos?\. [0-9A-Za-z][\w\-\/:. ]*)$/;
-  var changed = true;
-  while (changed) {
-    changed = false;
-    var lastComma = nameCandidates.lastIndexOf(', ');
-    if (lastComma === -1) break;
-    var lastSegment = nameCandidates.substring(lastComma + 2);
-    if (docketRe.test(lastSegment)) {
-      dockets.unshift(lastSegment);
-      nameCandidates = nameCandidates.substring(0, lastComma);
-      changed = true;
-    } else {
-      break;
-    }
-  }
-  var name = nameCandidates;
+  var peeled = wlCitePeelDockets(beforeName);
+  var dockets = peeled.dockets;
+  var name = peeled.name;
 
   // Find main parenthetical
   var runEnd = mainRun[mainRun.length - 1].index + mainRun[mainRun.length - 1].length;
@@ -351,9 +366,12 @@ function wlCiteParseTexasForm(text) {
     dockets: dockets,
     citations: citations,
     pin: pin,
+    pinAfter: pinAfter,
+    pinAt: pinAt,
     court: parenParsed.court,
     year: parenParsed.year,
     date: parenParsed.date,
+    dateText: parenParsed.dateText,
     parentheticalSuffix: parenParsed.parentheticalSuffix,
     history: history,
     unparsedTail: "",
@@ -557,13 +575,20 @@ function wlCiteSelectShortName(forms, primary) {
 function wlCiteRoundTrip(parsed, originalText) {
   if (!parsed || !parsed.ok) return { ok: false, residual: "parsed not ok" };
 
-  // Recompose: name, <citations joined ", "> [, at *pin] (<court> <year>[, suffix])[, history]
+  // Recompose: name[, dockets], citations (pin placed where the parser found it) (<court> <dateText|year>[, suffix])[, history]
   var recomposed = '';
 
   // Name
   if (parsed.name) recomposed = parsed.name;
 
-  // Citations
+  // Dockets (raw tokens, original text)
+  if (parsed.dockets && parsed.dockets.length > 0) {
+    recomposed += ', ' + parsed.dockets.join(", ");
+  }
+
+  // Citations, with the pinpoint at its original position ("490" or "at *4")
+  var pinToken = parsed.pin ? ((parsed.pinAt ? 'at ' : '') + parsed.pin) : '';
+  var pinPlaced = !parsed.pin;
   if (parsed.citations && parsed.citations.length > 0) {
     var citeStrs = [];
     for (var i = 0; i < parsed.citations.length; i++) {
@@ -575,17 +600,20 @@ function wlCiteRoundTrip(parsed, originalText) {
       } else {
         citeStrs.push(c.volume + " " + c.reporter + " " + c.page);
       }
+      if (!pinPlaced && parsed.pinAfter === i) {
+        citeStrs.push(pinToken);
+        pinPlaced = true;
+      }
     }
     recomposed += ', ' + citeStrs.join(", ");
   }
+  if (!pinPlaced) recomposed += ', at ' + parsed.pin;
 
-  // Pin (locator)
-  if (parsed.pin) recomposed += ', at ' + parsed.pin;
-
-  // Parenthetical
+  // Parenthetical: court + full date text (WL/enhanced forms) or year, then optional suffix
   var parenParts = [];
   if (parsed.court) parenParts.push(parsed.court.replace(/,$/, ''));
-  if (parsed.year) parenParts.push(parsed.year);
+  var dateToken = parsed.dateText || parsed.year;
+  if (dateToken) parenParts.push(dateToken);
   if (parsed.parentheticalSuffix) parenParts.push(parsed.parentheticalSuffix);
   if (parenParts.length > 0) {
     // Texas form: (court year, suffix) - comma only before suffix
