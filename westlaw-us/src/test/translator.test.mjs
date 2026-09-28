@@ -205,8 +205,10 @@ async function runDoWeb(doc, mockA, mockB) {
   var fzu = makeFakeZU();
   var ctx = loadBuiltFile(fz, fzu);
 
-  if (mockA) fzu.setMockResponse("standard", mockA);
-  if (mockB) fzu.setMockResponse("westlaw", mockB);
+  // Route by the styleID query parameter. B's URL (styleIDs=westlaw) also contains "standard", so B is
+  // registered first: the mock matcher returns the first registered key found in the URL.
+  if (mockB) fzu.setMockResponse("styleIDs=westlaw", mockB);
+  if (mockA) fzu.setMockResponse("styleIDs=standard", mockA);
 
   await ctx.doWeb(doc, doc.location.href);
 
@@ -442,18 +444,7 @@ describe("translator - doWeb envelope echo mismatch", function() {
   });
 });
 
-// ---- Non-echo envelope review reasons reach the saved item (W5) ----
-// B is registered first so its URL (which also contains styleIDs=standard) is routed to the B mock.
-async function runDoWebRouted(doc, mockA, mockB) {
-  var fz = makeFakeZotero();
-  var fzu = makeFakeZU();
-  var ctx = loadBuiltFile(fz, fzu);
-  if (mockB) fzu.setMockResponse("styleIDs=westlaw", mockB);
-  if (mockA) fzu.setMockResponse("styleIDs=standard", mockA);
-  await ctx.doWeb(doc, doc.location.href);
-  return { fz, fzu, ctx };
-}
-
+// ---- Non-echo envelope review reasons reach the saved item (W5); uses the shared routed runDoWeb helper ----
 function jsonResponse(obj) {
   return { status: 200, body: JSON.stringify(obj), headers: { "content-type": "application/json" } };
 }
@@ -486,7 +477,7 @@ function w5HasReviewTag(item) {
 
 describe("translator - doWeb envelope review reasons (non-echo)", function() {
   it("A responses not an array -> classified unexpected-envelope by the fetch layer, DOM item, needs-review tag, no throw", async function() {
-    var result = await runDoWebRouted(makeSanchezDoc(),
+    var result = await runDoWeb(makeSanchezDoc(),
       jsonResponse({ responses: "TEST-NOT-AN-ARRAY" }),
       jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
 
@@ -502,7 +493,7 @@ describe("translator - doWeb envelope review reasons (non-echo)", function() {
   });
 
   it("A responses holds only a non-object entry -> malformed-envelope + missing-style:standard, DOM item, unverified, review tag", async function() {
-    var result = await runDoWebRouted(makeSanchezDoc(),
+    var result = await runDoWeb(makeSanchezDoc(),
       jsonResponse({ responses: ["TEST-JUNK-ENTRY"] }),
       jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
 
@@ -521,7 +512,7 @@ describe("translator - doWeb envelope review reasons (non-echo)", function() {
   });
 
   it("B missing westlaw style -> missing-style:westlaw, primary data from A still used", async function() {
-    var result = await runDoWebRouted(makeSanchezDoc(),
+    var result = await runDoWeb(makeSanchezDoc(),
       jsonResponse({ responses: [w5StandardResponse()] }),
       jsonResponse({ responses: [w5StandardResponse()] }));
 
@@ -536,7 +527,7 @@ describe("translator - doWeb envelope review reasons (non-echo)", function() {
   });
 
   it("duplicate style in an envelope -> duplicate-style reason recorded exactly once", async function() {
-    var result = await runDoWebRouted(makeSanchezDoc(),
+    var result = await runDoWeb(makeSanchezDoc(),
       jsonResponse({ responses: [w5StandardResponse(), w5StandardResponse(), w5StandardResponse()] }),
       jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
 
@@ -548,7 +539,7 @@ describe("translator - doWeb envelope review reasons (non-echo)", function() {
   });
 
   it("clean envelopes add no review reasons (regression)", async function() {
-    var result = await runDoWebRouted(makeSanchezDoc(),
+    var result = await runDoWeb(makeSanchezDoc(),
       jsonResponse({ responses: [w5StandardResponse()] }),
       jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
 
@@ -716,5 +707,84 @@ describe("translator - build script", function() {
     assert.equal(header.priority, 100);
     assert.equal(header.translatorType, 4);
     assert.equal(header.translatorID, "9abca805-707d-4064-958f-e08ac37f0862");
+  });
+});
+
+// ---- DOM review reasons reach the saved item (W9) ----
+function w9Responses() {
+  return {
+    a: jsonResponse({ responses: [w5StandardResponse()] }),
+    b: jsonResponse({ responses: [
+      { request: { styleId: "standard" }, forms: [{ name: "long", text: { "text/plain": W5_LONG } }] },
+      w5WestlawResponse()
+    ] })
+  };
+}
+
+// The fake DOM has no appendChild; a second header list is added by pushing onto the body's child array.
+function w9AppendToBody(doc, node) {
+  doc.querySelector("body")._children.push(node);
+}
+
+describe("translator - doWeb DOM review reasons and request routing (W9)", function() {
+  it("routes request B to the westlaw-style mock, not A's response", async function() {
+    var r = w9Responses();
+    var result = await runDoWeb(makeSanchezDoc(), r.a, r.b);
+    var urls = result.fzu.getCalls().map(function(c) { return c.url; });
+    assert.equal(urls.length, 2, "two service requests");
+    assert.ok(urls.some(function(u) { return u.indexOf("styleIDs=westlaw") !== -1; }), "B request issued");
+    var item = result.fz.items[0];
+    assert.ok(item.extra.indexOf("1999 WL 652310") !== -1, "B's own inventory (WL cite) reached the item");
+    assert.ok(item.extra.indexOf("Westlaw status: validated-profile") !== -1);
+    assert.deepEqual(w5ReviewLines(item), []);
+  });
+
+  it("duplicate headers with different citations: conflicting-header is saved and status is not validated", async function() {
+    var r = w9Responses();
+    var doc = makeSanchezDoc();
+    var sticky = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "United States Court of Appeals, Fifth Circuit."),
+      el("li", {}, "August 25, 1999"),
+      el("li", {}, "188 F.3d 100"));
+    w9AppendToBody(doc, sticky);
+    var result = await runDoWeb(doc, r.a, r.b);
+    var item = result.fz.items[0];
+    assert.ok(w5ReviewLines(item).indexOf("Westlaw review: conflicting-header") !== -1, item.extra);
+    assert.equal(item.extra.indexOf("Westlaw status: validated-profile"), -1);
+    assert.ok(w5HasReviewTag(item));
+  });
+
+  it("duplicate headers with different court lines: conflicting-header is saved", async function() {
+    var r = w9Responses();
+    var doc = makeSanchezDoc();
+    var sticky = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Another Placeholder Circuit"),
+      el("li", {}, "August 25, 1999"),
+      el("li", {}, "187 F.3d 486"));
+    w9AppendToBody(doc, sticky);
+    var result = await runDoWeb(doc, r.a, r.b);
+    var item = result.fz.items[0];
+    assert.ok(w5ReviewLines(item).indexOf("Westlaw review: conflicting-header") !== -1, item.extra);
+    assert.equal(item.extra.indexOf("Westlaw status: validated-profile"), -1);
+  });
+
+  it("no header list (court/cites fallbacks): header-fallback is recorded without demoting a service-validated record", async function() {
+    var r = w9Responses();
+    var doc = makeDoc({
+      title: "Sanchez v. Liggett & Myers, Inc. | Cases | Fifth Circuit | Westlaw Advantage",
+      href: "https://1.next.westlaw.com/Document/I1234567890abcdef1234567890abcdef/View/FullText.html",
+      hostname: "1.next.westlaw.com",
+      body: el("body", {},
+        el("div", { id: "co_docHeaderTitleLine" }, "Sanchez v. Liggett & Myers, Inc."),
+        el("div", { class: "co_courtBlock" }, "United States Court of Appeals, Fifth Circuit."),
+        el("div", { class: "co_cites" }, "187 F.3d 486"),
+        el("div", { class: "co_docketBlock" }, "No. 98-40679."),
+        el("script", {},
+          'var config = {"DocumentGuid":"I1234567890abcdef1234567890abcdef","ContentType":"Cases","PageEventIdentifier":"TEST-PEI-0001","ResourceToken":"TEST-RT-0001","RelatedInfo":"relatedinfo.next.westlaw.com"};'))
+    });
+    var result = await runDoWeb(doc, r.a, r.b);
+    var item = result.fz.items[0];
+    assert.deepEqual(w5ReviewLines(item), ["Westlaw review: header-fallback"]);
+    assert.ok(item.extra.indexOf("Westlaw status: validated-profile") !== -1, item.extra);
   });
 });

@@ -1,4 +1,4 @@
-1 → 71/71
+1 → 71/71 → 228/228
 
 ## Review findings fixes
 
@@ -61,3 +61,14 @@
 - Generic `court of appeals of (<state list>)` row does not include New York or Maryland (asserted by a test).
 - Kentucky `Court of Appeals of Kentucky` (highest court pre-1976) left as intermediate `Ky. Ct. App.` with a code comment; no date logic. Open question.
 - Tests: 182 → 215 in `profile.test.mjs` (positives, near-miss unknowns, Texas profile unchanged, N.Y. omission policy with N.Y.2d/N.Y.3d vs N.E.2d/N.E.3d).
+
+## W10 — New York trial-level Supreme Court classification fix
+- Bug: bare `Supreme Court of New York.` and `Supreme Court, New York.` (no county/department qualifier) were matching generic `^supreme court of (<state>)...` row and incorrectly classified as state supreme (high court), when NY Supreme Court is actually the trial court; high court is Court of Appeals.
+- Fix: added two new full-match rows (anchored `^...$`) for NY trial court BEFORE the generic row:
+  - `^supreme court of new york$` → trial level, state `NY`, bluebook `N.Y. Sup. Ct.`, confidence `table`
+  - `^supreme court, new york$` → trial level, state `NY`, bluebook `N.Y. Sup. Ct.`, confidence `table`
+- Also tightened existing county-pattern rows to use 1-3 word county names instead of unlimited: `[a-z]+(?:\s+[a-z]+){0,2}` instead of `[a-z ]+` (matches 1-3 words, stops at 4+ word names).
+- Table order preserved: App. Div./App. Term rows still precede the new plain-text rows; generic row remains last and unreachable for NY.
+- Omission policy verified: `wlProfCourtForCitation` does NOT blank `N.Y. Sup. Ct.` for trial-level reporters (Misc., Misc. 2d, Misc. 3d, N.Y.S.2d, N.Y.S.3d) because the bluebook abbreviation `N.Y. Sup. Ct.` does not match the high-court reporter list `{N.Y., N.Y.2d, N.Y.3d}` keyed by reporter, so the classification bluebook is returned as-is (Bluebook rule: trial courts keep their abbreviation in trial reporters).
+- Tests added: 2 positive (bare forms), 5 omission policy tests (trial court + Misc./N.Y.S. reporters), 4 near-miss negatives (App. Div. stays intermediate, county-without-state stays unknown, New Yorkshire stays unknown), 3 spot-checks (CA/FL/TX Supreme Courts unaffected and stay high court).
+- Tests: 215 → 228 in `profile.test.mjs` (13 new tests added for W10).

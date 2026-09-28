@@ -279,8 +279,12 @@ function wlDomReadFacts(doc) {
   var lis = [];
   var liListIndex = [];
   var listCiteKeys = [];
+  var listCourtKeys = [];
+  var listDateSeen = [];
   for (var hl = 0; hl < headerLists.length; hl++) {
     listCiteKeys.push([]);
+    listCourtKeys.push(null);
+    listDateSeen.push(false);
     var kids = headerLists[hl].children || [];
     for (var kd = 0; kd < kids.length; kd++) {
       if (String(kids[kd].tagName).toUpperCase() === "LI") {
@@ -297,6 +301,12 @@ function wlDomReadFacts(doc) {
     if (!liText) continue;
 
     var classified = wlDomClassifyLI(liText);
+    var liList = liListIndex[i];
+    // Per-list court line (same rule as the global court pick below) so duplicate headers can be compared.
+    if (classified.kind === "unparsed" && listCourtKeys[liList] === null && (!listDateSeen[liList] || wlDomCourtLineRe.test(liText))) {
+      listCourtKeys[liList] = liText.toLowerCase();
+    }
+    if (classified.kind === "date") listDateSeen[liList] = true;
     if (classified.kind === "citation") {
       for (var lk = 0; lk < classified.citations.length; lk++) {
         var lkKey = classified.citations[lk].raw.toLowerCase();
@@ -345,10 +355,24 @@ function wlDomReadFacts(doc) {
     }
   }
 
+  // Two headers naming different courts are a conflict too, not first-wins.
+  for (var ca = 0; ca < listCourtKeys.length; ca++) {
+    for (var cb = ca + 1; cb < listCourtKeys.length; cb++) {
+      if (listCourtKeys[ca] !== null && listCourtKeys[cb] !== null && listCourtKeys[ca] !== listCourtKeys[cb] &&
+          reviewReasons.indexOf("conflicting-header") === -1) {
+        reviewReasons.push("conflicting-header");
+      }
+    }
+  }
+
+  // Facts read without the header list (fallback selectors) are flagged so the record is visibly lower-trust.
+  var usedHeaderFallback = false;
+
   if (!rawCourt) {
     var courtBlock = doc.querySelector(".co_courtBlock");
     if (courtBlock) {
       rawCourt = wlDomClean(courtBlock.textContent);
+      if (headerLists.length === 0 && rawCourt) usedHeaderFallback = true;
     }
   }
 
@@ -390,8 +414,11 @@ function wlDomReadFacts(doc) {
       for (var fc = 0; fc < fallbackCits.length; fc++) {
         citations.push(fallbackCits[fc]);
       }
+      if (headerLists.length === 0 && fallbackCits.length > 0) usedHeaderFallback = true;
     }
   }
+
+  if (usedHeaderFallback) reviewReasons.push("header-fallback");
 
   return {
     ok: true,

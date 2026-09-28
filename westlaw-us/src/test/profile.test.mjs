@@ -552,6 +552,20 @@ describe("P4 - NY specific rules and generic Supreme Court fix", function() {
     assert.equal(r.state, "NY");
     assert.equal(r.bluebook, "N.Y. Sup. Ct.");
   });
+  it("Supreme Court of New York (bare, no qualifier) → N.Y. Sup. Ct. trial level", function() {
+    var r = wlProfClassifyCourt("Supreme Court of New York.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "trial");
+    assert.equal(r.state, "NY");
+    assert.equal(r.bluebook, "N.Y. Sup. Ct.");
+  });
+  it("Supreme Court, New York (comma variant) → N.Y. Sup. Ct. trial level", function() {
+    var r = wlProfClassifyCourt("Supreme Court, New York.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "trial");
+    assert.equal(r.state, "NY");
+    assert.equal(r.bluebook, "N.Y. Sup. Ct.");
+  });
   it("generic Supreme Court of <State> does not match lines with Appellate Division", function() {
     var r = wlProfClassifyCourt("Supreme Court of New York, Appellate Division.");
     assert.notEqual(r.level, "supreme");
@@ -563,6 +577,43 @@ describe("P4 - NY specific rules and generic Supreme Court fix", function() {
   it("generic Supreme Court of <State> does not match lines with County", function() {
     var r = wlProfClassifyCourt("Supreme Court of New York, Kings County.");
     assert.notEqual(r.level, "supreme");
+  });
+  it("near-miss: Supreme Court of New York, Appellate Division stays App. Div. (not trial)", function() {
+    var r = wlProfClassifyCourt("Supreme Court of New York, Appellate Division, Second Department.");
+    assert.equal(r.level, "intermediate");
+    assert.notEqual(r.level, "trial");
+    assert.equal(r.bluebook, "App. Div.");
+  });
+  it("near-miss: Supreme Court, Kings County (without New York) should not match", function() {
+    var r = wlProfClassifyCourt("Supreme Court, Kings County.");
+    assert.notEqual(r.system, "state");
+    assert.notEqual(r.level, "trial");
+  });
+  it("near-miss: Supreme Court of New Yorkshire should not classify as NY trial", function() {
+    var r = wlProfClassifyCourt("Supreme Court of New Yorkshire.");
+    assert.notEqual(r.state, "NY");
+    assert.notEqual(r.level, "trial");
+  });
+  it("spot-check: Supreme Court of California unaffected and classifies as supreme", function() {
+    var r = wlProfClassifyCourt("Supreme Court of California.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "supreme");
+    assert.equal(r.state, "CA");
+    assert.equal(r.bluebook, "Cal.");
+  });
+  it("spot-check: Supreme Court of Florida unaffected and classifies as supreme", function() {
+    var r = wlProfClassifyCourt("Supreme Court of Florida.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "supreme");
+    assert.equal(r.state, "FL");
+    assert.equal(r.bluebook, "Fla.");
+  });
+  it("spot-check: Supreme Court of Texas unaffected and classifies as supreme", function() {
+    var r = wlProfClassifyCourt("Supreme Court of Texas.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "supreme");
+    assert.equal(r.state, "TX");
+    assert.equal(r.bluebook, "Tex.");
   });
 });
 
@@ -841,5 +892,32 @@ describe("W4 - high-court correctness fixes", function() {
   it("omission policy: Oregon Supreme Court with P.3d keeps Or.", function() {
     var c = wlProfClassifyCourt("Supreme Court of Oregon.");
     assert.equal(wlProfCourtForCitation(c, { reporter: "P.3d" }, null).court, "Or.");
+  });
+  it("omission policy: N.Y. Sup. Ct. trial court with N.Y.S.2d keeps N.Y. Sup. Ct.", function() {
+    var c = wlProfClassifyCourt("Supreme Court of New York.");
+    assert.equal(c.level, "trial");
+    assert.equal(c.bluebook, "N.Y. Sup. Ct.");
+    var result = wlProfCourtForCitation(c, { reporter: "N.Y.S.2d" }, null);
+    assert.equal(result.court, "N.Y. Sup. Ct.");
+  });
+  it("omission policy: N.Y. Sup. Ct. trial court with N.Y.S.3d keeps N.Y. Sup. Ct.", function() {
+    var c = wlProfClassifyCourt("Supreme Court of New York.");
+    var result = wlProfCourtForCitation(c, { reporter: "N.Y.S.3d" }, null);
+    assert.equal(result.court, "N.Y. Sup. Ct.");
+  });
+  it("omission policy: N.Y. Sup. Ct. trial court with Misc. keeps N.Y. Sup. Ct.", function() {
+    var c = wlProfClassifyCourt("Supreme Court of New York.");
+    var result = wlProfCourtForCitation(c, { reporter: "Misc." }, null);
+    assert.equal(result.court, "N.Y. Sup. Ct.");
+  });
+  it("omission policy: N.Y. Sup. Ct. trial court with Misc. 2d keeps N.Y. Sup. Ct.", function() {
+    var c = wlProfClassifyCourt("Supreme Court of New York.");
+    var result = wlProfCourtForCitation(c, { reporter: "Misc. 2d" }, null);
+    assert.equal(result.court, "N.Y. Sup. Ct.");
+  });
+  it("omission policy: N.Y. Sup. Ct. trial court with Misc. 3d keeps N.Y. Sup. Ct.", function() {
+    var c = wlProfClassifyCourt("Supreme Court of New York.");
+    var result = wlProfCourtForCitation(c, { reporter: "Misc. 3d" }, null);
+    assert.equal(result.court, "N.Y. Sup. Ct.");
   });
 });

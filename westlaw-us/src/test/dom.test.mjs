@@ -848,6 +848,43 @@ describe("wlDomReadFacts — plan §12 selector fallbacks", function() {
     assert.deepEqual(citeRaws(result), ["100 F.3d 200", "300 F. Supp. 2d 400"]);
   });
 
+  it("flags conflicting-header for two headers with different court lines", function() {
+    var first = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var second = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Another Placeholder Circuit"), el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.equal(result.reviewReasons.indexOf("conflicting-header") !== -1, true);
+    assert.equal(result.rawCourt, "Placeholder Court of Appeals");
+  });
+
+  it("flags conflicting-header when the second header's court line follows its date", function() {
+    var first = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var second = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"), el("li", {}, "Another Placeholder Circuit"));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.equal(result.reviewReasons.indexOf("conflicting-header") !== -1, true);
+  });
+
+  it("does not flag conflicting-header when a truncated second header has no court line", function() {
+    var first = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var second = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.deepEqual(plain(result.reviewReasons), []);
+  });
+
+  it("does not flag conflicting-header for sticky copies whose court line differs only in case", function() {
+    var first = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "100 F.3d 200"));
+    var second = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "PLACEHOLDER COURT OF APPEALS"), el("li", {}, "100 F.3d 200"));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.equal(result.reviewReasons.indexOf("conflicting-header"), -1);
+  });
+
   it("does not silently pick the first of two headers with different dates", function() {
     var first = el("div", { id: "co_docHeaderCitation" }, el("li", {}, "March 15, 2020"));
     var second = el("div", { id: "co_docHeaderCitation" }, el("li", {}, "April 16, 2021"));
@@ -867,11 +904,17 @@ describe("wlDomReadFacts — plan §12 selector fallbacks", function() {
     assert.equal(result.reviewReasons.indexOf("conflicting-header"), -1);
   });
 
-  it("with no header list, marks the result as fallback-sourced via a review reason", { todo: "dom.js emits no review reason when the header list is absent (fallback silently used); reason code not specified by plan section 12 - orchestrator decision" }, function() {
+  it("with no header list, marks the result as fallback-sourced via a review reason", function() {
     var courtBlock = el("div", { class: "co_courtBlock" }, "Placeholder Court of Appeals");
     var cites = el("div", { class: "co_cites" }, "100 F.3d 200");
     var result = wlDomReadFacts(fallbackDoc([courtBlock, cites]));
     assert.equal(result.reviewReasons.indexOf("header-fallback") !== -1, true);
+  });
+
+  it("with no header list and no fallback court or cites, header-fallback is not emitted", function() {
+    var docket = el("div", { class: "co_docketBlock" }, "No. 20-1234.");
+    var result = wlDomReadFacts(fallbackDoc([docket]));
+    assert.equal(result.reviewReasons.indexOf("header-fallback"), -1);
   });
 
   it("prefers header li values over .co_courtBlock/.co_cites when the header is present", function() {

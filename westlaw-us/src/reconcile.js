@@ -90,6 +90,28 @@ function wlRecAddEnvelopeReasons(reviewReasons, envelope) {
   }
 }
 
+// Forwards DomFacts review reasons (code-only strings such as conflicting-header, header-fallback) once each.
+function wlRecAddDomReasons(reviewReasons, dom) {
+  if (!dom || !Array.isArray(dom.reviewReasons)) return;
+  for (var i = 0; i < dom.reviewReasons.length; i++) {
+    var reason = dom.reviewReasons[i];
+    if (typeof reason === "string" && /^[a-z0-9:-]+$/.test(reason) && reviewReasons.indexOf(reason) === -1) reviewReasons.push(reason);
+  }
+}
+
+// Review reasons that are informational and must not stop a service-validated record from being validated-profile.
+// header-fallback only says the DOM court/citations came from the .co_courtBlock/.co_cites selectors because the
+// header list was absent; the service forms still validated the citation, so the DOM provenance note alone is not a
+// reason to distrust the record. Every other reason (conflicting-header included) demotes.
+var wlRecNonDemotingReasons = ["header-fallback"];
+
+function wlRecHasDemotingReason(reviewReasons) {
+  for (var i = 0; i < reviewReasons.length; i++) {
+    if (wlRecNonDemotingReasons.indexOf(reviewReasons[i]) === -1) return true;
+  }
+  return false;
+}
+
 function wlRecReconcile(input) {
   var context = input.context || {};
   var dom = input.dom || {};
@@ -106,9 +128,11 @@ function wlRecReconcile(input) {
     // 1. Service A failure → metadata-only from DOM
     if (svcA.category !== "ok") {
       reviewReasons.push("service-" + (svcA.category || "unknown"));
+      wlRecAddDomReasons(reviewReasons, dom);
       return wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenance);
     }
 
+    wlRecAddDomReasons(reviewReasons, dom);
     wlRecAddEnvelopeReasons(reviewReasons, svcA.envelope);
     if (svcB.category === "ok") wlRecAddEnvelopeReasons(reviewReasons, svcB.envelope);
 
@@ -423,7 +447,7 @@ function wlRecReconcile(input) {
       var bEnvelopeOk = true;
       if (svcB.category !== "ok") bEnvelopeOk = false;
       if (svcB.envelope && !svcB.envelope.ok) bEnvelopeOk = false;
-      if (reviewReasons.length === 0 && classification.confidence === "table" && bEnvelopeOk) {
+      if (!wlRecHasDemotingReason(reviewReasons) && classification.confidence === "table" && bEnvelopeOk) {
         status = "validated-profile";
       } else {
         status = "unverified-profile";

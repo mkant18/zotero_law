@@ -419,11 +419,19 @@ var wlProfCourtTable = [
     res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "N.Y. App. Term", confidence: "table" }
   },
   {
-    re: /^supreme court, [a-z ]+ county, new york$/,
+    re: /^supreme court, [a-z]+(?:\s+[a-z]+){0,2} county, new york$/,
     res: { system: "state", level: "trial", state: "NY", circuit: null, district: null, bluebook: "N.Y. Sup. Ct.", confidence: "table" }
   },
   {
-    re: /^supreme court of new york, [a-z ]+ county$/,
+    re: /^supreme court of new york, [a-z]+(?:\s+[a-z]+){0,2} county$/,
+    res: { system: "state", level: "trial", state: "NY", circuit: null, district: null, bluebook: "N.Y. Sup. Ct.", confidence: "table" }
+  },
+  {
+    re: /^supreme court of new york$/,
+    res: { system: "state", level: "trial", state: "NY", circuit: null, district: null, bluebook: "N.Y. Sup. Ct.", confidence: "table" }
+  },
+  {
+    re: /^supreme court, new york$/,
     res: { system: "state", level: "trial", state: "NY", circuit: null, district: null, bluebook: "N.Y. Sup. Ct.", confidence: "table" }
   },
   {

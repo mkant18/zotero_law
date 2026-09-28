@@ -33,7 +33,7 @@ function makeDom(opts) {
     citations: d.citations || [],
     dockets: d.dockets || [],
     pageCountText: d.pageCountText || null,
-    reviewReasons: []
+    reviewReasons: d.reviewReasons || []
   };
 }
 
@@ -907,5 +907,93 @@ describe("wlRecReconcile - service envelope review reasons", function() {
     });
     assert.equal(result.reviewReasons.indexOf("malformed-envelope"), -1);
     assert.ok(result.reviewReasons.indexOf("inventory-timeout") !== -1);
+  });
+});
+
+// ---- DOM review reasons are forwarded (W9) ----
+describe("wlRecReconcile - DOM review reasons", function() {
+  var stdStyle = {
+    long: "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999)",
+    shorts: ["Sanchez, 187 F.3d 486", "187 F.3d 486"],
+    id: "standard",
+    enhanced: null
+  };
+  var wlStyle = {
+    long: null,
+    shorts: [],
+    id: "westlaw",
+    enhanced: "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999), No. 98-40679, 1999 WL 652310"
+  };
+
+  function domWith(reasons) {
+    return makeDom({
+      guid: "I1234567890abcdef1234567890abcdef",
+      headerName: "Sanchez v. Liggett & Myers, Inc.",
+      rawCourt: "United States Court of Appeals, Fifth Circuit.",
+      date: "1999-08-25",
+      citations: [{ kind: "reporter", volume: "187", reporter: "F.3d", page: "486", raw: "187 F.3d 486" }],
+      dockets: ["No. 98-40679"],
+      reviewReasons: reasons
+    });
+  }
+
+  function reconcileDom(dom, svcA, svcB) {
+    return wlRecReconcile({
+      context: { guid: "I1234567890abcdef1234567890abcdef", url: "" },
+      dom: dom,
+      svcA: svcA || makeSvc("ok", makeEnvelope({ standard: stdStyle })),
+      svcB: svcB || makeSvc("ok", makeEnvelope({ standard: stdStyle, westlaw: wlStyle })),
+      profile: "standard"
+    });
+  }
+
+  function countOf(list, value) {
+    return list.filter(function(r) { return r === value; }).length;
+  }
+
+  it("conflicting-header reaches the record and demotes a service-validated record", function() {
+    var result = reconcileDom(domWith(["conflicting-header"]));
+    assert.ok(result.reviewReasons.indexOf("conflicting-header") !== -1);
+    assert.equal(result.status, "unverified-profile");
+  });
+
+  it("header-fallback reaches the record but does not demote a service-validated record", function() {
+    var result = reconcileDom(domWith(["header-fallback"]));
+    assert.equal(JSON.stringify(result.reviewReasons), JSON.stringify(["header-fallback"]));
+    assert.equal(result.status, "validated-profile");
+  });
+
+  it("header-fallback next to another reason still demotes", function() {
+    var result = reconcileDom(domWith(["header-fallback", "conflicting-header"]));
+    assert.equal(result.status, "unverified-profile");
+  });
+
+  it("DOM reasons are deduped, and non-string or non-code entries are dropped", function() {
+    var result = reconcileDom(domWith(["conflicting-header", "conflicting-header", 42, null, "Some Opinion Text!"]));
+    assert.equal(countOf(result.reviewReasons, "conflicting-header"), 1);
+    assert.equal(result.reviewReasons.length, 1);
+  });
+
+  it("a reason shared with a service envelope is recorded once", function() {
+    var result = reconcileDom(domWith(["missing-style:westlaw"]),
+      makeSvc("ok", makeEnvelope({ standard: stdStyle })),
+      { category: "ok", envelope: { ok: false, styles: { standard: stdStyle }, reviewReasons: ["missing-style:westlaw"] } });
+    assert.equal(countOf(result.reviewReasons, "missing-style:westlaw"), 1);
+  });
+
+  it("DOM reasons are forwarded on the metadata-only (service failed) path too", function() {
+    var result = reconcileDom(domWith(["conflicting-header", "header-fallback"]), makeSvc("timeout", null), makeSvc("none", null));
+    assert.equal(result.status, "metadata-only");
+    assert.ok(result.reviewReasons.indexOf("service-timeout") !== -1);
+    assert.ok(result.reviewReasons.indexOf("conflicting-header") !== -1);
+    assert.ok(result.reviewReasons.indexOf("header-fallback") !== -1);
+  });
+
+  it("missing dom.reviewReasons is tolerated", function() {
+    var dom = domWith([]);
+    delete dom.reviewReasons;
+    var result = reconcileDom(dom);
+    assert.equal(result.status, "validated-profile");
+    assert.equal(JSON.stringify(result.reviewReasons), "[]");
   });
 });

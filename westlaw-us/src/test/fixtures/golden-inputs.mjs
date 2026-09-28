@@ -1,6 +1,6 @@
 // M1-J golden pipeline inputs — reconcile INPUTS for each golden case.
 // DomFacts + synthetic service envelopes shaped like wlSvcReadEnvelope output.
-// GUIDs are placeholder I + 32 hex; no tokens.
+// GUIDs are obviously fake placeholders: I + 32 lowercase hex of one repeated digit (2/3/5/7 = G2/G3/G5/G7); no tokens.
 
 function makeEnvelope(styles) {
   return { ok: true, styles: styles, reviewReasons: [] };
@@ -71,11 +71,11 @@ export var G1 = {
 // G2 Philip Morris — history on, standard profile
 export var G2 = {
   context: {
-    guid: "I2historyGuid1234567890abcdef1234",
-    url: "https://1.next.westlaw.com/Document/I2historyGuid1234567890abcdef1234/View/FullText.html"
+    guid: "I22222222222222222222222222222222",
+    url: "https://1.next.westlaw.com/Document/I22222222222222222222222222222222/View/FullText.html"
   },
   dom: makeDom({
-    guid: "I2historyGuid1234567890abcdef1234",
+    guid: "I22222222222222222222222222222222",
     headerName: "United States v. Philip Morris USA, Inc.",
     rawCourt: "United States District Court for the District of Columbia.",
     date: "2006-06-01",
@@ -112,11 +112,11 @@ export var G2 = {
 // G3 Brown — synthetic SCOTUS, standard profile, may be unverified-profile
 export var G3 = {
   context: {
-    guid: "IbrownGuid1234567890abcdef123456",
-    url: "https://1.next.westlaw.com/Document/IbrownGuid1234567890abcdef123456/View/FullText.html"
+    guid: "I33333333333333333333333333333333",
+    url: "https://1.next.westlaw.com/Document/I33333333333333333333333333333333/View/FullText.html"
   },
   dom: makeDom({
-    guid: "IbrownGuid1234567890abcdef123456",
+    guid: "I33333333333333333333333333333333",
     headerName: "Brown v. Bd. of Educ.",
     rawCourt: "Supreme Court of the United States",
     date: "1954-05-17",
@@ -196,11 +196,11 @@ export var G4 = {
 // G5 Rogers — texas profile, validated-profile, with history
 export var G5 = {
   context: {
-    guid: "IRogersTxGoldenGuid1234567890abcdef",
-    url: "https://1.next.westlaw.com/Document/IRogersTxGoldenGuid1234567890abcdef/View/FullText.html"
+    guid: "I55555555555555555555555555555555",
+    url: "https://1.next.westlaw.com/Document/I55555555555555555555555555555555/View/FullText.html"
   },
   dom: makeDom({
-    guid: "IRogersTxGoldenGuid1234567890abcdef",
+    guid: "I55555555555555555555555555555555",
     headerName: "Rogers v. R.J. Reynolds Tobacco Co.",
     rawCourt: "Court of Appeals of Texas, Beaumont.",
     date: "1988-10-06",
@@ -241,11 +241,11 @@ export var G5 = {
 // G7 Example — WL-only synthetic, standard profile, may be unverified-profile
 export var G7 = {
   context: {
-    guid: "IwlOnlyGuid1234567890abcdef123456",
-    url: "https://1.next.westlaw.com/Document/IwlOnlyGuid1234567890abcdef123456/View/FullText.html"
+    guid: "I77777777777777777777777777777777",
+    url: "https://1.next.westlaw.com/Document/I77777777777777777777777777777777/View/FullText.html"
   },
   dom: makeDom({
-    guid: "IwlOnlyGuid1234567890abcdef123456",
+    guid: "I77777777777777777777777777777777",
     headerName: "Example v. Sample",
     rawCourt: "United States District Court for the District of Kansas.",
     date: "2024-03-01",

@@ -9,7 +9,7 @@
 	"inRepository": false,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
-	"lastUpdated": "2026-09-28 20:30:14"
+	"lastUpdated": "2026-09-28 20:36:25"
 }
 
 /*
@@ -299,7 +299,18 @@ function wlRepFindCitations(text) {
 }
 
 /* ---- cite-parse.js ---- */
-var wlCiteMonthRe = /^(.*?)\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan\.?|feb\.?|mar\.?|apr\.?|jun\.?|jul\.?|aug\.?|sep\.?|sept\.?|oct\.?|nov\.?|dec\.?)\.?\s+(\d{1,2}),?\s+(\d{4})$/i;
+// Parenthetical with a full date: [<court> ]<Mon.> <D>, <YYYY>[, <suffix>]
+// groups: 1 court (optional), 2 printed date token, 3 month, 4 day, 5 year, 6 suffix (optional, Texas writ/petition status)
+var wlCiteDateParentheticalRe = /^(?:(.*?)\s+)?(((?:january|february|march|april|may|june|july|august|september|october|november|december|jan\.?|feb\.?|mar\.?|apr\.?|jun\.?|jul\.?|aug\.?|sep\.?|sept\.?|oct\.?|nov\.?|dec\.?))\.?\s+(\d{1,2}),?\s+(\d{4}))(?:,\s*(.+))?$/i;
+
+// A real citation string is far shorter; longer input is rejected before anchor scanning
+// (wlCiteFindAnchorsInText is superlinear when no known reporter is present).
+var wlCiteMaxInputLength = 2000;
+
+// Docket segment tokens (see wlCitePeelDockets): a number token may carry a short parenthetical such as "(L)" or "(JPO)".
+var wlCiteDocketNumberToken = '[0-9][\\w\\-\\/:.]*(?:\\s*\\([A-Za-z0-9 .\\-]{1,20}\\))?';
+var wlCiteDocketSegmentRe = /^Nos?\. [0-9A-Za-z](?:[\w\-\/:.&]|\s|\([A-Za-z0-9 .\-]{1,20}\))*$/;
+var wlCiteBareDocketSegmentRe = new RegExp('^' + wlCiteDocketNumberToken + '(?:\\s+(?:and|&)\\s+' + wlCiteDocketNumberToken + ')*$');
 
 var wlCiteDocketStartRe = /^(No\.|Nos\.)\s/i;
 
@@ -315,13 +326,24 @@ function wlCiteFindMatchingParen(text, openPos) {
   return -1;
 }
 
+// Full-date parenthetical, with or without a court and with an optional Texas status suffix; null if none.
+function wlCiteParseParentheticalDate(content) {
+  var dm = content.match(wlCiteDateParentheticalRe);
+  if (!dm) return null;
+  var dateStr = wlTextParseUSDate(dm[3] + ' ' + dm[4] + ', ' + dm[5]);
+  return {
+    court: (dm[1] || '').trim().replace(/,$/, ''),
+    year: dm[5],
+    date: dateStr,
+    dateText: dm[2],
+    parentheticalSuffix: (dm[6] || '').trim()
+  };
+}
+
 function wlCiteParseParentheticalStandard(content) {
-  // Try full date form: <court> <Mon.> <D>, <YYYY>
-  var dm = content.match(wlCiteMonthRe);
-  if (dm) {
-    var dateStr = wlTextParseUSDate(dm[2] + ' ' + dm[3] + ', ' + dm[4]);
-    return { court: dm[1].trim().replace(/,$/, ''), year: dm[4], date: dateStr, dateText: content.substring(dm[1].length).trim(), parentheticalSuffix: '' };
-  }
+  // Try full date form: [<court>] <Mon.> <D>, <YYYY>[, <status>]
+  var dated = wlCiteParseParentheticalDate(content);
+  if (dated) return dated;
 
   // Try Texas form: <court> <year>, <status>
   var tm = content.match(/^(.*?)\s+(\d{4}),\s+(.+)$/);
@@ -345,37 +367,37 @@ function wlCiteParseParentheticalStandard(content) {
 }
 
 function wlCiteParseParentheticalTexas(content) {
+  // Texas form with a full date: <court> <Mon.> <D>, <YYYY>[, <status>]
+  var dated = wlCiteParseParentheticalDate(content);
+  if (dated) return dated;
   // Texas form: <court> <year>[, <status>]
   var tm = content.match(/^(.*?)\s+(\d{4}),\s*(.*)$/);
   if (tm) {
     return { court: tm[1].trim(), year: tm[2], date: null, dateText: null, parentheticalSuffix: tm[3].trim() };
   }
-  // Year only
-  var ym = content.match(/^(\d{4})$/);
-  if (ym) {
-    return { court: '', year: ym[1], date: null, dateText: null, parentheticalSuffix: '' };
-  }
-  return { court: '', year: '', date: null, dateText: null, parentheticalSuffix: '' };
+  // <court> <year> without a status, or year only
+  return wlCiteParseParentheticalStandard(content);
 }
 
 // Peel trailing docket segments ("No. 24-123", or "Nos. 1-2, 3-4" as ["Nos. 1-2", "3-4"]) off the
-// text before the first citation anchor. Segments keep their original text. Bare numbers only count
+// text before the first citation anchor. Segments are split on ", " and keep their original text:
+// "No. 1:21-cv-123 (JPO)" and "No. 21-1 (L), 21-2" keep their short parentheticals; "Nos. 22-1 & 22-2" stays
+// one token; "Nos. 22-1, 22-2 and 22-3" becomes ["Nos. 22-1", "22-2 and 22-3"]. Bare numbers only count
 // as dockets when a "No./Nos." segment precedes them; otherwise they stay in the name.
+// docketInName is true when the remaining name still holds a ", No. " / ", Nos. " segment (an unrecognized docket).
 function wlCitePeelDockets(beforeAnchor) {
   var rest = beforeAnchor.replace(/,\s*$/, '');
-  var docketRe = /^(Nos?\. [0-9A-Za-z][\w\-\/:. ]*)$/;
-  var bareDocketRe = /^[0-9][\w\-\/:.]*$/;
   var dockets = [];
   var pendingBare = [];
   while (true) {
     var lastComma = rest.lastIndexOf(', ');
     if (lastComma === -1) break;
     var lastSegment = rest.substring(lastComma + 2);
-    if (docketRe.test(lastSegment)) {
+    if (wlCiteDocketSegmentRe.test(lastSegment)) {
       dockets = [lastSegment].concat(pendingBare, dockets);
       pendingBare = [];
       rest = rest.substring(0, lastComma);
-    } else if (bareDocketRe.test(lastSegment)) {
+    } else if (wlCiteBareDocketSegmentRe.test(lastSegment)) {
       pendingBare.unshift(lastSegment);
       rest = rest.substring(0, lastComma);
     } else {
@@ -387,7 +409,39 @@ function wlCitePeelDockets(beforeAnchor) {
     rest = rest + ', ' + pendingBare.join(', ');
     pendingBare = [];
   }
-  return { name: rest, dockets: dockets };
+  return { name: rest, dockets: dockets, docketInName: /,\s*Nos?\.\s/.test(rest) };
+}
+
+// Pinpoint after the last citation of the main run, before the main parenthetical. A pin is only
+// digits/star-digits/range followed by ", <next citation>", " (" or end -- NOT digits followed by more
+// words (e.g. "2003 N.Y. Slip Op. 19972" is not a pin). Non-pin text between the last citation and the
+// parenthetical is returned as an unparsed citation segment.
+function wlCiteFindTrailingPin(cleaned, runEnd, searchFrom, lastRunIndex) {
+  var found = { pin: null, pinAfter: null, pinAt: false, unparsedSegments: [] };
+  var parenIdx = cleaned.indexOf('(', searchFrom);
+  if (parenIdx === -1) return found;
+  var textToParen = cleaned.substring(runEnd, parenIdx);
+  var pinAfterMatch = textToParen.match(/(?:,\s*|at\s+)(\*\d+(?:-\d+)?|\d+(?:-\d+)?)(?=\s*(?:,|\(|$))/);
+  if (pinAfterMatch) {
+    found.pin = pinAfterMatch[1];
+    found.pinAfter = lastRunIndex;
+    found.pinAt = pinAfterMatch[0].charAt(0) === 'a';
+  } else {
+    var unparsedMatch = textToParen.match(/^(?:,\s*|at\s+)(.+)$/);
+    if (unparsedMatch && unparsedMatch[1].trim().length > 0) {
+      found.unparsedSegments.push(unparsedMatch[1].trim());
+    }
+  }
+  return found;
+}
+
+// Text after the main ")" split into its separator and the history text. The separator is kept (historySep)
+// so the round trip can recompose it: ", " for "), aff'd ..." and " " for ") (unpublished table decision)".
+function wlCiteSplitHistory(afterParen) {
+  var sepMatch = afterParen.match(/^(?:,\s*|\s+)/);
+  var sep = sepMatch ? sepMatch[0] : '';
+  var history = afterParen.substring(sep.length);
+  return { history: history, historySep: history ? sep : '' };
 }
 
 function wlCiteBuildCitation(anchor) {
@@ -404,6 +458,7 @@ function wlCiteFindAnchorsInText(text) {
   // Try wlRepFindCitations first
   var anchors = wlRepFindCitations(text);
   if (anchors.length > 0) return anchors;
+  if (text.length > wlCiteMaxInputLength) return anchors;
 
   // No known anchors found. Try to find any citation-like text
   // Look for a year followed by a reporter-like abbreviation and a page number
@@ -439,6 +494,7 @@ function wlCiteFindAnchorsInText(text) {
 function wlCiteParseStandardForm(text) {
   var cleaned = wlTextClean(text);
   if (!cleaned) return { ok: false, reason: "empty-input" };
+  if (cleaned.length > wlCiteMaxInputLength) return { ok: false, reason: "input-too-long" };
 
   var anchors = wlRepFindCitations(cleaned);
   var hadKnownAnchors = anchors.length > 0;
@@ -497,28 +553,14 @@ function wlCiteParseStandardForm(text) {
     searchFrom++;
   }
 
-  // Check for pin after the last anchor in the run (before the parenthetical).
-  // A pin is only digits/star-digits/range that is followed by ", <next citation>" or " (" or end —
-  // NOT digits followed by more words (e.g., "2003 N.Y. Slip Op. 19972" is not a pin).
+  // Pin after the last anchor in the run (before the parenthetical), or an unparsed citation segment there.
   var unparsedSegments = [];
   if (pin === null) {
-    var parenIdx = cleaned.indexOf('(', searchFrom);
-    if (parenIdx !== -1) {
-      var textToParen = cleaned.substring(runEnd, parenIdx);
-      // Pin must be followed by ", " + next citation, " (" , or end — not by more words
-      var pinAfterMatch = textToParen.match(/(?:,\s*|at\s+)(\*\d+(?:-\d+)?|\d+(?:-\d+)?)(?=\s*(?:,|\(|$))/);
-      if (pinAfterMatch) {
-        pin = pinAfterMatch[1];
-        pinAfter = mainRun.length - 1;
-        pinAt = pinAfterMatch[0].charAt(0) === 'a';
-      } else {
-        // No valid pin found. Check for an unparsed citation segment between the last citation and the parenthetical.
-        var unparsedMatch = textToParen.match(/^(?:,\s*|at\s+)(.+)$/);
-        if (unparsedMatch && unparsedMatch[1].trim().length > 0) {
-          unparsedSegments.push(unparsedMatch[1].trim());
-        }
-      }
-    }
+    var trailing = wlCiteFindTrailingPin(cleaned, runEnd, searchFrom, mainRun.length - 1);
+    pin = trailing.pin;
+    pinAfter = trailing.pinAfter;
+    pinAt = trailing.pinAt;
+    unparsedSegments = trailing.unparsedSegments;
   }
 
   var parenOpen = cleaned.indexOf('(', searchFrom);
@@ -533,8 +575,7 @@ function wlCiteParseStandardForm(text) {
   var parenParsed = wlCiteParseParentheticalStandard(parenContent);
 
   // History = everything after the main ) with leading ", " removed
-  var afterParen = cleaned.substring(parenClose + 1);
-  var history = afterParen.replace(/^,\s*/, '');
+  var historyParts = wlCiteSplitHistory(cleaned.substring(parenClose + 1));
 
   // Build citations
   var citations = [];
@@ -563,6 +604,8 @@ function wlCiteParseStandardForm(text) {
   if (unparsedSegments.length > 0) {
     reviewReasons.push("unknown-reporter");
   }
+  // A ", No. " segment left in the name is an unrecognized docket: never silent.
+  if (peeled.docketInName) reviewReasons.push("docket-in-name");
 
   // dockets: optional field — comma-segment(s) before the first citation anchor
   // starting with "No." or "Nos." that match the docket pattern, stripped from the name.
@@ -580,7 +623,8 @@ function wlCiteParseStandardForm(text) {
     date: parenParsed.date,
     dateText: parenParsed.dateText,
     parentheticalSuffix: parenParsed.parentheticalSuffix,
-    history: history,
+    history: historyParts.history,
+    historySep: historyParts.historySep,
     unparsedTail: "",
     reviewReasons: reviewReasons
   };
@@ -589,6 +633,7 @@ function wlCiteParseStandardForm(text) {
 function wlCiteParseTexasForm(text) {
   var cleaned = wlTextClean(text);
   if (!cleaned) return { ok: false, reason: "empty-input" };
+  if (cleaned.length > wlCiteMaxInputLength) return { ok: false, reason: "input-too-long" };
 
   var anchors = wlCiteFindAnchorsInText(cleaned);
   if (anchors.length === 0) return { ok: false, reason: "no-citation-anchor" };
@@ -637,6 +682,16 @@ function wlCiteParseTexasForm(text) {
     searchFrom++;
   }
 
+  // Pin after the last anchor in the run (same logic as the standard form)
+  var unparsedSegments = [];
+  if (pin === null) {
+    var trailing = wlCiteFindTrailingPin(cleaned, runEnd, searchFrom, mainRun.length - 1);
+    pin = trailing.pin;
+    pinAfter = trailing.pinAfter;
+    pinAt = trailing.pinAt;
+    unparsedSegments = trailing.unparsedSegments;
+  }
+
   var parenOpen = cleaned.indexOf('(', searchFrom);
   if (parenOpen === -1) return { ok: false, reason: "no-parenthetical" };
 
@@ -649,14 +704,28 @@ function wlCiteParseTexasForm(text) {
   var parenParsed = wlCiteParseParentheticalTexas(parenContent);
 
   // History
-  var afterParen = cleaned.substring(parenClose + 1);
-  var history = afterParen.replace(/^,\s*/, '');
+  var historyParts = wlCiteSplitHistory(cleaned.substring(parenClose + 1));
 
   // Build citations
   var citations = [];
   for (var j = 0; j < mainRun.length; j++) {
     citations.push(wlCiteBuildCitation(mainRun[j]));
   }
+  for (var u = 0; u < unparsedSegments.length; u++) {
+    citations.push({ kind: "unparsed", raw: unparsedSegments[u] });
+  }
+
+  var reviewReasons = [];
+  for (var k = 0; k < mainRun.length; k++) {
+    if (mainRun[k].kind === "unparsed") {
+      reviewReasons.push("unknown-reporter");
+      break;
+    }
+  }
+  if (unparsedSegments.length > 0 && reviewReasons.indexOf("unknown-reporter") === -1) {
+    reviewReasons.push("unknown-reporter");
+  }
+  if (peeled.docketInName) reviewReasons.push("docket-in-name");
 
   // dockets: optional field — comma-segment(s) before the first citation anchor
   // starting with "No." or "Nos." that match the docket pattern, stripped from the name.
@@ -674,15 +743,17 @@ function wlCiteParseTexasForm(text) {
     date: parenParsed.date,
     dateText: parenParsed.dateText,
     parentheticalSuffix: parenParsed.parentheticalSuffix,
-    history: history,
+    history: historyParts.history,
+    historySep: historyParts.historySep,
     unparsedTail: "",
-    reviewReasons: []
+    reviewReasons: reviewReasons
   };
 }
 
 function wlCiteParseWestlawInventory(text) {
   var cleaned = wlTextClean(text);
   if (!cleaned) return { ok: false, reason: "empty-input" };
+  if (cleaned.length > wlCiteMaxInputLength) return { ok: false, reason: "input-too-long" };
 
   var anchors = wlRepFindCitations(cleaned);
   if (anchors.length === 0) return { ok: false, reason: "no-citation-anchor" };
@@ -794,6 +865,7 @@ function wlCiteParseShortName(shortText, primary) {
 
   var cleaned = wlTextClean(shortText);
   if (!cleaned) return null;
+  if (cleaned.length > wlCiteMaxInputLength) return null;
 
   // Handle "Id." case (with or without locator)
   if (/^Id\.(\s+at\s+\S+)?$/i.test(cleaned)) return null;
@@ -929,7 +1001,7 @@ function wlCiteRoundTrip(parsed, originalText) {
   }
 
   // History
-  if (parsed.history) recomposed += ', ' + parsed.history;
+  if (parsed.history) recomposed += (typeof parsed.historySep === "string" ? parsed.historySep : ', ') + parsed.history;
 
   // Normalize whitespace and NFC to match wlTextClean behavior on original
   var normalized = recomposed.replace(/\s+/g, " ").trim().normalize("NFC");
@@ -1366,11 +1438,19 @@ var wlProfCourtTable = [
     res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "N.Y. App. Term", confidence: "table" }
   },
   {
-    re: /^supreme court, [a-z ]+ county, new york$/,
+    re: /^supreme court, [a-z]+(?:\s+[a-z]+){0,2} county, new york$/,
     res: { system: "state", level: "trial", state: "NY", circuit: null, district: null, bluebook: "N.Y. Sup. Ct.", confidence: "table" }
   },
   {
-    re: /^supreme court of new york, [a-z ]+ county$/,
+    re: /^supreme court of new york, [a-z]+(?:\s+[a-z]+){0,2} county$/,
+    res: { system: "state", level: "trial", state: "NY", circuit: null, district: null, bluebook: "N.Y. Sup. Ct.", confidence: "table" }
+  },
+  {
+    re: /^supreme court of new york$/,
+    res: { system: "state", level: "trial", state: "NY", circuit: null, district: null, bluebook: "N.Y. Sup. Ct.", confidence: "table" }
+  },
+  {
+    re: /^supreme court, new york$/,
     res: { system: "state", level: "trial", state: "NY", circuit: null, district: null, bluebook: "N.Y. Sup. Ct.", confidence: "table" }
   },
   {
@@ -2240,8 +2320,12 @@ function wlDomReadFacts(doc) {
   var lis = [];
   var liListIndex = [];
   var listCiteKeys = [];
+  var listCourtKeys = [];
+  var listDateSeen = [];
   for (var hl = 0; hl < headerLists.length; hl++) {
     listCiteKeys.push([]);
+    listCourtKeys.push(null);
+    listDateSeen.push(false);
     var kids = headerLists[hl].children || [];
     for (var kd = 0; kd < kids.length; kd++) {
       if (String(kids[kd].tagName).toUpperCase() === "LI") {
@@ -2258,6 +2342,12 @@ function wlDomReadFacts(doc) {
     if (!liText) continue;
 
     var classified = wlDomClassifyLI(liText);
+    var liList = liListIndex[i];
+    // Per-list court line (same rule as the global court pick below) so duplicate headers can be compared.
+    if (classified.kind === "unparsed" && listCourtKeys[liList] === null && (!listDateSeen[liList] || wlDomCourtLineRe.test(liText))) {
+      listCourtKeys[liList] = liText.toLowerCase();
+    }
+    if (classified.kind === "date") listDateSeen[liList] = true;
     if (classified.kind === "citation") {
       for (var lk = 0; lk < classified.citations.length; lk++) {
         var lkKey = classified.citations[lk].raw.toLowerCase();
@@ -2306,10 +2396,24 @@ function wlDomReadFacts(doc) {
     }
   }
 
+  // Two headers naming different courts are a conflict too, not first-wins.
+  for (var ca = 0; ca < listCourtKeys.length; ca++) {
+    for (var cb = ca + 1; cb < listCourtKeys.length; cb++) {
+      if (listCourtKeys[ca] !== null && listCourtKeys[cb] !== null && listCourtKeys[ca] !== listCourtKeys[cb] &&
+          reviewReasons.indexOf("conflicting-header") === -1) {
+        reviewReasons.push("conflicting-header");
+      }
+    }
+  }
+
+  // Facts read without the header list (fallback selectors) are flagged so the record is visibly lower-trust.
+  var usedHeaderFallback = false;
+
   if (!rawCourt) {
     var courtBlock = doc.querySelector(".co_courtBlock");
     if (courtBlock) {
       rawCourt = wlDomClean(courtBlock.textContent);
+      if (headerLists.length === 0 && rawCourt) usedHeaderFallback = true;
     }
   }
 
@@ -2351,8 +2455,11 @@ function wlDomReadFacts(doc) {
       for (var fc = 0; fc < fallbackCits.length; fc++) {
         citations.push(fallbackCits[fc]);
       }
+      if (headerLists.length === 0 && fallbackCits.length > 0) usedHeaderFallback = true;
     }
   }
+
+  if (usedHeaderFallback) reviewReasons.push("header-fallback");
 
   return {
     ok: true,
@@ -2761,6 +2868,28 @@ function wlRecAddEnvelopeReasons(reviewReasons, envelope) {
   }
 }
 
+// Forwards DomFacts review reasons (code-only strings such as conflicting-header, header-fallback) once each.
+function wlRecAddDomReasons(reviewReasons, dom) {
+  if (!dom || !Array.isArray(dom.reviewReasons)) return;
+  for (var i = 0; i < dom.reviewReasons.length; i++) {
+    var reason = dom.reviewReasons[i];
+    if (typeof reason === "string" && /^[a-z0-9:-]+$/.test(reason) && reviewReasons.indexOf(reason) === -1) reviewReasons.push(reason);
+  }
+}
+
+// Review reasons that are informational and must not stop a service-validated record from being validated-profile.
+// header-fallback only says the DOM court/citations came from the .co_courtBlock/.co_cites selectors because the
+// header list was absent; the service forms still validated the citation, so the DOM provenance note alone is not a
+// reason to distrust the record. Every other reason (conflicting-header included) demotes.
+var wlRecNonDemotingReasons = ["header-fallback"];
+
+function wlRecHasDemotingReason(reviewReasons) {
+  for (var i = 0; i < reviewReasons.length; i++) {
+    if (wlRecNonDemotingReasons.indexOf(reviewReasons[i]) === -1) return true;
+  }
+  return false;
+}
+
 function wlRecReconcile(input) {
   var context = input.context || {};
   var dom = input.dom || {};
@@ -2777,9 +2906,11 @@ function wlRecReconcile(input) {
     // 1. Service A failure → metadata-only from DOM
     if (svcA.category !== "ok") {
       reviewReasons.push("service-" + (svcA.category || "unknown"));
+      wlRecAddDomReasons(reviewReasons, dom);
       return wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenance);
     }
 
+    wlRecAddDomReasons(reviewReasons, dom);
     wlRecAddEnvelopeReasons(reviewReasons, svcA.envelope);
     if (svcB.category === "ok") wlRecAddEnvelopeReasons(reviewReasons, svcB.envelope);
 
@@ -3094,7 +3225,7 @@ function wlRecReconcile(input) {
       var bEnvelopeOk = true;
       if (svcB.category !== "ok") bEnvelopeOk = false;
       if (svcB.envelope && !svcB.envelope.ok) bEnvelopeOk = false;
-      if (reviewReasons.length === 0 && classification.confidence === "table" && bEnvelopeOk) {
+      if (!wlRecHasDemotingReason(reviewReasons) && classification.confidence === "table" && bEnvelopeOk) {
         status = "validated-profile";
       } else {
         status = "unverified-profile";
