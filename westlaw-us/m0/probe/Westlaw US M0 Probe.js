@@ -596,6 +596,8 @@ async function doWeb(doc, url) {
 
         if (resultA.json) {
           var summary = summarizeEnvelope(resultA.json);
+          resultA.styles = extractStyleIdsFromUrl(requests[0] ? requests[0].url : "");
+          resultA.forms = extractFormsFromSummary(summary);
           for (var si = 0; si < summary.length; si++) {
             if (summary[si].longText && summary[si].styleId === resultA.styleId) {
               aLongText = summary[si].longText;
@@ -603,17 +605,15 @@ async function doWeb(doc, url) {
             }
           }
           if (!aLongText) {
-            for (var si = 0; si < summary.length; si++) {
-              if (summary[si].longText) {
-                aLongText = summary[si].longText;
-                aLongStyleId = summary[si].styleId;
-              }
-            }
+            aLongText = "none-matched";
+            aLongStyleId = resultA.styleId || "";
           }
         }
 
         if (resultB && resultB.json) {
           var summaryB = summarizeEnvelope(resultB.json);
+          resultB.styles = extractStyleIdsFromUrl(requests[1] ? requests[1].url : "");
+          resultB.forms = extractFormsFromSummary(summaryB);
           for (var si2 = 0; si2 < summaryB.length; si2++) {
             if (summaryB[si2].longText && summaryB[si2].styleId === resultB.styleId) {
               bLongText = summaryB[si2].longText;
@@ -621,12 +621,8 @@ async function doWeb(doc, url) {
             }
           }
           if (!bLongText) {
-            for (var si2 = 0; si2 < summaryB.length; si2++) {
-              if (summaryB[si2].longText) {
-                bLongText = summaryB[si2].longText;
-                bLongStyleId = summaryB[si2].styleId;
-              }
-            }
+            bLongText = "none-matched";
+            bLongStyleId = resultB.styleId || "";
           }
         }
 
@@ -658,12 +654,20 @@ async function doWeb(doc, url) {
       }
 
       if (aLongText) {
-        var aStyleId = aLongStyleId || resultA.styleId || "standard";
-        extraLines.push("Westlaw M0 A long (" + aStyleId + "): " + aLongText);
+        if (aLongText === "none-matched") {
+          extraLines.push("Westlaw M0 A long: none-matched");
+        } else {
+          var aStyleId = aLongStyleId || resultA.styleId || "standard";
+          extraLines.push("Westlaw M0 A long (" + aStyleId + "): " + aLongText);
+        }
       }
       if (bLongText) {
-        var bStyleId = bLongStyleId || (resultB ? (resultB.styleId || "westlaw") : "westlaw");
-        extraLines.push("Westlaw M0 B long (" + bStyleId + "): " + bLongText);
+        if (bLongText === "none-matched") {
+          extraLines.push("Westlaw M0 B long: none-matched");
+        } else {
+          var bStyleId = bLongStyleId || (resultB ? (resultB.styleId || "westlaw") : "westlaw");
+          extraLines.push("Westlaw M0 B long (" + bStyleId + "): " + bLongText);
+        }
       }
 
       if (retryAfter) {
@@ -713,7 +717,7 @@ async function doWeb(doc, url) {
 }
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { M0: M0, cleanText: cleanText, detectWeb: detectWeb, doWeb: doWeb, readPageContext: readPageContext, buildRequests: buildRequests, fetchForm: fetchForm, summarizeEnvelope: summarizeEnvelope };
+  module.exports = { M0: M0, cleanText: cleanText, detectWeb: detectWeb, doWeb: doWeb, readPageContext: readPageContext, buildRequests: buildRequests, fetchForm: fetchForm, summarizeEnvelope: summarizeEnvelope, extractFormsFromSummary: extractFormsFromSummary };
 }
 
 var testCases = [];

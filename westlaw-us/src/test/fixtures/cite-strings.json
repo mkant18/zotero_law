@@ -1,0 +1,218 @@
+{
+  "G1": {
+    "long": "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999)",
+    "short1": "Sanchez, 187 F.3d 486",
+    "short2": "187 F.3d 486",
+    "expected": {
+      "ok": true, "dialect": "standard",
+      "name": "Sanchez v. Liggett & Myers, Inc.",
+      "citations": [{"kind": "reporter", "volume": "187", "reporter": "F.3d", "page": "486", "raw": "187 F.3d 486"}],
+      "pin": null, "court": "5th Cir.", "year": "1999", "date": null, "parentheticalSuffix": "",
+      "history": "", "reviewReasons": []
+    }
+  },
+  "G1b": {
+    "long": "United States v. Philip Morris USA Inc., 566 F.3d 1095 (D.C. Cir. 2009)",
+    "short1": "Philip Morris USA Inc., 566 F.3d 1095",
+    "short2": "566 F.3d 1095",
+    "expected": {
+      "ok": true, "dialect": "standard",
+      "name": "United States v. Philip Morris USA Inc.",
+      "citations": [{"kind": "reporter", "volume": "566", "reporter": "F.3d", "page": "1095", "raw": "566 F.3d 1095"}],
+      "pin": null, "court": "D.C. Cir.", "year": "2009", "date": null, "parentheticalSuffix": "",
+      "history": "", "reviewReasons": []
+    }
+  },
+  "G2": {
+    "long": "United States v. Philip Morris USA, Inc., 449 F. Supp. 2d 1 (D.D.C. 2006), aff'd in part, vacated in part, 566 F.3d 1095 (D.C. Cir. 2009), and order clarified, 778 F. Supp. 2d 8 (D.D.C. 2011), and modified, No. 99-CV-2496 (PLF), 2022 WL 17452863 (D.D.C. Dec. 6, 2022)",
+    "short1": "Philip Morris USA, Inc., 449 F. Supp. 2d 1",
+    "short2": "449 F. Supp. 2d 1",
+    "expected": {
+      "ok": true, "dialect": "standard",
+      "name": "United States v. Philip Morris USA, Inc.",
+      "citations": [{"kind": "reporter", "volume": "449", "reporter": "F. Supp. 2d", "page": "1", "raw": "449 F. Supp. 2d 1"}],
+      "pin": null, "court": "D.D.C.", "year": "2006", "date": null, "parentheticalSuffix": "",
+      "history": "aff'd in part, vacated in part, 566 F.3d 1095 (D.C. Cir. 2009), and order clarified, 778 F. Supp. 2d 8 (D.D.C. 2011), and modified, No. 99-CV-2496 (PLF), 2022 WL 17452863 (D.D.C. Dec. 6, 2022)",
+      "reviewReasons": []
+    }
+  },
+  "G4": {
+    "long": "Miele v. Am. Tobacco Co., 2 A.D.3d 799, 770 N.Y.S.2d 386 (2003)",
+    "short1": "Miele, 2 A.D.3d 799",
+    "short2": "2 A.D.3d 799",
+    "expected": {
+      "ok": true, "dialect": "standard",
+      "name": "Miele v. Am. Tobacco Co.",
+      "citations": [
+        {"kind": "reporter", "volume": "2", "reporter": "A.D.3d", "page": "799", "raw": "2 A.D.3d 799"},
+        {"kind": "reporter", "volume": "770", "reporter": "N.Y.S.2d", "page": "386", "raw": "770 N.Y.S.2d 386"}
+      ],
+      "pin": null, "court": "", "year": "2003", "date": null, "parentheticalSuffix": "",
+      "history": "", "reviewReasons": []
+    }
+  },
+  "G4pin": {
+    "long": "Miele v. Am. Tobacco Co., 2 A.D.3d 799, 802, 770 N.Y.S.2d 386 (2003)",
+    "expected": {
+      "ok": true, "dialect": "standard",
+      "name": "Miele v. Am. Tobacco Co.",
+      "citations": [
+        {"kind": "reporter", "volume": "2", "reporter": "A.D.3d", "page": "799", "raw": "2 A.D.3d 799"},
+        {"kind": "reporter", "volume": "770", "reporter": "N.Y.S.2d", "page": "386", "raw": "770 N.Y.S.2d 386"}
+      ],
+      "pin": "802", "court": "", "year": "2003", "date": null, "parentheticalSuffix": "",
+      "history": "", "reviewReasons": []
+    }
+  },
+  "G5": {
+    "long": "Rogers v. R.J. Reynolds Tobacco Co., 761 S.W.2d 788 (Tex. App.—Beaumont 1988, writ denied)",
+    "short1": "Rogers, 761 S.W.2d 788",
+    "short2": "761 S.W.2d 788",
+    "expected": {
+      "ok": true, "dialect": "texas",
+      "name": "Rogers v. R.J. Reynolds Tobacco Co.",
+      "citations": [{"kind": "reporter", "volume": "761", "reporter": "S.W.2d", "page": "788", "raw": "761 S.W.2d 788"}],
+      "pin": null, "court": "Tex. App.—Beaumont", "year": "1988", "date": null, "parentheticalSuffix": "writ denied",
+      "history": "", "reviewReasons": []
+    }
+  },
+  "G7": {
+    "long": "Example v. Sample, No. 24-123, 2024 WL 1234567, at *4 (D. Kan. Mar. 1, 2024)",
+    "expected": {
+      "ok": true, "dialect": "standard",
+      "name": "Example v. Sample",
+      "dockets": ["No. 24-123"],
+      "citations": [{"kind": "wl", "volume": "2024", "reporter": "WL", "page": "1234567", "raw": "2024 WL 1234567"}],
+      "pin": "*4", "court": "D. Kan.", "year": "2024", "date": "2024-03-01", "parentheticalSuffix": "",
+      "history": "", "reviewReasons": []
+    }
+  },
+  "synthetic": {
+    "illinois": {
+      "long": "In re Estate of Smith, 100 N.E.2d 5 (Ill. App. Ct. 1950)",
+      "expected": {
+        "ok": true, "dialect": "standard",
+        "name": "In re Estate of Smith",
+        "citations": [{"kind": "reporter", "volume": "100", "reporter": "N.E.2d", "page": "5", "raw": "100 N.E.2d 5"}],
+        "pin": null, "court": "Ill. App. Ct.", "year": "1950", "date": null, "parentheticalSuffix": "",
+        "history": "", "reviewReasons": []
+      }
+    },
+    "alabama": {
+      "long": "Ex parte Jones, 9 So. 2d 1 (Ala. 1942)",
+      "expected": {
+        "ok": true, "dialect": "standard",
+        "name": "Ex parte Jones",
+        "citations": [{"kind": "reporter", "volume": "9", "reporter": "So. 2d", "page": "1", "raw": "9 So. 2d 1"}],
+        "pin": null, "court": "Ala.", "year": "1942", "date": null, "parentheticalSuffix": "",
+        "history": "", "reviewReasons": []
+      }
+    },
+    "numeralsComma": {
+      "long": "3M Co. v. Johnson, Inc., 10 F.4th 20 (Fed. Cir. 2021)",
+      "expected": {
+        "ok": true, "dialect": "standard",
+        "name": "3M Co. v. Johnson, Inc.",
+        "citations": [{"kind": "reporter", "volume": "10", "reporter": "F.4th", "page": "20", "raw": "10 F.4th 20"}],
+        "pin": null, "court": "Fed. Cir.", "year": "2021", "date": null, "parentheticalSuffix": "",
+        "history": "", "reviewReasons": []
+      }
+    },
+    "reporterInternalParen": {
+      "long": "Doe v. Roe, 2020 Fed. Sec. L. Rep. (CCH) ¶ 100 (S.D.N.Y. 2020)",
+      "expected": {
+        "ok": true, "dialect": "standard",
+        "name": "Doe v. Roe",
+        "citations": [{"kind": "unparsed", "volume": "2020", "reporter": "Fed. Sec. L. Rep.", "page": "100", "raw": "2020 Fed. Sec. L. Rep. (CCH) ¶ 100"}],
+        "pin": null, "court": "S.D.N.Y.", "year": "2020", "date": null, "parentheticalSuffix": "",
+        "history": "", "reviewReasons": ["unknown-reporter"]
+      }
+    },
+    "historyLaterYear": {
+      "long": "Rogers v. R.J. Reynolds Tobacco Co., 761 S.W.2d 788 (Tex. App. 1988), writ denied (July 12, 1989), and disapproved of by Triplex Commc'ns, Inc. v. Riley, 900 S.W.2d 716 (Tex. 1995)",
+      "expected": {
+        "ok": true, "dialect": "standard",
+        "name": "Rogers v. R.J. Reynolds Tobacco Co.",
+        "citations": [{"kind": "reporter", "volume": "761", "reporter": "S.W.2d", "page": "788", "raw": "761 S.W.2d 788"}],
+        "pin": null, "court": "Tex. App.", "year": "1988", "date": null, "parentheticalSuffix": "",
+        "history": "writ denied (July 12, 1989), and disapproved of by Triplex Commc'ns, Inc. v. Riley, 900 S.W.2d 716 (Tex. 1995)",
+        "reviewReasons": []
+      }
+    },
+    "d1UnparsedBetweenCitationAndParen": {
+      "long": "Miele v. Am. Tobacco Co., 770 N.Y.S.2d 386, 2003 N.Y. Slip Op. 19972 (App. Div. 2003)",
+      "expected": {
+        "ok": true, "dialect": "standard",
+        "name": "Miele v. Am. Tobacco Co.",
+        "dockets": [],
+        "citations": [
+          {"kind": "reporter", "volume": "770", "reporter": "N.Y.S.2d", "page": "386", "raw": "770 N.Y.S.2d 386"},
+          {"kind": "unparsed", "raw": "2003 N.Y. Slip Op. 19972"}
+        ],
+        "pin": null, "court": "App. Div.", "year": "2003", "date": null, "parentheticalSuffix": "",
+        "history": "", "reviewReasons": ["unknown-reporter"]
+      }
+    },
+    "d2NoDocketInPartyName": {
+      "long": "Doe No. 1 v. Roe, 1 F.3d 2 (5th Cir. 1999)",
+      "expected": {
+        "ok": true, "dialect": "standard",
+        "name": "Doe No. 1 v. Roe",
+        "dockets": [],
+        "citations": [{"kind": "reporter", "volume": "1", "reporter": "F.3d", "page": "2", "raw": "1 F.3d 2"}],
+        "pin": null, "court": "5th Cir.", "year": "1999", "date": null, "parentheticalSuffix": "",
+        "history": "", "reviewReasons": []
+      }
+    },
+    "parallelRun": {
+      "long": "Miele v. Am. Tobacco Co., 2 A.D.3d 799, 770 N.Y.S.2d 386 (2003)",
+      "expected": {
+        "ok": true, "dialect": "standard",
+        "name": "Miele v. Am. Tobacco Co.",
+        "citations": [
+          {"kind": "reporter", "volume": "2", "reporter": "A.D.3d", "page": "799", "raw": "2 A.D.3d 799"},
+          {"kind": "reporter", "volume": "770", "reporter": "N.Y.S.2d", "page": "386", "raw": "770 N.Y.S.2d 386"}
+        ],
+        "pin": null, "court": "", "year": "2003", "date": null, "parentheticalSuffix": "",
+        "history": "", "reviewReasons": []
+      }
+    },
+    "unbalanced": {
+      "long": "Foo v. Bar, 1 F.3d 2 (5th Cir. 1999",
+      "expected": { "ok": false, "reason": "unbalanced-parens" }
+    },
+    "emptyInput": {
+      "long": "",
+      "expected": { "ok": false, "reason": "empty-input" }
+    },
+    "noAnchor": {
+      "long": "Some random text with no citation",
+      "expected": { "ok": false, "reason": "no-citation-anchor" }
+    }
+  },
+  "westlawInventory": {
+    "sanchez": {
+      "long": "Sanchez v. Liggett & Myers, Inc., No. 98-40679, 187 F.3d 486 (5th Cir.(Tex.) Aug. 25, 1999)",
+      "expected": {
+        "ok": true,
+        "dockets": ["No. 98-40679"],
+        "citations": [{"kind": "reporter", "volume": "187", "reporter": "F.3d", "page": "486", "raw": "187 F.3d 486"}],
+        "wl": null, "date": "1999-08-25", "rawCourt": "5th Cir.(Tex.)",
+        "reviewReasons": ["docket-in-long-form"]
+      }
+    },
+    "miele": {
+      "long": "Miele v American Tobacco Co., No. 019125/97, 2001-07484, 2001-07486, 2001-07487, 2001-07488, 2001-07489, 2002-01777, 770 N.Y.S.2d 386, 2003 N.Y. Slip Op. 19972, 2003 WL 23099090 (N.Y.A.D. 2 Dept., Dec. 29, 2003)",
+      "expected": {
+        "ok": true,
+        "dockets": ["No. 019125/97", "2001-07484", "2001-07486", "2001-07487", "2001-07488", "2001-07489", "2002-01777"],
+        "citations": [
+          {"kind": "reporter", "volume": "770", "reporter": "N.Y.S.2d", "page": "386", "raw": "770 N.Y.S.2d 386"}
+        ],
+        "wl": {"kind": "wl", "volume": "2003", "reporter": "WL", "page": "23099090", "raw": "2003 WL 23099090"},
+        "date": "2003-12-29", "rawCourt": "N.Y.A.D. 2 Dept.",
+        "reviewReasons": ["docket-in-long-form"]
+      }
+    }
+  }
+}

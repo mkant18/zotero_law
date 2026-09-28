@@ -149,20 +149,14 @@ function assertRequestUrls(fakeZU) {
   }
 }
 
-// Test 1: success A+B
+// Test 1: success A+B with per-request envelopes (responses matched by styleId, not array position)
 test('success A+B with synthetic envelope', async () => {
   const { translator, fakeZotero, fakeZU } = loadTranslator();
-  const { M0, doWeb, readPageContext, buildRequests, fetchForm, summarizeEnvelope } = translator;
+  const { M0, doWeb, readPageContext, buildRequests, fetchForm, summarizeEnvelope, extractFormsFromSummary } = translator;
 
-  const envelope = {
+  const envelopeA = {
     responses: [
-      {
-        request: { styleId: 'standard', parallelCiteRule: 'westReporterOnly', subStyle: 'LegalBriefs', history: true },
-        forms: [
-          { name: 'long', text: { 'text/plain': 'Doe v Smith, 123 F.3d 1 (2d Cir. 2020)' } },
-          { name: 'short', text: { 'text/plain': 'Doe v Smith' } },
-        ],
-      },
+      // Texas response listed first (reversed order) — matching must be by styleId, not position
       {
         request: { styleId: 'texas', parallelCiteRule: 'westReporterOnly', subStyle: 'LegalBriefs', history: true },
         forms: [
@@ -170,15 +164,51 @@ test('success A+B with synthetic envelope', async () => {
           { name: 'specialRef', text: { 'text/plain': 'See Doe v Smith' } },
         ],
       },
+      // Standard response listed second — A should match this by styleId
+      {
+        request: { styleId: 'standard', parallelCiteRule: 'westReporterOnly', subStyle: 'LegalBriefs', history: true },
+        forms: [
+          { name: 'long', text: { 'text/plain': 'Doe v Smith, 123 F.3d 1 (2d Cir. 2020)' } },
+          { name: 'short', text: { 'text/plain': 'Doe v Smith' } },
+        ],
+      },
     ],
   };
 
-  fakeZU.request = async (url, options) => ({
-    status: 200,
-    responseURL: url,
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(envelope),
-  });
+  const envelopeB = {
+    responses: [
+      // Standard response listed first (reversed order) — B should match westlaw, not standard
+      {
+        request: { styleId: 'standard', parallelCiteRule: 'allReporter', subStyle: 'LegalBriefs', history: false },
+        forms: [
+          { name: 'long', text: { 'text/plain': 'Doe v Smith, 123 F.3d 1 (2d Cir. 2020)' } },
+          { name: 'short', text: { 'text/plain': 'Doe v Smith' } },
+        ],
+      },
+      // Westlaw response listed second — B should match this by styleId
+      {
+        request: { styleId: 'westlaw', parallelCiteRule: 'allReporter', subStyle: 'LegalBriefs', history: false },
+        forms: [
+          { name: 'long', text: { 'text/plain': 'Doe v Smith, 123 WL 1234567 (Westlaw 2024)' } },
+          { name: 'short', text: { 'text/plain': 'Doe v Smith' } },
+          { name: 'enhanced', text: { 'text/plain': 'Doe v Smith, 123 WL 1234567' } },
+        ],
+      },
+    ],
+  };
+
+  let callIndex = 0;
+  fakeZU.request = async (url, options) => {
+    callIndex++;
+    const isB = url.includes('styleIDs=westlaw');
+    const env = isB ? envelopeB : envelopeA;
+    return {
+      status: 200,
+      responseURL: url,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(env),
+    };
+  };
 
   const scripts = [
     makeConfigScript(FAKE_GUID, 'Cases', FAKE_PCID, FAKE_RTID, FAKE_RI),
@@ -195,12 +225,53 @@ test('success A+B with synthetic envelope', async () => {
   assert.equal(item.notes.length, 0);
   assert.equal(item.extra.includes('Westlaw M0 A: ok'), true);
   assert.equal(item.extra.includes('Westlaw M0 B: ok'), true);
+  // A matched by styleId (standard), not by array position (texas was first)
   assert.equal(item.extra.includes('Westlaw M0 A long (standard):'), true);
-  assert.equal(item.extra.includes('Westlaw M0 B long (texas):'), true);
+  assert.equal(item.extra.includes('Westlaw M0 B long (westlaw):'), true);
+  // styles and forms are non-empty on success
+  assert.ok(/styles=standard[,\w]*/.test(item.extra), 'A styles should be non-empty');
+  assert.ok(/styles=.*westlaw/.test(item.extra), 'B styles should be non-empty');
+  assert.ok(/forms=/.test(item.extra), 'forms should be non-empty on success');
   assertNoSecretsInItemOrDebug(item, fakeZotero.debugMessages, [FAKE_RTID, FAKE_PCID, FAKE_RI]);
   assertRequestHeaders(fakeZU);
   assertRequestUrls(fakeZU);
   assert.equal(fakeZU.getCallCount(), 2);
+});
+
+// Test 1b: none-matched long text when echoed styleId has no long form
+test('success with no long form for echoed styleId → none-matched', async () => {
+  const { translator, fakeZotero, fakeZU } = loadTranslator();
+  const { doWeb } = translator;
+
+  const envelope = {
+    responses: [
+      {
+        request: { styleId: 'standard', parallelCiteRule: 'westReporterOnly', subStyle: 'LegalBriefs', history: true },
+        forms: [
+          { name: 'short', text: { 'text/plain': 'Doe v Smith' } },
+        ],
+      },
+    ],
+  };
+
+  fakeZU.request = async (url, options) => ({
+    status: 200,
+    responseURL: url,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(envelope),
+  });
+
+  const scripts = [makeConfigScript(FAKE_GUID, 'Cases', FAKE_PCID, FAKE_RTID, FAKE_RI)];
+  const doc = makeCaseDoc({ scripts });
+
+  await doWeb(doc, doc.location.href);
+
+  assert.equal(fakeZotero.getCompleteCount(), 1);
+  const item = fakeZotero.getLastItem();
+  assert.equal(item.extra.includes('Westlaw M0 A long: none-matched'), true, 'Should emit none-matched when no long form for echoed styleId');
+  assert.equal(item.extra.includes('Westlaw M0 A long (standard):'), false, 'Should NOT emit long line with styleId when none-matched');
+  assert.equal(item.extra.includes('Westlaw M0 B: ok'), true, 'B request also succeeds');
+  assert.equal(item.extra.includes('Westlaw M0 B long: none-matched'), true, 'B should also be none-matched since westlaw styleId not in envelope');
 });
 
 // Test 2: Texas court line vs Fifth Circuit with Texas in title
