@@ -9,7 +9,7 @@
 	"inRepository": false,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
-	"lastUpdated": "2026-09-28 20:23:22"
+	"lastUpdated": "2026-09-28 20:30:14"
 }
 
 /*
@@ -983,7 +983,7 @@ var wlProfT10 = {
   "north dakota": "N.D.",
   "ohio": "Ohio",
   "oklahoma": "Okla.",
-  "oregon": "Ore.",
+  "oregon": "Or.",
   "pennsylvania": "Pa.",
   "puerto rico": "P.R.",
   "rhode island": "R.I.",
@@ -1110,11 +1110,13 @@ var wlProfIntermediateAppellateMap = {
   "colorado": "Colo. App.",
   "iowa": "Iowa Ct. App.",
   "kansas": "Kan. Ct. App.",
+  // Open question: the Court of Appeals of Kentucky was the state's highest court before 1976; classification
+  // has no decision date, so this line is always mapped as intermediate (Ky. Ct. App.).
   "kentucky": "Ky. Ct. App.",
   "minnesota": "Minn. Ct. App.",
   "north carolina": "N.C. Ct. App.",
   "new mexico": "N.M. Ct. App.",
-  "oregon": "Ore. Ct. App.",
+  "oregon": "Or. Ct. App.",
   "south carolina": "S.C. Ct. App.",
   "tennessee": "Tenn. Ct. App.",
   "utah": "Utah Ct. App.",
@@ -1385,8 +1387,9 @@ var wlProfCourtTable = [
     res: { system: "state", level: "supreme", state: "MD", circuit: null, district: null, bluebook: "Md.", confidence: "table" }
   },
   {
+    // Maryland's highest court until the December 2022 rename to the Supreme Court of Maryland.
     re: /^court of appeals of maryland$/,
-    res: { system: "state", level: "intermediate", state: "MD", circuit: null, district: null, bluebook: "Md.", confidence: "table" }
+    res: { system: "state", level: "supreme", state: "MD", circuit: null, district: null, bluebook: "Md.", confidence: "table" }
   },
   {
     re: /^appellate court of maryland$/,
@@ -1395,6 +1398,14 @@ var wlProfCourtTable = [
   {
     re: /^court of appeals of new york$/,
     res: { system: "state", level: "supreme", state: "NY", circuit: null, district: null, bluebook: "N.Y.", confidence: "table" }
+  },
+  {
+    re: /^supreme court of appeals of west virginia$/,
+    res: { system: "state", level: "supreme", state: "WV", circuit: null, district: null, bluebook: "W. Va.", confidence: "table" }
+  },
+  {
+    re: /^district of columbia court of appeals$/,
+    res: { system: "state", level: "supreme", state: "DC", circuit: null, district: null, bluebook: "D.C.", confidence: "table" }
   },
   {
     re: /^court of criminal appeals of texas$/,
@@ -1953,6 +1964,7 @@ var wlDomPageCountRe = /^\(Approx\. \d+ pages?\)$/;
 var wlDomGuidRe = /^I[0-9a-f]{32}$/;
 var wlDomDocRe = /\/Document\/([^\/?#]+)/;
 var wlDomLinkRe = /\/Link\//;
+var wlDomCourtLineRe = /\b(Court|Circuit|Tribunal)\b/i;
 
 function wlDomClean(s) {
   if (s == null) return "";
@@ -2223,17 +2235,38 @@ function wlDomReadFacts(doc) {
   }
 
   var seenLis = {};
-  var lis = doc.querySelectorAll("#co_docHeaderCitation > li");
+  // Duplicate IDs are possible (e.g. a sticky copy of the header): read every list, tracking per-list citations.
+  var headerLists = doc.querySelectorAll("#co_docHeaderCitation");
+  var lis = [];
+  var liListIndex = [];
+  var listCiteKeys = [];
+  for (var hl = 0; hl < headerLists.length; hl++) {
+    listCiteKeys.push([]);
+    var kids = headerLists[hl].children || [];
+    for (var kd = 0; kd < kids.length; kd++) {
+      if (String(kids[kd].tagName).toUpperCase() === "LI") {
+        lis.push(kids[kd]);
+        liListIndex.push(hl);
+      }
+    }
+  }
   var courtLineFound = false;
   var dateValues = [];
 
   for (var i = 0; i < lis.length; i++) {
     var liText = wlDomClean(lis[i].textContent);
     if (!liText) continue;
-    if (seenLis[liText]) continue;
-    seenLis[liText] = true;
 
     var classified = wlDomClassifyLI(liText);
+    if (classified.kind === "citation") {
+      for (var lk = 0; lk < classified.citations.length; lk++) {
+        var lkKey = classified.citations[lk].raw.toLowerCase();
+        if (listCiteKeys[liListIndex[i]].indexOf(lkKey) === -1) listCiteKeys[liListIndex[i]].push(lkKey);
+      }
+    }
+
+    if (seenLis[liText]) continue;
+    seenLis[liText] = true;
 
     if (classified.kind === "date") {
       dateValues.push({ date: classified.date, text: classified.dateText });
@@ -2250,11 +2283,25 @@ function wlDomReadFacts(doc) {
         citations.push(classified.citations[ci]);
       }
     } else if (classified.kind === "unparsed") {
-      if (!courtLineFound && !date && !wlDomPageCountRe.test(liText) && wlRepFindCitations(liText).length === 0) {
+      if (!courtLineFound && (!date || wlDomCourtLineRe.test(liText))) {
         rawCourt = liText;
         courtLineFound = true;
       } else {
         citations.push({ kind: "unparsed", text: liText });
+      }
+    }
+  }
+
+  // Two headers whose citation sets disagree (neither contains the other) are a conflict, not first-wins.
+  for (var la = 0; la < listCiteKeys.length; la++) {
+    for (var lb = la + 1; lb < listCiteKeys.length; lb++) {
+      var keysA = listCiteKeys[la];
+      var keysB = listCiteKeys[lb];
+      if (!keysA.length || !keysB.length) continue;
+      var aInB = keysA.every(function(k) { return keysB.indexOf(k) !== -1; });
+      var bInA = keysB.every(function(k) { return keysA.indexOf(k) !== -1; });
+      if (!aInB && !bInA && reviewReasons.indexOf("conflicting-header") === -1) {
+        reviewReasons.push("conflicting-header");
       }
     }
   }
@@ -2705,6 +2752,15 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
   };
 }
 
+// Forwards a service envelope's own review reasons (already code-only, never response text) once each.
+function wlRecAddEnvelopeReasons(reviewReasons, envelope) {
+  if (!envelope || !Array.isArray(envelope.reviewReasons)) return;
+  for (var i = 0; i < envelope.reviewReasons.length; i++) {
+    var reason = envelope.reviewReasons[i];
+    if (typeof reason === "string" && reviewReasons.indexOf(reason) === -1) reviewReasons.push(reason);
+  }
+}
+
 function wlRecReconcile(input) {
   var context = input.context || {};
   var dom = input.dom || {};
@@ -2723,6 +2779,9 @@ function wlRecReconcile(input) {
       reviewReasons.push("service-" + (svcA.category || "unknown"));
       return wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenance);
     }
+
+    wlRecAddEnvelopeReasons(reviewReasons, svcA.envelope);
+    if (svcB.category === "ok") wlRecAddEnvelopeReasons(reviewReasons, svcB.envelope);
 
     // 2. Parse A forms — for texas profile, prefer texas.long; fall back to standard.long
     var parsedA = null;

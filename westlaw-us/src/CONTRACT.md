@@ -29,7 +29,7 @@ origin test) is still pending user authorization. These modules are needed under
 | `cite-parse.js` (parseStandardForm, parseTexasForm, parseWestlawInventory, parseReporterCitation, parseShortName) | `wlCite` | M1-A |
 | `dom.js` (inspectCaseReadiness, readPageContext, readDOMFacts) | `wlDom` | M1-C |
 | `map.js` (mapCaseToZotero, validateOutgoingItem) | `wlMap` | M1-D |
-| `service.js` (buildCitationRequests, fetchCitationForms, readResponseEnvelope) | `wlSvc` | M1-E |
+| `service.js` (buildCitationRequests, fetchCitationForms, wlSvcReadEnvelope) | `wlSvc` | M1-E |
 | `profile.js` (classifyCourt, selectCitationProfile, court-omission policy) | `wlProf` | M1-G |
 | `reconcile.js` (reconcileCaseRecord: DomFacts + parsed service forms \u2192 CaseRecord) | `wlRec` | M1-H |
 | `translator.js` (header, detectWeb, doWeb shell, testCases) + build script | `wl` (entry points unprefixed as Zotero requires) | M1-I |
@@ -48,10 +48,14 @@ origin test) is still pending user authorization. These modules are needed under
 { ok: true, dialect: "standard"|"texas",
   name: "Sanchez v. Liggett & Myers, Inc.",
   citations: [Citation, ...],          // main-decision citation run, in order (parallels included)
+  dockets: ["No. 98-40679"],           // raw docket tokens from original text; e.g., "Nos. 1-2, 3-4" → ["Nos. 1-2", "3-4"]
   pin: "490" | null,                   // only if the input contained a pinpoint
+  pinAt: true,                         // true if pin written as "at 490"; false if "… 490 (…)"
+  pinAfter: 0 | null,                  // index into citations array of the citation the pin follows; null if no pin
   court: "5th Cir." | "" ,             // authority inside the main parenthetical ("" if year-only)
   year: "1999",
   date: null | "1999-08-25",           // only when the parenthetical carries a full date (WL/enhanced forms)
+  dateText: null | "Aug. 25, 1999",    // full parenthetical date token as printed; null for year-only dates
   parentheticalSuffix: "" | "writ denied",   // Texas writ/petition status etc. (after the year, inside parens)
   history: "" | "aff'd in part, vacated in part, 566 F.3d 1095 (D.C. Cir. 2009)",  // tail after main ')' minus leading ", "
   unparsedTail: "" ,                   // anything not accounted for
@@ -79,6 +83,36 @@ or { ok:false, reason: "no-citation-anchor"|"unbalanced-parens"|"no-parenthetica
   wlPrimary: boolean, profile: "standard"|"texas"|"dom-only", status: "validated-profile"|"unverified-profile"|"metadata-only",
   reviewReasons: [], provenance: { field: "service"|"dom"|"both" } }
 ```
+
+## Service request envelope parsing (wlSvcReadEnvelope)
+
+**Function signature:**
+```js
+wlSvcReadEnvelope(json, wantedStyleIds, expect?)
+```
+
+**Parameters:**
+- `json` (object): parsed response body from `/RelatedInfo/v2/citestyles` endpoint.
+- `wantedStyleIds` (array of strings): expected style IDs, e.g., `["standard", "texas"]`; used to validate echo and detect missing styles.
+- `expect` (object, optional): format-option map per style, e.g., `{ standard: { subStyle: "LegalBriefs", history: true }, … }`; requests must echo these options to confirm the response matches the request.
+
+**Validation logic:**
+1. Verify envelope structure (presence of `responses` array).
+2. For each style in `wantedStyleIds`, check that exactly one response echoes that style ID (no duplicates).
+3. Validate that echoed format options in each response match the `expect` map (if supplied). If an echo key is absent or mismatched, omit that style's response from output and add a review reason `echo-mismatch:<styleId>:<key>`.
+4. Check that all requested forms exist in the response, e.g., `long`, `short`, `Id.` (add `missing-form:<styleId>:long` if absent).
+
+**Review reasons (returned in `reviewReasons` array):**
+- `malformed-envelope`: top-level structure invalid (no `responses` array or wrong type).
+- `missing-style:<id>`: a requested style ID is not present in responses.
+- `duplicate-style:<id>`: a style ID appears more than once in responses.
+- `missing-form:<id>:long`: requested style `<id>` lacks the `long` citation form.
+- `echo-mismatch:<id>:<key>`: echoed request option `<key>` for style `<id>` does not match the `expect` value; that style's response is omitted from output (not treated as a fatal error).
+
+**Key points:**
+- Absent echo keys (e.g., response omits an echoed option because the service does not echo it) are *not* failures; only mismatches are flagged.
+- Echo-mismatched styles are omitted from the returned `styles` object; their review reasons are preserved for visibility.
+- Malformed envelopes, missing styles, and missing forms generate review reasons but do not throw exceptions.
 
 ## Hard invariants (tested everywhere)
 - Never first-comma split case names (`Liggett & Myers, Inc.` contains a comma).

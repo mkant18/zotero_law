@@ -394,7 +394,7 @@ describe("P2 - new court table rules", function() {
   it("Court of Appeals of Maryland", function() {
     var r = wlProfClassifyCourt("Court of Appeals of Maryland.");
     assert.equal(r.system, "state");
-    assert.equal(r.level, "intermediate");
+    assert.equal(r.level, "supreme");
     assert.equal(r.state, "MD");
     assert.equal(r.bluebook, "Md.");
   });
@@ -752,5 +752,94 @@ describe("W3 - state court-table backlog", function() {
     var r = wlProfClassifyCourt("Court of Appeals of Colorado.");
     assert.notEqual(r.bluebook, "Colo. Ct. App.");
     assert.equal(r.bluebook, "Colo. App.");
+  });
+});
+
+describe("W4 - high-court correctness fixes", function() {
+  var positives = [
+    ["Supreme Court of Oregon.", "supreme", "OR", "Or."],
+    ["Court of Appeals of Oregon.", "intermediate", "OR", "Or. Ct. App."],
+    ["Court of Appeals of Maryland.", "supreme", "MD", "Md."],
+    ["Supreme Court of Maryland.", "supreme", "MD", "Md."],
+    ["Court of Special Appeals of Maryland.", "intermediate", "MD", "Md. Ct. Spec. App."],
+    ["Appellate Court of Maryland.", "intermediate", "MD", "Md. App. Ct."],
+    ["Court of Appeals of New York.", "supreme", "NY", "N.Y."],
+    ["Supreme Judicial Court of Massachusetts.", "supreme", "MA", "Mass."],
+    ["Supreme Judicial Court of Maine.", "supreme", "ME", "Me."],
+    ["Supreme Court of Appeals of West Virginia.", "supreme", "WV", "W. Va."],
+    ["District of Columbia Court of Appeals.", "supreme", "DC", "D.C."],
+    ["Court of Criminal Appeals of Texas.", "supreme", "TX", "Tex. Crim. App."],
+    ["Court of Criminal Appeals of Oklahoma.", "supreme", "OK", "Okla. Crim. App."],
+    ["Supreme Court of Texas.", "supreme", "TX", "Tex."]
+  ];
+  positives.forEach(function(row) {
+    it("classifies " + row[0], function() {
+      var r = wlProfClassifyCourt(row[0]);
+      assert.equal(r.system, "state");
+      assert.equal(r.level, row[1]);
+      assert.equal(r.state, row[2]);
+      assert.equal(r.bluebook, row[3]);
+      assert.equal(r.confidence, "table");
+    });
+  });
+
+  it("Oregon abbreviations never use Ore. (Bluebook T1/T10 is Or.)", function() {
+    assert.equal(wlProfT10["oregon"], "Or.");
+    ["Supreme Court of Oregon.", "Court of Appeals of Oregon."].forEach(function(line) {
+      assert.ok(!/^Ore\./.test(wlProfClassifyCourt(line).bluebook));
+    });
+  });
+
+  it("generic Court of Appeals row does not swallow New York or Maryland as intermediate", function() {
+    assert.notEqual(wlProfClassifyCourt("Court of Appeals of New York.").level, "intermediate");
+    assert.notEqual(wlProfClassifyCourt("Court of Appeals of Maryland.").level, "intermediate");
+  });
+
+  var unknownLines = [
+    "Court of Appeals of New York, Appellate Division.",
+    "Court of Appeals of New York, Second Department.",
+    "Court of Appeals of Maryland, Baltimore.",
+    "Supreme Court of Appeals of West Virginia, Southern District.",
+    "Supreme Court of Appeals of Virginia, Richmond.",
+    "Supreme Judicial Court of Maine, Sitting as the Law Court.",
+    "Supreme Judicial Court of Maine, Cumberland County.",
+    "Court of Criminal Appeals of Texas, Austin.",
+    "Court of Criminal Appeals of Oklahoma, Tulsa.",
+    "Court of Appeals of Oregon, Portland.",
+    "District of Columbia Court of Appeals, Civil Division.",
+    "Court of Appeals of the District of Columbia."
+  ];
+  unknownLines.forEach(function(line) {
+    it("keeps near-miss unknown: " + line, function() {
+      var r = wlProfClassifyCourt(line);
+      assert.equal(r.system, "unknown");
+      assert.equal(r.bluebook, null);
+      assert.equal(r.confidence, "none");
+    });
+  });
+
+  it("Texas profile selection is unchanged for high courts (standard) and intermediate (texas)", function() {
+    assert.equal(wlProfSelectProfile(wlProfClassifyCourt("Court of Criminal Appeals of Texas.")), "standard");
+    assert.equal(wlProfSelectProfile(wlProfClassifyCourt("Supreme Court of Texas.")), "standard");
+    assert.equal(wlProfSelectProfile(wlProfClassifyCourt("Court of Appeals of Texas, Beaumont.")), "texas");
+  });
+
+  it("omission policy: N.Y. Court of Appeals with official N.Y.2d/N.Y.3d omits the court", function() {
+    var c = wlProfClassifyCourt("Court of Appeals of New York.");
+    assert.equal(wlProfCourtForCitation(c, { reporter: "N.Y.2d" }, null).court, "");
+    assert.equal(wlProfCourtForCitation(c, { reporter: "N.Y.3d" }, null).court, "");
+  });
+  it("omission policy: N.Y. Court of Appeals with N.E. regional reporter keeps N.Y.", function() {
+    var c = wlProfClassifyCourt("Court of Appeals of New York.");
+    assert.equal(wlProfCourtForCitation(c, { reporter: "N.E.2d" }, null).court, "N.Y.");
+    assert.equal(wlProfCourtForCitation(c, { reporter: "N.E.3d" }, null).court, "N.Y.");
+  });
+  it("omission policy: Maryland Court of Appeals with A.2d keeps Md.", function() {
+    var c = wlProfClassifyCourt("Court of Appeals of Maryland.");
+    assert.equal(wlProfCourtForCitation(c, { reporter: "A.2d" }, null).court, "Md.");
+  });
+  it("omission policy: Oregon Supreme Court with P.3d keeps Or.", function() {
+    var c = wlProfClassifyCourt("Supreme Court of Oregon.");
+    assert.equal(wlProfCourtForCitation(c, { reporter: "P.3d" }, null).court, "Or.");
   });
 });

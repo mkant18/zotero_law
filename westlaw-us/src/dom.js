@@ -3,6 +3,7 @@ var wlDomPageCountRe = /^\(Approx\. \d+ pages?\)$/;
 var wlDomGuidRe = /^I[0-9a-f]{32}$/;
 var wlDomDocRe = /\/Document\/([^\/?#]+)/;
 var wlDomLinkRe = /\/Link\//;
+var wlDomCourtLineRe = /\b(Court|Circuit|Tribunal)\b/i;
 
 function wlDomClean(s) {
   if (s == null) return "";
@@ -273,17 +274,38 @@ function wlDomReadFacts(doc) {
   }
 
   var seenLis = {};
-  var lis = doc.querySelectorAll("#co_docHeaderCitation > li");
+  // Duplicate IDs are possible (e.g. a sticky copy of the header): read every list, tracking per-list citations.
+  var headerLists = doc.querySelectorAll("#co_docHeaderCitation");
+  var lis = [];
+  var liListIndex = [];
+  var listCiteKeys = [];
+  for (var hl = 0; hl < headerLists.length; hl++) {
+    listCiteKeys.push([]);
+    var kids = headerLists[hl].children || [];
+    for (var kd = 0; kd < kids.length; kd++) {
+      if (String(kids[kd].tagName).toUpperCase() === "LI") {
+        lis.push(kids[kd]);
+        liListIndex.push(hl);
+      }
+    }
+  }
   var courtLineFound = false;
   var dateValues = [];
 
   for (var i = 0; i < lis.length; i++) {
     var liText = wlDomClean(lis[i].textContent);
     if (!liText) continue;
-    if (seenLis[liText]) continue;
-    seenLis[liText] = true;
 
     var classified = wlDomClassifyLI(liText);
+    if (classified.kind === "citation") {
+      for (var lk = 0; lk < classified.citations.length; lk++) {
+        var lkKey = classified.citations[lk].raw.toLowerCase();
+        if (listCiteKeys[liListIndex[i]].indexOf(lkKey) === -1) listCiteKeys[liListIndex[i]].push(lkKey);
+      }
+    }
+
+    if (seenLis[liText]) continue;
+    seenLis[liText] = true;
 
     if (classified.kind === "date") {
       dateValues.push({ date: classified.date, text: classified.dateText });
@@ -300,11 +322,25 @@ function wlDomReadFacts(doc) {
         citations.push(classified.citations[ci]);
       }
     } else if (classified.kind === "unparsed") {
-      if (!courtLineFound && !date && !wlDomPageCountRe.test(liText) && wlRepFindCitations(liText).length === 0) {
+      if (!courtLineFound && (!date || wlDomCourtLineRe.test(liText))) {
         rawCourt = liText;
         courtLineFound = true;
       } else {
         citations.push({ kind: "unparsed", text: liText });
+      }
+    }
+  }
+
+  // Two headers whose citation sets disagree (neither contains the other) are a conflict, not first-wins.
+  for (var la = 0; la < listCiteKeys.length; la++) {
+    for (var lb = la + 1; lb < listCiteKeys.length; lb++) {
+      var keysA = listCiteKeys[la];
+      var keysB = listCiteKeys[lb];
+      if (!keysA.length || !keysB.length) continue;
+      var aInB = keysA.every(function(k) { return keysB.indexOf(k) !== -1; });
+      var bInA = keysB.every(function(k) { return keysA.indexOf(k) !== -1; });
+      if (!aInB && !bInA && reviewReasons.indexOf("conflicting-header") === -1) {
+        reviewReasons.push("conflicting-header");
       }
     }
   }

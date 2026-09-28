@@ -36,7 +36,7 @@ var wlProfT10 = {
   "north dakota": "N.D.",
   "ohio": "Ohio",
   "oklahoma": "Okla.",
-  "oregon": "Ore.",
+  "oregon": "Or.",
   "pennsylvania": "Pa.",
   "puerto rico": "P.R.",
   "rhode island": "R.I.",
@@ -163,11 +163,13 @@ var wlProfIntermediateAppellateMap = {
   "colorado": "Colo. App.",
   "iowa": "Iowa Ct. App.",
   "kansas": "Kan. Ct. App.",
+  // Open question: the Court of Appeals of Kentucky was the state's highest court before 1976; classification
+  // has no decision date, so this line is always mapped as intermediate (Ky. Ct. App.).
   "kentucky": "Ky. Ct. App.",
   "minnesota": "Minn. Ct. App.",
   "north carolina": "N.C. Ct. App.",
   "new mexico": "N.M. Ct. App.",
-  "oregon": "Ore. Ct. App.",
+  "oregon": "Or. Ct. App.",
   "south carolina": "S.C. Ct. App.",
   "tennessee": "Tenn. Ct. App.",
   "utah": "Utah Ct. App.",
@@ -438,8 +440,9 @@ var wlProfCourtTable = [
     res: { system: "state", level: "supreme", state: "MD", circuit: null, district: null, bluebook: "Md.", confidence: "table" }
   },
   {
+    // Maryland's highest court until the December 2022 rename to the Supreme Court of Maryland.
     re: /^court of appeals of maryland$/,
-    res: { system: "state", level: "intermediate", state: "MD", circuit: null, district: null, bluebook: "Md.", confidence: "table" }
+    res: { system: "state", level: "supreme", state: "MD", circuit: null, district: null, bluebook: "Md.", confidence: "table" }
   },
   {
     re: /^appellate court of maryland$/,
@@ -448,6 +451,14 @@ var wlProfCourtTable = [
   {
     re: /^court of appeals of new york$/,
     res: { system: "state", level: "supreme", state: "NY", circuit: null, district: null, bluebook: "N.Y.", confidence: "table" }
+  },
+  {
+    re: /^supreme court of appeals of west virginia$/,
+    res: { system: "state", level: "supreme", state: "WV", circuit: null, district: null, bluebook: "W. Va.", confidence: "table" }
+  },
+  {
+    re: /^district of columbia court of appeals$/,
+    res: { system: "state", level: "supreme", state: "DC", circuit: null, district: null, bluebook: "D.C.", confidence: "table" }
   },
   {
     re: /^court of criminal appeals of texas$/,

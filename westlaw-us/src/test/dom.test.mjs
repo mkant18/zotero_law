@@ -703,3 +703,198 @@ describe("wlDomReadFacts", function() {
     assert.equal(resultStr.indexOf("\u200B"), -1);
   });
 });
+
+// ---- plan §12 selector and schema fallbacks (synthetic placeholder text only) ----
+
+function fallbackDoc(bodyNodes) {
+  var header = el("div", { id: "co_docHeaderTitleLine" }, "Placeholder v. Example");
+  var config = el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases"};');
+  return makeDoc({
+    title: "Placeholder v. Example | Cases | Test Court | Westlaw Advantage",
+    body: el.apply(null, ["body", {}, header].concat(bodyNodes, [config]))
+  });
+}
+
+function citeRaws(result) {
+  return Array.from(result.citations, function(c) { return c.raw; });
+}
+
+function plain(v) {
+  return JSON.parse(JSON.stringify(v));
+}
+
+describe("wlDomReadFacts — plan §12 selector fallbacks", function() {
+  it("reads court/date/cites from courtline/filedate/cite0/cite1 ids", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", { id: "courtline" }, "Placeholder Court of Appeals"),
+      el("li", { id: "filedate" }, "March 15, 2020"),
+      el("li", { id: "cite0" }, "100 F.3d 200"),
+      el("li", { id: "cite1" }, "300 F. Supp. 2d 400"));
+    var result = wlDomReadFacts(fallbackDoc([list]));
+    assert.equal(result.rawCourt, "Placeholder Court of Appeals");
+    assert.equal(result.date, "2020-03-15");
+    assert.deepEqual(citeRaws(result), ["100 F.3d 200", "300 F. Supp. 2d 400"]);
+    assert.equal(result.citations.every(function(c) { return c.kind === "reporter"; }), true);
+    assert.deepEqual(plain(result.reviewReasons), []);
+  });
+
+  it("reads citations from chapter0/chapter1 ids", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", { id: "courtline" }, "Placeholder Court of Appeals"),
+      el("li", { id: "filedate" }, "March 15, 2020"),
+      el("li", { id: "chapter0" }, "100 F.3d 200"),
+      el("li", { id: "chapter1" }, "300 F. Supp. 2d 400"));
+    var result = wlDomReadFacts(fallbackDoc([list]));
+    assert.deepEqual(citeRaws(result), ["100 F.3d 200", "300 F. Supp. 2d 400"]);
+    assert.equal(result.rawCourt, "Placeholder Court of Appeals");
+  });
+
+  it("reads a single un-numbered chapter id as a citation", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", { id: "courtline" }, "Placeholder Court of Appeals"),
+      el("li", { id: "chapter" }, "100 F.3d 200"));
+    var result = wlDomReadFacts(fallbackDoc([list]));
+    assert.deepEqual(citeRaws(result), ["100 F.3d 200"]);
+  });
+
+  it("classifies semantically, ignoring misleading li ids", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", { id: "cite0" }, "March 15, 2020"),
+      el("li", { id: "filedate" }, "100 F.3d 200"),
+      el("li", { id: "courtline" }, "(Approx. 4 pages)"));
+    var result = wlDomReadFacts(fallbackDoc([list]));
+    assert.equal(result.date, "2020-03-15");
+    assert.deepEqual(citeRaws(result), ["100 F.3d 200"]);
+    assert.equal(result.pageCountText, "(Approx. 4 pages)");
+    assert.equal(result.rawCourt, "");
+  });
+
+  it("classifies id-less direct li children semantically in court, date, cite, page-count order", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"),
+      el("li", {}, "March 15, 2020"),
+      el("li", {}, "100 F.3d 200"),
+      el("li", {}, "(Approx. 4 pages)"));
+    var result = wlDomReadFacts(fallbackDoc([list]));
+    assert.equal(result.rawCourt, "Placeholder Court of Appeals");
+    assert.equal(result.date, "2020-03-15");
+    assert.equal(result.citations.length, 1);
+    assert.equal(result.pageCountText, "(Approx. 4 pages)");
+  });
+
+  it("classifies id-less li children even when the court line follows the date", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "March 15, 2020"),
+      el("li", {}, "100 F.3d 200"),
+      el("li", {}, "Placeholder Court of Appeals"));
+    var result = wlDomReadFacts(fallbackDoc([list]));
+    assert.equal(result.rawCourt, "Placeholder Court of Appeals");
+    assert.equal(result.date, "2020-03-15");
+    assert.deepEqual(citeRaws(result), ["100 F.3d 200"]);
+    assert.equal(result.citations.some(function(c) { return c.kind === "unparsed"; }), false);
+  });
+
+  it("does not turn a page-count li (\"2 pages\" style) into a date or citation", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "March 15, 2020"),
+      el("li", {}, "100 F.3d 200"),
+      el("li", {}, "(Approx. 2 pages)"),
+      el("li", {}, "(Approx. 1 page)"));
+    var result = wlDomReadFacts(fallbackDoc([list]));
+    assert.equal(result.date, "2020-03-15");
+    assert.equal(result.dateText, "March 15, 2020");
+    assert.deepEqual(citeRaws(result), ["100 F.3d 200"]);
+    assert.equal(result.pageCountText, "(Approx. 1 page)");
+    assert.equal(result.rawCourt, "");
+    assert.deepEqual(plain(result.reviewReasons), []);
+  });
+
+  it("a page-count-only header yields no date, citation, or court", function() {
+    var list = el("div", { id: "co_docHeaderCitation" }, el("li", {}, "(Approx. 2 pages)"));
+    var result = wlDomReadFacts(fallbackDoc([list]));
+    assert.equal(result.date, null);
+    assert.equal(result.dateText, null);
+    assert.deepEqual(plain(result.citations), []);
+    assert.equal(result.rawCourt, "");
+    assert.equal(result.pageCountText, "(Approx. 2 pages)");
+  });
+
+  it("flags conflicting-header for two headers with different citations", function() {
+    var first = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var second = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "March 15, 2020"), el("li", {}, "300 F. Supp. 2d 400"));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.equal(result.reviewReasons.indexOf("conflicting-header") !== -1, true);
+  });
+
+  it("does not flag conflicting-header for two identical (sticky) headers", function() {
+    var first = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var second = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.deepEqual(plain(result.reviewReasons), []);
+    assert.equal(result.citations.length, 1);
+    assert.equal(result.rawCourt, "Placeholder Court of Appeals");
+  });
+
+  it("does not flag conflicting-header when one header list is a subset of the other (truncated sticky copy)", function() {
+    var first = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "100 F.3d 200"), el("li", {}, "300 F. Supp. 2d 400"));
+    var second = el("div", { id: "co_docHeaderCitation" }, el("li", {}, "100 F.3d 200"));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.equal(result.reviewReasons.indexOf("conflicting-header"), -1);
+    assert.deepEqual(citeRaws(result), ["100 F.3d 200", "300 F. Supp. 2d 400"]);
+  });
+
+  it("does not silently pick the first of two headers with different dates", function() {
+    var first = el("div", { id: "co_docHeaderCitation" }, el("li", {}, "March 15, 2020"));
+    var second = el("div", { id: "co_docHeaderCitation" }, el("li", {}, "April 16, 2021"));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.equal(result.reviewReasons.indexOf("conflicting-header") !== -1, true);
+  });
+
+  it("with no header list, falls back to .co_courtBlock and .co_cites and leaves date empty", function() {
+    var courtBlock = el("div", { class: "co_courtBlock" }, "Placeholder Court of Appeals");
+    var cites = el("div", { class: "co_cites" }, "100 F.3d 200");
+    var result = wlDomReadFacts(fallbackDoc([courtBlock, cites]));
+    assert.equal(result.ok, true);
+    assert.equal(result.rawCourt, "Placeholder Court of Appeals");
+    assert.deepEqual(citeRaws(result), ["100 F.3d 200"]);
+    assert.equal(result.date, null);
+    assert.equal(result.dateText, null);
+    assert.equal(result.reviewReasons.indexOf("conflicting-header"), -1);
+  });
+
+  it("with no header list, marks the result as fallback-sourced via a review reason", { todo: "dom.js emits no review reason when the header list is absent (fallback silently used); reason code not specified by plan section 12 - orchestrator decision" }, function() {
+    var courtBlock = el("div", { class: "co_courtBlock" }, "Placeholder Court of Appeals");
+    var cites = el("div", { class: "co_cites" }, "100 F.3d 200");
+    var result = wlDomReadFacts(fallbackDoc([courtBlock, cites]));
+    assert.equal(result.reviewReasons.indexOf("header-fallback") !== -1, true);
+  });
+
+  it("prefers header li values over .co_courtBlock/.co_cites when the header is present", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var courtBlock = el("div", { class: "co_courtBlock" }, "Placeholder Court of Appeals");
+    var cites = el("div", { class: "co_cites" }, "100 F.3d 200");
+    var result = wlDomReadFacts(fallbackDoc([list, courtBlock, cites]));
+    assert.equal(result.rawCourt, "Placeholder Court of Appeals");
+    assert.deepEqual(citeRaws(result), ["100 F.3d 200"]);
+    assert.deepEqual(plain(result.reviewReasons), []);
+  });
+
+  it(".co_docketBlock is read independently of the header list", function() {
+    var docket = el("div", { class: "co_docketBlock" }, "No. 20-1234.");
+    var result = wlDomReadFacts(fallbackDoc([docket]));
+    assert.deepEqual(plain(result.dockets), ["No. 20-1234"]);
+    assert.equal(result.headerName, "Placeholder v. Example");
+  });
+
+  it("headerName is the sanitized header text without the | Cases | suffix", function() {
+    var header = el("div", { id: "co_docHeaderTitleLine" }, "Placeholder v. Example | Cases | Test Court");
+    var doc = makeDoc({ title: "x | Cases | y", body: el("body", {}, header) });
+    assert.equal(wlDomReadFacts(doc).headerName, "Placeholder v. Example");
+  });
+});

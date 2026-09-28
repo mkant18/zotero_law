@@ -81,6 +81,15 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
   };
 }
 
+// Forwards a service envelope's own review reasons (already code-only, never response text) once each.
+function wlRecAddEnvelopeReasons(reviewReasons, envelope) {
+  if (!envelope || !Array.isArray(envelope.reviewReasons)) return;
+  for (var i = 0; i < envelope.reviewReasons.length; i++) {
+    var reason = envelope.reviewReasons[i];
+    if (typeof reason === "string" && reviewReasons.indexOf(reason) === -1) reviewReasons.push(reason);
+  }
+}
+
 function wlRecReconcile(input) {
   var context = input.context || {};
   var dom = input.dom || {};
@@ -99,6 +108,9 @@ function wlRecReconcile(input) {
       reviewReasons.push("service-" + (svcA.category || "unknown"));
       return wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenance);
     }
+
+    wlRecAddEnvelopeReasons(reviewReasons, svcA.envelope);
+    if (svcB.category === "ok") wlRecAddEnvelopeReasons(reviewReasons, svcB.envelope);
 
     // 2. Parse A forms — for texas profile, prefer texas.long; fall back to standard.long
     var parsedA = null;

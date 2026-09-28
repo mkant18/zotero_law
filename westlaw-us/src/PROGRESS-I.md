@@ -34,3 +34,9 @@ T2: Added trailing newline after `/** END TEST CASES **/` in build-translator.mj
 - `node --test "westlaw-us/src/test/translator.test.mjs"` → 24/24 pass
 - `node --test "westlaw-us/src/test/*.test.mjs"` → 419/419 pass
 - `node westlaw-us/tools/check-private-data.mjs --paths westlaw-us` → fail=0 warn=0
+
+## W5 — forward non-echo envelope review reasons
+- Probe (under .cache): before the change `wlRecReconcile` never read `envelope.reviewReasons`; `wlTrReadService` forwarded only `echo-mismatch:*`, so `malformed-envelope`, `missing-style:<id>`, `duplicate-style:<id>`, `missing-form:<id>:long` were dropped.
+- Fix in `reconcile.js` (single place): new `wlRecAddEnvelopeReasons` copies envelope A reasons (and envelope B reasons when B category is `ok`) into `rec.reviewReasons`, deduped. Any reason makes the record non-validated (`unverified-profile`, or `metadata-only` when no primary) and adds the needs-review tag via map. `translator.js` unchanged (echo path already dedupes).
+- Note: `responses` not an array is classified `unexpected-envelope` by `wlSvcFetch` before `wlSvcReadEnvelope`, so it surfaces as `service-unexpected-envelope` / metadata-only (existing path). `malformed-envelope` is reachable via non-object entries in `responses`/`forms`.
+- Tests: 5 in `reconcile.test.mjs`, 5 in `translator.test.mjs` (B routed by `styleIDs=westlaw` because the B URL also contains `styleIDs=standard`).
