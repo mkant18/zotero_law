@@ -1,5 +1,5 @@
 {
-  "_note": "Hand-built from reports/20-ASTRA-ARCHITECTURE.md section 5 (field contract) and section 11 golden targets G1/G2/G4/G5/G7, applied to the synthetic inputs in golden-inputs.mjs. Not generated from mapper output. 'extra' is listed as its individual lines (the mapper emits them joined by \\n). Version string is the explicit test option passed to wlMapToZoteroFields. G2/G5/G7 use valid placeholder GUIDs (I + 32 hex) substituted in the test, because golden-inputs.mjs has malformed placeholder GUIDs for those cases.",
+  "_note": "Hand-built from reports/20-ASTRA-ARCHITECTURE.md section 5 (field contract) and section 11 golden targets G1/G2/G4/G5/G7, applied to the synthetic inputs in golden-inputs.mjs. Not generated from mapper output. 'extra' is listed as its individual lines (the mapper emits them joined by \\n). Version string is the explicit test option passed to wlMapToZoteroFields.",
   "G1": {
     "itemType": "case",
     "caseName": "Sanchez v. Liggett & Myers, Inc.",

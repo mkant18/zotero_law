@@ -9,7 +9,7 @@
 	"inRepository": false,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
-	"lastUpdated": "2026-09-28 20:30:14"
+	"lastUpdated": "2026-09-28 21:38:27"
 }
 
 /*
@@ -1436,7 +1436,7 @@ var wlProfCourtTable = [
     res: { system: "state", level: "intermediate", state: "IL", circuit: null, district: null, bluebook: "Ill. App. Ct.", confidence: "table" }
   },
   {
-    re: /^court of appeals of (georgia|michigan|ohio|arizona|colorado|iowa|kansas|kentucky|minnesota|north carolina|new mexico|oregon|south carolina|tennessee|utah|washington|wisconsin|missouri|indiana|nebraska)(?:,\s*\d+(?:st|nd|rd|th)?\s+district)?$/,
+    re: /^court of appeals of (georgia|michigan|colorado|iowa|kansas|kentucky|minnesota|north carolina|new mexico|oregon|south carolina|utah|wisconsin|indiana|nebraska)(?:,\s*\d+(?:st|nd|rd|th)?\s+district)?$/,
     res: function(m) {
       var stateName = m[1].toLowerCase();
       var bluebook = wlProfIntermediateAppellateMap[stateName] || null;
@@ -1496,15 +1496,15 @@ var wlProfCourtTable = [
     res: { system: "state", level: "intermediate", state: "TN", circuit: null, district: null, bluebook: "Tenn. Crim. App.", confidence: "table" }
   },
   {
-    re: /^court of appeals of missouri,\s*(?:eastern|western|southern)\s+district$/,
+    re: /^court of appeals of missouri(?:,\s*(?:eastern|western|southern)\s+district)?$/,
     res: { system: "state", level: "intermediate", state: "MO", circuit: null, district: null, bluebook: "Mo. Ct. App.", confidence: "table" }
   },
   {
-    re: /^court of appeals of washington,\s*division\s+(?:1|2|3|one|two|three)$/,
+    re: /^court of appeals of washington(?:,\s*division\s+(?:1|2|3|one|two|three))?$/,
     res: { system: "state", level: "intermediate", state: "WA", circuit: null, district: null, bluebook: "Wash. Ct. App.", confidence: "table" }
   },
   {
-    re: /^court of appeals of arizona,\s*division\s+(?:1|2|one|two)$/,
+    re: /^court of appeals of arizona(?:,\s*division\s+(?:1|2|one|two))?$/,
     res: { system: "state", level: "intermediate", state: "AZ", circuit: null, district: null, bluebook: "Ariz. Ct. App.", confidence: "table" }
   },
   {
@@ -2207,6 +2207,29 @@ function wlDomClassifyLI(liText) {
   return { kind: "unparsed", text: liText };
 }
 
+// First acceptable unparsed line in one header list, same rule as rawCourt.
+function wlDomHeaderListCourtLine(listEl) {
+  var kids = listEl.children || [];
+  var dateSeen = false;
+  var courtLineFound = false;
+  var courtLine = "";
+  for (var kd = 0; kd < kids.length; kd++) {
+    if (String(kids[kd].tagName).toUpperCase() !== "LI") continue;
+    var liText = wlDomClean(kids[kd].textContent);
+    if (!liText) continue;
+    var classified = wlDomClassifyLI(liText);
+    if (classified.kind === "date") {
+      dateSeen = true;
+    } else if (classified.kind === "unparsed") {
+      if (!courtLineFound && (!dateSeen || wlDomCourtLineRe.test(liText))) {
+        courtLine = liText;
+        courtLineFound = true;
+      }
+    }
+  }
+  return courtLine;
+}
+
 function wlDomReadFacts(doc) {
   var reviewReasons = [];
   var citations = [];
@@ -2306,10 +2329,31 @@ function wlDomReadFacts(doc) {
     }
   }
 
+  if (headerLists.length >= 2 && reviewReasons.indexOf("conflicting-header") === -1) {
+    var headerCourtLines = [];
+    for (var hc = 0; hc < headerLists.length; hc++) {
+      var headerCourtLine = wlDomHeaderListCourtLine(headerLists[hc]);
+      if (headerCourtLine) headerCourtLines.push(headerCourtLine.toLowerCase());
+    }
+    if (headerCourtLines.length >= 2) {
+      for (var hx = 1; hx < headerCourtLines.length; hx++) {
+        if (headerCourtLines[hx] !== headerCourtLines[0]) {
+          reviewReasons.push("conflicting-header");
+          break;
+        }
+      }
+    }
+  }
+
+  var courtFallbackSupplied = false;
   if (!rawCourt) {
     var courtBlock = doc.querySelector(".co_courtBlock");
     if (courtBlock) {
-      rawCourt = wlDomClean(courtBlock.textContent);
+      var courtFallbackText = wlDomClean(courtBlock.textContent);
+      if (courtFallbackText) {
+        rawCourt = courtFallbackText;
+        courtFallbackSupplied = true;
+      }
     }
   }
 
@@ -2343,15 +2387,21 @@ function wlDomReadFacts(doc) {
     }
   }
 
+  var citesFallbackSupplied = false;
   if (!citations.length) {
     var citesFallback = doc.querySelector(".co_cites");
     if (citesFallback) {
       var citesText = wlDomClean(citesFallback.textContent);
       var fallbackCits = wlRepFindCitations(citesText);
+      if (fallbackCits.length > 0) citesFallbackSupplied = true;
       for (var fc = 0; fc < fallbackCits.length; fc++) {
         citations.push(fallbackCits[fc]);
       }
     }
+  }
+
+  if (headerLists.length === 0 && (courtFallbackSupplied || citesFallbackSupplied)) {
+    reviewReasons.push("header-fallback");
   }
 
   return {
@@ -2376,6 +2426,8 @@ var wlMapTokenRe = /ResourceToken|PageEventIdentifier|x-cobalt|Bearer /;
 var wlMapYearParenRe = /\(\d{4}\)/;
 var wlMapCiteRe = /\d+ [A-Z].* \d+/;
 var wlMapGuidRe = /^I[0-9a-f]{32}$/;
+// A missing header list is recorded for provenance. It does not mean the validated citation needs review.
+var wlMapInformationalReasons = ["header-fallback"];
 var wlMapDashRe = /[\u2013\u2014]/g;
 var wlMapDocketCleanRe = /^[0-9a-zA-Z\u2013\u2014-]+$/;
 
@@ -2417,6 +2469,13 @@ function wlMapFormatDocketNumber(dockets) {
     return s;
   });
   return "Nos. " + parts.join(", ");
+}
+
+function wlMapHasDemotingReason(reviewReasons) {
+  for (var i = 0; i < reviewReasons.length; i++) {
+    if (wlMapInformationalReasons.indexOf(reviewReasons[i]) === -1) return true;
+  }
+  return false;
 }
 
 function wlMapToZoteroFields(rec, opts) {
@@ -2498,7 +2557,7 @@ function wlMapToZoteroFields(rec, opts) {
   var extra = extraLines.join("\n");
 
   var tags = [];
-  if (reviewReasons.length > 0 || rec.status !== "validated-profile") {
+  if (wlMapHasDemotingReason(reviewReasons) || rec.status !== "validated-profile") {
     tags.push({ tag: "Westlaw: needs citation review" });
   }
 
@@ -2752,6 +2811,25 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
   };
 }
 
+// Forwards DOM review reason codes once each. Non-codes are dropped.
+function wlRecAddDomReasons(reviewReasons, dom) {
+  if (!dom || !Array.isArray(dom.reviewReasons)) return;
+  for (var i = 0; i < dom.reviewReasons.length; i++) {
+    var reason = dom.reviewReasons[i];
+    if (typeof reason === "string" && /^[a-z0-9:-]+$/.test(reason) && reviewReasons.indexOf(reason) === -1) {
+      reviewReasons.push(reason);
+    }
+  }
+}
+
+// header-fallback is recorded but does not by itself block validated-profile.
+function wlRecHasDemotingReason(reviewReasons) {
+  for (var i = 0; i < reviewReasons.length; i++) {
+    if (reviewReasons[i] !== "header-fallback") return true;
+  }
+  return false;
+}
+
 // Forwards a service envelope's own review reasons (already code-only, never response text) once each.
 function wlRecAddEnvelopeReasons(reviewReasons, envelope) {
   if (!envelope || !Array.isArray(envelope.reviewReasons)) return;
@@ -2774,6 +2852,8 @@ function wlRecReconcile(input) {
   var provenance = {};
 
   try {
+    wlRecAddDomReasons(reviewReasons, dom);
+
     // 1. Service A failure → metadata-only from DOM
     if (svcA.category !== "ok") {
       reviewReasons.push("service-" + (svcA.category || "unknown"));
@@ -3094,7 +3174,7 @@ function wlRecReconcile(input) {
       var bEnvelopeOk = true;
       if (svcB.category !== "ok") bEnvelopeOk = false;
       if (svcB.envelope && !svcB.envelope.ok) bEnvelopeOk = false;
-      if (reviewReasons.length === 0 && classification.confidence === "table" && bEnvelopeOk) {
+      if (!wlRecHasDemotingReason(reviewReasons) && classification.confidence === "table" && bEnvelopeOk) {
         status = "validated-profile";
       } else {
         status = "unverified-profile";

@@ -94,23 +94,23 @@ wlSvcReadEnvelope(json, wantedStyleIds, expect?)
 **Parameters:**
 - `json` (object): parsed response body from `/RelatedInfo/v2/citestyles` endpoint.
 - `wantedStyleIds` (array of strings): expected style IDs, e.g., `["standard", "texas"]`; used to validate echo and detect missing styles.
-- `expect` (object, optional): format-option map per style, e.g., `{ standard: { subStyle: "LegalBriefs", history: true }, … }`; requests must echo these options to confirm the response matches the request.
+- `expect` (object, optional): one flat format-option map for the whole request, the object `wlSvcBuildRequests` attaches as `expect`. Example: `{ history: "true", parallelCiteRule: "westReporterOnly", subStyle: "LegalBriefs", underline: "false", bold: "false", italicize: "false" }`. It is not keyed by style.
 
 **Validation logic:**
 1. Verify envelope structure (presence of `responses` array).
 2. For each style in `wantedStyleIds`, check that exactly one response echoes that style ID (no duplicates).
-3. Validate that echoed format options in each response match the `expect` map (if supplied). If an echo key is absent or mismatched, omit that style's response from output and add a review reason `echo-mismatch:<styleId>:<key>`.
-4. Check that all requested forms exist in the response, e.g., `long`, `short`, `Id.` (add `missing-form:<styleId>:long` if absent).
+3. If `expect` is supplied, compare only echoed keys that are present and non-null. A present value that differs omits that style from output and adds `echo-mismatch:<styleId>:<key>`. A missing echo key is not a mismatch.
+4. A style with neither a `long` nor an `enhanced` form is kept (`long: null`) and flagged `missing-form:<styleId>:long`. `short` and `Id.` are not required.
 
 **Review reasons (returned in `reviewReasons` array):**
 - `malformed-envelope`: top-level structure invalid (no `responses` array or wrong type).
 - `missing-style:<id>`: a requested style ID is not present in responses.
 - `duplicate-style:<id>`: a style ID appears more than once in responses.
-- `missing-form:<id>:long`: requested style `<id>` lacks the `long` citation form.
-- `echo-mismatch:<id>:<key>`: echoed request option `<key>` for style `<id>` does not match the `expect` value; that style's response is omitted from output (not treated as a fatal error).
+- `missing-form:<id>:long`: requested style `<id>` has neither a `long` nor an `enhanced` form.
+- `echo-mismatch:<id>:<key>`: a present echoed option `<key>` for style `<id>` does not match `expect`; that style's response is omitted from output (not treated as a fatal error).
 
 **Key points:**
-- Absent echo keys (e.g., response omits an echoed option because the service does not echo it) are *not* failures; only mismatches are flagged.
+- Absent echo keys (the response omits an option the service does not echo) are not failures; only a present key whose value differs is flagged.
 - Echo-mismatched styles are omitted from the returned `styles` object; their review reasons are preserved for visibility.
 - Malformed envelopes, missing styles, and missing forms generate review reasons but do not throw exceptions.
 

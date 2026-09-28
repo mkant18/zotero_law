@@ -956,12 +956,17 @@ describe("wlRecReconcile - DOM review reasons", function() {
     var result = reconcileOk(["conflicting-header"]);
     assert.ok(result.reviewReasons.indexOf("conflicting-header") !== -1);
     assert.notEqual(result.status, "validated-profile");
+    var fields = wlMapToZoteroFields(result);
+    assert.ok(fields.tags.some(function(t) { return t.tag === "Westlaw: needs citation review"; }));
   });
 
   it("header-fallback alone stays on a table-confidence record and keeps validated-profile", function() {
     var result = reconcileOk(["header-fallback"]);
     assert.ok(result.reviewReasons.indexOf("header-fallback") !== -1);
     assert.equal(result.status, "validated-profile");
+    var fields = wlMapToZoteroFields(result);
+    assert.equal(fields.tags.length, 0);
+    assert.ok(fields.extra.indexOf("Westlaw review: header-fallback") !== -1);
   });
 
   it("header-fallback plus another DOM reason is not validated-profile", function() {

@@ -4,6 +4,8 @@ var wlMapTokenRe = /ResourceToken|PageEventIdentifier|x-cobalt|Bearer /;
 var wlMapYearParenRe = /\(\d{4}\)/;
 var wlMapCiteRe = /\d+ [A-Z].* \d+/;
 var wlMapGuidRe = /^I[0-9a-f]{32}$/;
+// A missing header list is recorded for provenance. It does not mean the validated citation needs review.
+var wlMapInformationalReasons = ["header-fallback"];
 var wlMapDashRe = /[\u2013\u2014]/g;
 var wlMapDocketCleanRe = /^[0-9a-zA-Z\u2013\u2014-]+$/;
 
@@ -45,6 +47,13 @@ function wlMapFormatDocketNumber(dockets) {
     return s;
   });
   return "Nos. " + parts.join(", ");
+}
+
+function wlMapHasDemotingReason(reviewReasons) {
+  for (var i = 0; i < reviewReasons.length; i++) {
+    if (wlMapInformationalReasons.indexOf(reviewReasons[i]) === -1) return true;
+  }
+  return false;
 }
 
 function wlMapToZoteroFields(rec, opts) {
@@ -126,7 +135,7 @@ function wlMapToZoteroFields(rec, opts) {
   var extra = extraLines.join("\n");
 
   var tags = [];
-  if (reviewReasons.length > 0 || rec.status !== "validated-profile") {
+  if (wlMapHasDemotingReason(reviewReasons) || rec.status !== "validated-profile") {
     tags.push({ tag: "Westlaw: needs citation review" });
   }
 
