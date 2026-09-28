@@ -1,0 +1,85 @@
+```acceptance-report
+{
+  "criteriaSatisfied": [
+    {
+      "id": "criterion-1",
+      "status": "satisfied",
+      "evidence": "Report covers: (1) CSL Bluebook variable usage with exact line references from 3 CSL styles; (2) Juris-M vs standard Zotero field comparison from schema.json and gh API; (3) translator workflow from .ci/ scripts, CI workflow, eslint rules, and deployment mechanism; (4) local testing via Scaffold and connector debug options. All claims cited to specific file paths and line ranges."
+    }
+  ],
+  "changedFiles": [
+    "reports/E-citation-output-and-dev-workflow.md"
+  ],
+  "testsAddedOrUpdated": [],
+  "commandsRun": [
+    {
+      "command": "read M:/Coding_Projects/_zotero-research/styles/bluebook-law-review.csl (391 lines)",
+      "result": "passed",
+      "summary": "Extracted legal_case variable mapping: title, volume, container-title, page-first, locator, authority, issued"
+    },
+    {
+      "command": "read M:/Coding_Projects/_zotero-research/styles/bluebook-inline.csl (232 lines)",
+      "result": "passed",
+      "summary": "Extracted legal_case source-long/source-short/container macro details"
+    },
+    {
+      "command": "gh api repos/Juris-M/zotero-schema/contents/schema-jurism.json",
+      "result": "passed",
+      "summary": "Juris-M has 32 case fields vs standard Zotero 15; identified 17 extra fields including jurisdiction, division, yearAsVolume"
+    },
+    {
+      "command": "read M:/Coding_Projects/_zotero-research/translators/.github/workflows/ci.yml",
+      "result": "passed",
+      "summary": "CI uses Chromium/Playwright to test translators; builds connector from source"
+    },
+    {
+      "command": "read M:/Coding_Projects/_zotero-research/translators/.ci/pull-request-check/browser-test.mjs",
+      "result": "passed",
+      "summary": "Web tests run in real browser; login-walled sites have empty/untestable test cases"
+    },
+    {
+      "command": "read M:/Coding_Projects/_zotero-research/translators/WestLaw UK.js (head 80, grep testCases)",
+      "result": "passed",
+      "summary": "WestLaw UK has real test URLs but they require auth; Lexis+ has empty testCases"
+    },
+    {
+      "command": "bash: python3 query on schema.json for CSL mappings",
+      "result": "passed",
+      "summary": "Confirmed CSL_TYPE_MAPPINGS: legal_case -> ['case']; CSL text field mappings for all relevant variables"
+    },
+    {
+      "command": "read M:/Coding_Projects/_zotero-research/zotero/chrome/content/zotero/xpcom/utilities/utilities_item.js (line 161-311)",
+      "result": "passed",
+      "summary": "itemToCSLJSON iterates CSL_TEXT_MAPPINGS, CSL_DATE_MAPPINGS, and CSL_NAME_MAPPINGS to build CSL-JSON output"
+    },
+    {
+      "command": "gh api repos/Juris-M/zotero/contents/chrome/content/zotero/xpcom/jurisAbbrev.js",
+      "result": "passed",
+      "summary": "Juris-M has full abbreviation file loading system; standard Zotero lacks this entirely"
+    },
+    {
+      "command": "read M:/Coding_Projects/_zotero-research/translate/src/repo.js",
+      "result": "passed",
+      "summary": "Translator update via zotero.org/repo with 24h check interval; metadata diff-based updates"
+    }
+  ],
+  "validationOutput": [
+    "All key claims verified against source code or gh API responses",
+    "Unverified claims explicitly marked as 'open questions'",
+    "Juris-M schema comparison done via gh API (no local clone needed)"
+  ],
+  "residualRisks": [
+    "US Westlaw URL pattern unknown — couldn't test because it requires auth; UK Westlaw pattern confirmed",
+    "Zotero forum search for 'Westlaw case' didn't return usable results within timeout",
+    "Schema submodule was not initially checked out; had to git submodule update --init --depth 1 (succeeded)",
+    "Some Juris-M internals (abbreviation file format, styles module system) inferred from source, not tested at runtime",
+    "No verification of how current Westlaw US pages appear to Zotero (no test account available)"
+  ],
+  "noStagedFiles": true,
+  "diffSummary": "Comprehensive investigative report on Bluebook CSL variable usage, Juris-M vs standard Zotero legal fields, translator dev/CI/deployment workflow, and local testing procedures",
+  "reviewFindings": [
+    "no blockers"
+  ],
+  "manualNotes": "Report written to M:/Coding_Projects/_zotero-research/reports/E-citation-output-and-dev-workflow.md. All 4 areas of investigation covered with exact file/line citations. Key implication: A US Westlaw translator is feasible using standard Zotero case fields (no schema changes needed), with court abbreviation being the hardest design challenge."
+}
+```

@@ -1,0 +1,15 @@
+# Upstream clones (re-create with scripts/clone-upstream.sh)
+/zotero/
+/zotero-connectors/
+/translate/
+/translators/
+/styles/
+/utilities/
+
+# Westlaw captures: full opinion text, proprietary Westlaw JS, account identifiers — never commit
+/westlaw-samples/*.html
+/westlaw-samples/*.txt
+
+# Runtime logs
+/tools/daemon.log
+*.log
