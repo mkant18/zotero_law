@@ -23,13 +23,25 @@ Labels: **[V]** verified (command/evidence recorded) · **[I]** inferred · **[P
 | ID | Task | Owner | Status | Evidence |
 |---|---|---|---|---|
 | P0 | Privacy prep + ledger + golden registry | orchestrator | done | §1, `golden/GOLDEN-TARGETS.md` |
-| M0-A | CSL bridge spike (local derivative + offline citeproc render) | Ling worker | [V] built, 28/28 tests; pending review | `node --test "westlaw-us/m0/csl/test/*.test.mjs"`; orchestrator spot-render of E1–E21/G2i matched brief |
-| M0-B | M0 probe translator + mocked failure tests | Ling worker | [V] built, 22/22 tests; pending review | `node --test "westlaw-us/m0/probe/test/*.test.mjs"` |
-| M0-C | Private-data checker | Ling worker | [V] 44/44 tests; **false positives** on real repo (see §3) → fix task M0-C2 | `node --test "westlaw-us/tools/test/*.test.mjs"` |
-| M0-R | Independent review of M0-A/B/C | Ling reviewers (non-authors) | pending | — |
+| M0-A | CSL bridge spike (local derivative + offline citeproc render) | Ling worker | [V] done, reviewed by orchestrator; 28/28 | `node --test "westlaw-us/m0/csl/test/*.test.mjs"` |
+| M0-B | M0 probe translator + mocked failure tests | Ling worker | [V] done, review fixes applied (styles=/forms= wired, positional long-text fallback removed); 23/23 | `node --test "westlaw-us/m0/probe/test/*.test.mjs"` |
+| M0-C | Private-data checker | Ling worker | [V] done + M0-C2 false-positive fixes; 50/50; repo fail=0 warn=6 (legacy) | `node --test "westlaw-us/tools/test/*.test.mjs"`; `node westlaw-us/tools/check-private-data.mjs` |
+| M0-R | Review of M0-A/B/C | orchestrator (Ling reviewers unreliable, see §3) | [V] done | §3 |
 | M0-L | **Live** connector request path, fallback/snapshot, installed-Zotero CSL proof | user + orchestrator | **[B] blocked on user authorization** | `m0/MANUAL-SPIKE.md` |
 | M0-G | M0 go/no-go | orchestrator + reviewer | [B] needs M0-L | — |
-| M1.* | Parser/adapters/mapping/CSL/integration | — | [B] gated on M0 go + user decisions | — |
+| M1-A1 | `src/text.js`, `src/reporters.js` | Ling | [V] done, reviewed | tests text/reporters |
+| M1-A2 | `src/cite-parse.js` (standard/texas/westlaw-inventory, short names, round trip) | Ling | [V] done, reviewed; **open: R4** round-trip drops docket + full date for WL forms (false `round-trip-mismatch` on G7) | tests cite-parse |
+| M1-C | `src/dom.js` + fake DOM helper | Ling | [V] done, reviewed (docket split + secrets fixed) | tests dom |
+| M1-D | `src/map.js` | Ling | [V] done, reviewed (extra is a string) | tests map |
+| M1-E | `src/service.js` (requests, ZU.request fetch/classify, envelope) | Ling | [V] done, spot-reviewed | tests service |
+| M1-G | `src/profile.js` court table + omission policy | Ling | [V] done, reviewed (SCOTUS any reporter; full-match rules; NY App. Div./App. Term/Sup. Ct.; "for the" forms) | tests profile |
+| M1-H | `src/reconcile.js` | Ling | [V] done, reviewed (Texas history from texas form; conflicting service cites → unparsed) | tests reconcile |
+| M1-I | `src/translator.js` + `tools/build-translator.mjs` → `dist/Westlaw Advantage US.js` | Ling | [V] done, reviewed (bare JSON header, stable ID 9abca805-…, license, test-case block, real function decls) | tests translator |
+| M1-J | offline golden pipeline (reconcile→map→itemToCSLJSON→citeproc) | Ling | [V] 14/15 cases pass; G1–G5 validated-profile; G7 unverified only because of R4 | `node --test "westlaw-us/src/test/golden-pipeline.test.mjs"` |
+| M1-live | Real Chrome/connector/Zotero install + real SCOTUS/state-high/WL-only fixtures | user | [B] gated on M0-L + user decisions (plan §14) | — |
+
+All M1 work is **at-risk pre-gate** (plan says proceed after M0 go); it is needed under either M0-L outcome (service-enriched or DOM-only).
+Full suite: `node --test "westlaw-us/src/test/*.test.mjs"` → 475/475 (session 2 end).
 
 ## 2a. Source findings made during M0 prep
 - [V] Connector MV3 `ZU.request` → `Zotero.COHTTP` → service-worker `fetch(credentials:'include')` (`zotero-connectors/src/common/http.js` `_requestFetch`).
@@ -42,8 +54,16 @@ Labels: **[V]** verified (command/evidence recorded) · **[I]** inferred · **[P
 - [V] M0-A orchestrator decisions (documented in csl test/README): (1) comparisons normalize U+2019→' (citeproc smart apostrophe) and accept one trailing layout `.`; (2) `Medium:`/`Genre:` Extra lines stay in CSL `note` after `itemToCSLJSON` and become variables via citeproc field-hack — C1 checks either location. Fixed defects: fake Zotero bootstrap → real `utilities/test/init.js` bootstrap; wrong test note sequences (E3/E4/E9/E12/E21 had no genuine subsequent position); invalid CSL (`<if>` outside `<choose>`); genre spacing; double comma before references.
 - [V] M0-C checker on real repo: 18 FAIL, all false positives — regex capture patterns `"ResourceToken":"([^"]+)"` in `tools/*.js`, template literals `${…}` in probe tests, the rule description prose in `tasks/M0-C-private-data-check.md`, and R4 on `reports/C1-…md` (a report that merely mentions `<script`/`co_document`). Also `--paths` mode must honour ignore rules (it scanned ignored `westlaw-us/.cache/`).
 
-## 4. Blockers / user decisions
-(see final report; batched questions)
+- [V] (session 2) Ling reviewers (`reviewer` agent: no bash; `worker` agent in read-only mode) repeatedly ended without output. Orchestrator performed reviews directly with adversarial probe scripts; every wave found real defects (see git log messages for fixes). Workers perform well only on small, exact defect lists.
+- [V] Notable wrong-data defects caught and fixed: generic "Supreme Court of <State>" prefix-matched "Supreme Court of New York, Appellate Division." → `N.Y.`; Texas history taken from the standard form duplicated "writ denied"; service citation conflicting with DOM exported as a parallel; `Nos.` docket lists mangled; `extra` emitted as array; built translator started with `var header =` and regenerated its translatorID each build.
+- [V] `parallelCiteRule=westReporterOnly` IS accepted (cite-matrix has all 4 rules); the reports/10 §3 note "only CAFormat/allReporter" is stale.
 
-## 5. Next bounded task
-M0-C2 (checker false-positive fix) ∥ M0-R reviews of M0-A and M0-B (read-only Ling reviewers).
+## 4. Blockers / user decisions
+- **[B] OpenRouter credits exhausted** (session 2, 402 "can only afford 8572 tokens … adjust the key's monthly limit"). All Ling 3.0 Flash builders are blocked until credits/limit are raised. The orchestrator did NOT switch builders to another model (needs explicit user approval).
+- [B] M0-L live spike needs user authorization (plan §11 M0, `m0/MANUAL-SPIKE.md`).
+- Plan §14 open questions 1–10 remain unanswered.
+
+## 5. Next bounded tasks (when builders are available)
+1. R4 round-trip fix in `src/cite-parse.js` (exact brief text in `westlaw-us/HANDOFF.md`); then G7 golden → expect `validated-profile`/or documented reason; finalize `golden-pipeline.test.mjs` (G4 todo removed — G4 now validated).
+2. Backlog (safe to do offline): Pennsylvania/Ohio/other unknown court lines (currently safe `unknown`); `wlSvcFetch` echo checks for format options; in-text/brief CSL variant is a user decision.
+3. Then stop for user: M0-L live spike + real fixtures (SCOTUS, state high court, WL-only).

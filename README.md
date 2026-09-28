@@ -3,7 +3,7 @@
 Research and planning for a personal Zotero web translator that saves **Westlaw Advantage (US)** case
 documents as Zotero `case` items that cite cleanly in **Bluebook**.
 
-Status: investigation complete; architecture plan pending (see `ASTRA-PROMPT.md`).
+Status: architecture plan in `reports/20-ASTRA-ARCHITECTURE.md`; M0 offline spikes + M1 offline translator modules built (`westlaw-us/`). See `westlaw-us/HANDOFF.md` and `westlaw-us/LEDGER.md`.
 
 ## Layout
 - `reports/00-SYNTHESIS.md` — consolidated findings: Zotero, the Chrome connector (MV3), translators, `case` → CSL → Bluebook.
