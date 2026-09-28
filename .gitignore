@@ -6,9 +6,19 @@
 /styles/
 /utilities/
 
-# Westlaw captures: full opinion text, proprietary Westlaw JS, account identifiers — never commit
-/westlaw-samples/*.html
-/westlaw-samples/*.txt
+# Westlaw captures: full opinion text, proprietary Westlaw JS, account identifiers — never commit.
+# The ENTIRE tree is private. NOTE: westlaw-samples/citations-settings.json and
+# westlaw-samples/cite-matrix/*.json were tracked before this rule (see westlaw-us/LEDGER.md);
+# ignore rules do not untrack them.
+/westlaw-samples/
+
+# Project private captures, live-spike notes, and runtime test outputs
+/westlaw-us/.private/
+/westlaw-us/**/out/
+/westlaw-us/**/node_modules/
+/westlaw-us/.cache/
+*.har
+*.har.json
 
 # Runtime logs
 /tools/daemon.log
