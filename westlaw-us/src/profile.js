@@ -142,14 +142,6 @@ var wlProfCircuitMap = {
   "fed": "Fed. Cir."
 };
 
-var wlProfRegionalReporters = {
-  "P.": true, "P.2d": true, "P.3d": true,
-  "N.E.": true, "N.E.2d": true, "N.E.3d": true,
-  "S.E.": true, "S.E.2d": true,
-  "S.W.": true, "S.W.2d": true, "S.W.3d": true,
-  "A.": true, "A.2d": true, "A.3d": true
-};
-
 var wlProfOfficialHighCourtReporters = {
   "Cal.": true, "Cal. 2d": true, "Cal. 3d": true, "Cal. 4th": true, "Cal. 5th": true,
   "N.Y.": true, "N.Y.2d": true, "N.Y.3d": true
@@ -163,8 +155,8 @@ var wlProfIntermediateAppellateMap = {
   "colorado": "Colo. App.",
   "iowa": "Iowa Ct. App.",
   "kansas": "Kan. Ct. App.",
-  // Open question: the Court of Appeals of Kentucky was the state's highest court before 1976; classification
-  // has no decision date, so this line is always mapped as intermediate (Ky. Ct. App.).
+  // The Court of Appeals of Kentucky was the state's highest court before 1976-01-01; wlProfClassifyCourt
+  // re-classifies that era as supreme (Ky.) when it is given the decision date.
   "kentucky": "Ky. Ct. App.",
   "minnesota": "Minn. Ct. App.",
   "north carolina": "N.C. Ct. App.",
@@ -181,7 +173,6 @@ var wlProfIntermediateAppellateMap = {
 };
 
 var wlProfTexasCourts = {
-  "houston": "Tex. App.\u2014Houston [1st Dist.]",
   "houston (1st dist.)": "Tex. App.\u2014Houston [1st Dist.]",
   "houston (14th dist.)": "Tex. App.\u2014Houston [14th Dist.]",
   "fort worth": "Tex. App.\u2014Fort Worth",
@@ -196,6 +187,30 @@ var wlProfTexasCourts = {
   "eastland": "Tex. App.\u2014Eastland",
   "tyler": "Tex. App.\u2014Tyler",
   "corpus christi\u2013edinburg": "Tex. App.\u2014Corpus Christi\u2013Edinburg"
+};
+
+// Bare "Houston" on the DOM court line carries no district, so it is not in wlProfTexasCourts: the district
+// must come from the service court. Bare "Corpus Christi" is likewise accepted only as a service court.
+var wlProfTexasServiceOnlyCourts = [
+  "Tex. App.\u2014Corpus Christi"
+];
+
+var wlProfScotusReporters = {
+  "U.S.": true, "S. Ct.": true, "L. Ed.": true, "L. Ed. 2d": true
+};
+
+// Bluebook 10.4(b): the "N.Y." of these court abbreviations is omitted when the reporter unambiguously
+// conveys New York.
+var wlProfNyConveyingReporters = {
+  "N.Y.S.": true, "N.Y.S.2d": true, "N.Y.S.3d": true,
+  "A.D.": true, "A.D.2d": true, "A.D.3d": true,
+  "Misc.": true, "Misc. 2d": true, "Misc. 3d": true
+};
+
+var wlProfNyOmittedCourts = {
+  "N.Y. App. Div.": "App. Div.",
+  "N.Y. App. Term": "App. Term",
+  "N.Y. Sup. Ct.": "Sup. Ct."
 };
 
 var wlProfDistrictMap = {
@@ -392,14 +407,14 @@ var wlProfCourtTable = [
   },
   {
     re: /^supreme court, appellate division, second department, new york$/,
-    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "App. Div.", confidence: "table" }
+    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "N.Y. App. Div.", confidence: "table" }
   },
   {
     re: /^court of appeals of texas, (.+)$/,
     res: function(m) {
-      var key = m[1].toLowerCase();
+      var key = m[1].toLowerCase().replace(/\s*[-\u2010-\u2015]\s*/g, "\u2013");
       var bluebook = wlProfTexasCourts[key] || null;
-      return { system: "state", level: "intermediate", state: "TX", circuit: null, district: null, bluebook: bluebook, confidence: "table" };
+      return { system: "state", level: "intermediate", state: "TX", circuit: null, district: null, bluebook: bluebook, confidence: "table", city: key };
     }
   },
   {
@@ -408,11 +423,11 @@ var wlProfCourtTable = [
   },
   {
     re: /^supreme court of new york, appellate division(?:,\s*(?:\d+(?:st|nd|rd|th)?|[a-z]+)\s+department)?$/,
-    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "App. Div.", confidence: "table" }
+    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "N.Y. App. Div.", confidence: "table" }
   },
   {
     re: /^supreme court, appellate division, (?:\d+(?:st|nd|rd|th)?|[a-z]+)\s+department, new york$/,
-    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "App. Div.", confidence: "table" }
+    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "N.Y. App. Div.", confidence: "table" }
   },
   {
     re: /^supreme court, appellate term(?:,\s*(?:\d+(?:st|nd|rd|th)?|[a-z]+)(?:\s+\w+)*\s+department)?(?:,\s*new york)?$/,
@@ -601,7 +616,25 @@ function wlProfProcessCourt(rawCourt) {
   return lowered;
 }
 
-function wlProfClassifyCourt(rawCourt) {
+function wlProfKentuckyByEra(classification, isoDate) {
+  var yearMatch = typeof isoDate === "string" ? isoDate.match(/^(\d{4})(?:-\d{2}-\d{2})?$/) : null;
+  var result = {};
+  for (var key in classification) {
+    if (Object.prototype.hasOwnProperty.call(classification, key)) result[key] = classification[key];
+  }
+  if (!yearMatch) {
+    result.eraUncertain = true;
+  } else if (parseInt(yearMatch[1], 10) < 1976) {
+    result.level = "supreme";
+    result.bluebook = "Ky.";
+  }
+  return result;
+}
+
+// isoDate (optional, "YYYY-MM-DD" or "YYYY") is used only for the Court of Appeals of Kentucky, which was the
+// state's highest court before 1976-01-01. Without a usable date that court is classified as intermediate and the
+// result carries eraUncertain: true (callers should add the demoting review reason court-era-uncertain).
+function wlProfClassifyCourt(rawCourt, isoDate) {
   if (rawCourt == null) {
     return { system: "unknown", level: "unknown", state: null, circuit: null, district: null, bluebook: null, confidence: "none" };
   }
@@ -610,10 +643,11 @@ function wlProfClassifyCourt(rawCourt) {
     var entry = wlProfCourtTable[i];
     var m = processed.match(entry.re);
     if (m) {
-      if (typeof entry.res === "function") {
-        return entry.res(m);
+      var result = typeof entry.res === "function" ? entry.res(m) : entry.res;
+      if (result.state === "KY" && result.level === "intermediate") {
+        return wlProfKentuckyByEra(result, isoDate);
       }
-      return entry.res;
+      return result;
     }
   }
   return { system: "unknown", level: "unknown", state: null, circuit: null, district: null, bluebook: null, confidence: "none" };
@@ -627,47 +661,85 @@ function wlProfSelectProfile(classification) {
   return "standard";
 }
 
-function wlProfIsRegionalReporter(reporter) {
-  return !!wlProfRegionalReporters[reporter];
-}
-
 function wlProfIsOfficialHighCourtReporter(reporter) {
   return !!wlProfOfficialHighCourtReporters[reporter];
 }
 
+function wlProfIsKnownTexasCourt(court) {
+  var key = wlTextCompareKey(court);
+  var known = wlProfTexasServiceOnlyCourts.slice();
+  for (var city in wlProfTexasCourts) {
+    if (Object.prototype.hasOwnProperty.call(wlProfTexasCourts, city)) known.push(wlProfTexasCourts[city]);
+  }
+  for (var i = 0; i < known.length; i++) {
+    if (wlTextCompareKey(known[i]) === key) return true;
+  }
+  return false;
+}
+
+// Texas courts of appeals: the DOM line may lack the district/city detail, so the service court fills it in
+// when it is a known Texas court that does not contradict the DOM line.
+function wlProfTexasCourtForCitation(classification, serviceCourt) {
+  var reviewReasons = [];
+  var domCourt = classification.bluebook || "";
+  if (serviceCourt) {
+    var serviceKey = wlTextCompareKey(serviceCourt);
+    if (!wlProfIsKnownTexasCourt(serviceCourt)) {
+      if (domCourt) {
+        reviewReasons.push("court-conflict");
+        return { court: serviceCourt, reviewReasons: reviewReasons };
+      }
+      reviewReasons.push("court-unresolved");
+      return { court: "", reviewReasons: reviewReasons };
+    }
+    if (domCourt) {
+      if (serviceKey !== wlTextCompareKey(domCourt)) reviewReasons.push("court-conflict");
+    } else if (classification.city === "houston" && serviceKey.indexOf(wlTextCompareKey("Tex. App.\u2014Houston")) !== 0) {
+      reviewReasons.push("court-conflict");
+    }
+    return { court: serviceCourt, reviewReasons: reviewReasons };
+  }
+  if (domCourt) {
+    return { court: domCourt, reviewReasons: reviewReasons };
+  }
+  reviewReasons.push("court-unresolved");
+  return { court: "", reviewReasons: reviewReasons };
+}
+
 function wlProfCourtForCitation(classification, primary, serviceCourt) {
   var reviewReasons = [];
+  var reporter = primary ? primary.reporter : "";
 
   if (classification && classification.system === "federal" && classification.level === "supreme") {
+    if (reporter && !wlProfScotusReporters[reporter]) {
+      return { court: "U.S.", reviewReasons: reviewReasons };
+    }
     return { court: "", reviewReasons: reviewReasons };
-  }
-
-  if (primary && wlProfIsRegionalReporter(primary.reporter)) {
-    return { court: classification ? classification.bluebook || "" : "", reviewReasons: reviewReasons };
   }
 
   if (primary && wlProfIsOfficialHighCourtReporter(primary.reporter)) {
     return { court: "", reviewReasons: reviewReasons };
   }
 
-  if (serviceCourt) {
-    var serviceKey = wlTextCompareKey(serviceCourt);
-    var bluebookKey = classification ? wlTextCompareKey(classification.bluebook || "") : "";
-    if (serviceKey === bluebookKey) {
-      return { court: serviceCourt, reviewReasons: reviewReasons };
-    } else if (classification && classification.bluebook) {
-      reviewReasons.push("court-conflict");
-      return { court: serviceCourt, reviewReasons: reviewReasons };
-    } else if (classification && classification.confidence === "none") {
-      reviewReasons.push("court-unclassified");
-      return { court: serviceCourt, reviewReasons: reviewReasons };
-    } else {
-      return { court: serviceCourt, reviewReasons: reviewReasons };
-    }
+  if (classification && classification.system === "state" && classification.state === "TX" && classification.level === "intermediate") {
+    return wlProfTexasCourtForCitation(classification, serviceCourt);
   }
 
-  if (classification && classification.bluebook) {
-    return { court: classification.bluebook, reviewReasons: reviewReasons };
+  var expected = classification ? classification.bluebook || "" : "";
+  if (classification && classification.state === "NY" && wlProfNyConveyingReporters[reporter] && wlProfNyOmittedCourts[expected]) {
+    expected = wlProfNyOmittedCourts[expected];
+  }
+
+  if (serviceCourt) {
+    if (expected && wlTextCompareKey(serviceCourt) === wlTextCompareKey(expected)) {
+      return { court: serviceCourt, reviewReasons: reviewReasons };
+    }
+    reviewReasons.push(expected ? "court-conflict" : "court-unclassified");
+    return { court: serviceCourt, reviewReasons: reviewReasons };
+  }
+
+  if (expected) {
+    return { court: expected, reviewReasons: reviewReasons };
   }
 
   reviewReasons.push("court-unresolved");

@@ -9,7 +9,7 @@
 	"inRepository": false,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
-	"lastUpdated": "2026-09-28 20:43:30"
+	"lastUpdated": "2026-09-28 20:52:47"
 }
 
 /*
@@ -1161,14 +1161,6 @@ var wlProfCircuitMap = {
   "fed": "Fed. Cir."
 };
 
-var wlProfRegionalReporters = {
-  "P.": true, "P.2d": true, "P.3d": true,
-  "N.E.": true, "N.E.2d": true, "N.E.3d": true,
-  "S.E.": true, "S.E.2d": true,
-  "S.W.": true, "S.W.2d": true, "S.W.3d": true,
-  "A.": true, "A.2d": true, "A.3d": true
-};
-
 var wlProfOfficialHighCourtReporters = {
   "Cal.": true, "Cal. 2d": true, "Cal. 3d": true, "Cal. 4th": true, "Cal. 5th": true,
   "N.Y.": true, "N.Y.2d": true, "N.Y.3d": true
@@ -1182,8 +1174,8 @@ var wlProfIntermediateAppellateMap = {
   "colorado": "Colo. App.",
   "iowa": "Iowa Ct. App.",
   "kansas": "Kan. Ct. App.",
-  // Open question: the Court of Appeals of Kentucky was the state's highest court before 1976; classification
-  // has no decision date, so this line is always mapped as intermediate (Ky. Ct. App.).
+  // The Court of Appeals of Kentucky was the state's highest court before 1976-01-01; wlProfClassifyCourt
+  // re-classifies that era as supreme (Ky.) when it is given the decision date.
   "kentucky": "Ky. Ct. App.",
   "minnesota": "Minn. Ct. App.",
   "north carolina": "N.C. Ct. App.",
@@ -1200,7 +1192,6 @@ var wlProfIntermediateAppellateMap = {
 };
 
 var wlProfTexasCourts = {
-  "houston": "Tex. App.\u2014Houston [1st Dist.]",
   "houston (1st dist.)": "Tex. App.\u2014Houston [1st Dist.]",
   "houston (14th dist.)": "Tex. App.\u2014Houston [14th Dist.]",
   "fort worth": "Tex. App.\u2014Fort Worth",
@@ -1215,6 +1206,30 @@ var wlProfTexasCourts = {
   "eastland": "Tex. App.\u2014Eastland",
   "tyler": "Tex. App.\u2014Tyler",
   "corpus christi\u2013edinburg": "Tex. App.\u2014Corpus Christi\u2013Edinburg"
+};
+
+// Bare "Houston" on the DOM court line carries no district, so it is not in wlProfTexasCourts: the district
+// must come from the service court. Bare "Corpus Christi" is likewise accepted only as a service court.
+var wlProfTexasServiceOnlyCourts = [
+  "Tex. App.\u2014Corpus Christi"
+];
+
+var wlProfScotusReporters = {
+  "U.S.": true, "S. Ct.": true, "L. Ed.": true, "L. Ed. 2d": true
+};
+
+// Bluebook 10.4(b): the "N.Y." of these court abbreviations is omitted when the reporter unambiguously
+// conveys New York.
+var wlProfNyConveyingReporters = {
+  "N.Y.S.": true, "N.Y.S.2d": true, "N.Y.S.3d": true,
+  "A.D.": true, "A.D.2d": true, "A.D.3d": true,
+  "Misc.": true, "Misc. 2d": true, "Misc. 3d": true
+};
+
+var wlProfNyOmittedCourts = {
+  "N.Y. App. Div.": "App. Div.",
+  "N.Y. App. Term": "App. Term",
+  "N.Y. Sup. Ct.": "Sup. Ct."
 };
 
 var wlProfDistrictMap = {
@@ -1411,14 +1426,14 @@ var wlProfCourtTable = [
   },
   {
     re: /^supreme court, appellate division, second department, new york$/,
-    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "App. Div.", confidence: "table" }
+    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "N.Y. App. Div.", confidence: "table" }
   },
   {
     re: /^court of appeals of texas, (.+)$/,
     res: function(m) {
-      var key = m[1].toLowerCase();
+      var key = m[1].toLowerCase().replace(/\s*[-\u2010-\u2015]\s*/g, "\u2013");
       var bluebook = wlProfTexasCourts[key] || null;
-      return { system: "state", level: "intermediate", state: "TX", circuit: null, district: null, bluebook: bluebook, confidence: "table" };
+      return { system: "state", level: "intermediate", state: "TX", circuit: null, district: null, bluebook: bluebook, confidence: "table", city: key };
     }
   },
   {
@@ -1427,11 +1442,11 @@ var wlProfCourtTable = [
   },
   {
     re: /^supreme court of new york, appellate division(?:,\s*(?:\d+(?:st|nd|rd|th)?|[a-z]+)\s+department)?$/,
-    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "App. Div.", confidence: "table" }
+    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "N.Y. App. Div.", confidence: "table" }
   },
   {
     re: /^supreme court, appellate division, (?:\d+(?:st|nd|rd|th)?|[a-z]+)\s+department, new york$/,
-    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "App. Div.", confidence: "table" }
+    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "N.Y. App. Div.", confidence: "table" }
   },
   {
     re: /^supreme court, appellate term(?:,\s*(?:\d+(?:st|nd|rd|th)?|[a-z]+)(?:\s+\w+)*\s+department)?(?:,\s*new york)?$/,
@@ -1620,7 +1635,25 @@ function wlProfProcessCourt(rawCourt) {
   return lowered;
 }
 
-function wlProfClassifyCourt(rawCourt) {
+function wlProfKentuckyByEra(classification, isoDate) {
+  var yearMatch = typeof isoDate === "string" ? isoDate.match(/^(\d{4})(?:-\d{2}-\d{2})?$/) : null;
+  var result = {};
+  for (var key in classification) {
+    if (Object.prototype.hasOwnProperty.call(classification, key)) result[key] = classification[key];
+  }
+  if (!yearMatch) {
+    result.eraUncertain = true;
+  } else if (parseInt(yearMatch[1], 10) < 1976) {
+    result.level = "supreme";
+    result.bluebook = "Ky.";
+  }
+  return result;
+}
+
+// isoDate (optional, "YYYY-MM-DD" or "YYYY") is used only for the Court of Appeals of Kentucky, which was the
+// state's highest court before 1976-01-01. Without a usable date that court is classified as intermediate and the
+// result carries eraUncertain: true (callers should add the demoting review reason court-era-uncertain).
+function wlProfClassifyCourt(rawCourt, isoDate) {
   if (rawCourt == null) {
     return { system: "unknown", level: "unknown", state: null, circuit: null, district: null, bluebook: null, confidence: "none" };
   }
@@ -1629,10 +1662,11 @@ function wlProfClassifyCourt(rawCourt) {
     var entry = wlProfCourtTable[i];
     var m = processed.match(entry.re);
     if (m) {
-      if (typeof entry.res === "function") {
-        return entry.res(m);
+      var result = typeof entry.res === "function" ? entry.res(m) : entry.res;
+      if (result.state === "KY" && result.level === "intermediate") {
+        return wlProfKentuckyByEra(result, isoDate);
       }
-      return entry.res;
+      return result;
     }
   }
   return { system: "unknown", level: "unknown", state: null, circuit: null, district: null, bluebook: null, confidence: "none" };
@@ -1646,47 +1680,85 @@ function wlProfSelectProfile(classification) {
   return "standard";
 }
 
-function wlProfIsRegionalReporter(reporter) {
-  return !!wlProfRegionalReporters[reporter];
-}
-
 function wlProfIsOfficialHighCourtReporter(reporter) {
   return !!wlProfOfficialHighCourtReporters[reporter];
 }
 
+function wlProfIsKnownTexasCourt(court) {
+  var key = wlTextCompareKey(court);
+  var known = wlProfTexasServiceOnlyCourts.slice();
+  for (var city in wlProfTexasCourts) {
+    if (Object.prototype.hasOwnProperty.call(wlProfTexasCourts, city)) known.push(wlProfTexasCourts[city]);
+  }
+  for (var i = 0; i < known.length; i++) {
+    if (wlTextCompareKey(known[i]) === key) return true;
+  }
+  return false;
+}
+
+// Texas courts of appeals: the DOM line may lack the district/city detail, so the service court fills it in
+// when it is a known Texas court that does not contradict the DOM line.
+function wlProfTexasCourtForCitation(classification, serviceCourt) {
+  var reviewReasons = [];
+  var domCourt = classification.bluebook || "";
+  if (serviceCourt) {
+    var serviceKey = wlTextCompareKey(serviceCourt);
+    if (!wlProfIsKnownTexasCourt(serviceCourt)) {
+      if (domCourt) {
+        reviewReasons.push("court-conflict");
+        return { court: serviceCourt, reviewReasons: reviewReasons };
+      }
+      reviewReasons.push("court-unresolved");
+      return { court: "", reviewReasons: reviewReasons };
+    }
+    if (domCourt) {
+      if (serviceKey !== wlTextCompareKey(domCourt)) reviewReasons.push("court-conflict");
+    } else if (classification.city === "houston" && serviceKey.indexOf(wlTextCompareKey("Tex. App.\u2014Houston")) !== 0) {
+      reviewReasons.push("court-conflict");
+    }
+    return { court: serviceCourt, reviewReasons: reviewReasons };
+  }
+  if (domCourt) {
+    return { court: domCourt, reviewReasons: reviewReasons };
+  }
+  reviewReasons.push("court-unresolved");
+  return { court: "", reviewReasons: reviewReasons };
+}
+
 function wlProfCourtForCitation(classification, primary, serviceCourt) {
   var reviewReasons = [];
+  var reporter = primary ? primary.reporter : "";
 
   if (classification && classification.system === "federal" && classification.level === "supreme") {
+    if (reporter && !wlProfScotusReporters[reporter]) {
+      return { court: "U.S.", reviewReasons: reviewReasons };
+    }
     return { court: "", reviewReasons: reviewReasons };
-  }
-
-  if (primary && wlProfIsRegionalReporter(primary.reporter)) {
-    return { court: classification ? classification.bluebook || "" : "", reviewReasons: reviewReasons };
   }
 
   if (primary && wlProfIsOfficialHighCourtReporter(primary.reporter)) {
     return { court: "", reviewReasons: reviewReasons };
   }
 
-  if (serviceCourt) {
-    var serviceKey = wlTextCompareKey(serviceCourt);
-    var bluebookKey = classification ? wlTextCompareKey(classification.bluebook || "") : "";
-    if (serviceKey === bluebookKey) {
-      return { court: serviceCourt, reviewReasons: reviewReasons };
-    } else if (classification && classification.bluebook) {
-      reviewReasons.push("court-conflict");
-      return { court: serviceCourt, reviewReasons: reviewReasons };
-    } else if (classification && classification.confidence === "none") {
-      reviewReasons.push("court-unclassified");
-      return { court: serviceCourt, reviewReasons: reviewReasons };
-    } else {
-      return { court: serviceCourt, reviewReasons: reviewReasons };
-    }
+  if (classification && classification.system === "state" && classification.state === "TX" && classification.level === "intermediate") {
+    return wlProfTexasCourtForCitation(classification, serviceCourt);
   }
 
-  if (classification && classification.bluebook) {
-    return { court: classification.bluebook, reviewReasons: reviewReasons };
+  var expected = classification ? classification.bluebook || "" : "";
+  if (classification && classification.state === "NY" && wlProfNyConveyingReporters[reporter] && wlProfNyOmittedCourts[expected]) {
+    expected = wlProfNyOmittedCourts[expected];
+  }
+
+  if (serviceCourt) {
+    if (expected && wlTextCompareKey(serviceCourt) === wlTextCompareKey(expected)) {
+      return { court: serviceCourt, reviewReasons: reviewReasons };
+    }
+    reviewReasons.push(expected ? "court-conflict" : "court-unclassified");
+    return { court: serviceCourt, reviewReasons: reviewReasons };
+  }
+
+  if (expected) {
+    return { court: expected, reviewReasons: reviewReasons };
   }
 
   reviewReasons.push("court-unresolved");
@@ -1969,15 +2041,16 @@ function wlSvcReadEnvelope(json, wantedStyleIds, expect) {
     var styleId = typeof req.styleId === "string" ? req.styleId : "";
     if (styleId === "") continue;
 
+    // Unwanted style ids are response text: ignored silently, never copied into a review reason.
+    if (wantedStyleIds.indexOf(styleId) === -1) {
+      continue;
+    }
+
     if (seenStyleIds[styleId]) {
       reviewReasons.push("duplicate-style:" + styleId);
       continue;
     }
     seenStyleIds[styleId] = true;
-
-    if (wantedStyleIds.indexOf(styleId) === -1) {
-      continue;
-    }
 
     var mismatchKey = wlSvcFindEchoMismatch(req, expect);
     if (mismatchKey) {
@@ -2088,6 +2161,7 @@ function wlDomReadPageContext(doc, url) {
   var peiValues = kv["PageEventIdentifier"] || [];
   var rtValues = kv["ResourceToken"] || [];
 
+  var guidAmbiguous = false;
   var validGUIDs = [];
   for (var g = 0; g < guidValues.length; g++) {
     if (wlDomValidateGUID(guidValues[g])) {
@@ -2102,6 +2176,8 @@ function wlDomReadPageContext(doc, url) {
     }
     if (uniqGUIDs.length > 1) {
       ambiguous = true;
+      guidAmbiguous = true;
+      reviewReasons.push("ambiguous-guid");
     }
   }
 
@@ -2164,6 +2240,12 @@ function wlDomReadPageContext(doc, url) {
     }
   }
 
+  // Two distinct DocumentGuid values: even one matching the URL is not trustworthy for service calls.
+  if (guidAmbiguous) {
+    identityGUID = null;
+    if (identityReason !== "identity-mismatch") identityReason = "identity-ambiguous";
+  }
+
   config.guid = identityGUID;
   config.identityReason = identityReason;
   config.ambiguous = ambiguous;
@@ -2202,6 +2284,7 @@ function wlDomReadPageContext(doc, url) {
   } else {
     reviewReasons.push("missing-config");
   }
+  if (guidAmbiguous) secrets = null;
 
   return {
     ok: ok,
@@ -2272,8 +2355,9 @@ function wlDomInspectCaseReadiness(doc, url) {
 }
 
 function wlDomClassifyLI(liText) {
-  var date = wlTextParseUSDate(liText);
-  if (date) return { kind: "date", date: date, dateText: liText };
+  var dateLiText = liText.replace(/\.$/, "");
+  var date = wlTextParseUSDate(dateLiText);
+  if (date) return { kind: "date", date: date, dateText: dateLiText };
 
   if (wlDomPageCountRe.test(liText)) {
     return { kind: "pageCount", text: liText };
@@ -2284,7 +2368,36 @@ function wlDomClassifyLI(liText) {
     return { kind: "citation", citations: cits, text: liText };
   }
 
-  return { kind: "unparsed", text: liText };
+  return { kind: "unparsed", text: liText, raw: liText };
+}
+
+// Docket block text -> normalized "No. X" values. Anything that is not a docket number (parentheticals,
+// "Division B", unprefixed text) is reported through `unparsed` instead of becoming a docket or vanishing.
+function wlDomParseDocketText(text) {
+  var dockets = [];
+  var unparsed = false;
+  var work = text.replace(/\.+$/, "");
+  var withoutParens = work.replace(/\([^)]*\)/g, " ");
+  if (withoutParens !== work) unparsed = true;
+  work = wlDomClean(withoutParens).replace(/\.+$/, "");
+  work = work.replace(/^Docket\s+(?=Nos?\.?\s)/i, "");
+  if (!/^Nos?\.?\s/.test(work)) {
+    if (work) unparsed = true;
+    return { dockets: dockets, unparsed: unparsed };
+  }
+  work = work.replace(/\bconsolidated\s+with\b/gi, ";");
+  var segments = work.split(/;\s*|,\s*|\s+and\s+/);
+  for (var i = 0; i < segments.length; i++) {
+    var seg = segments[i].trim().replace(/\.+$/, "").replace(/^Nos?\.?\s*/, "").trim();
+    if (!seg) continue;
+    if (/[0-9]/.test(seg) && /^[A-Za-z0-9][A-Za-z0-9 .\-\u2010-\u2015\/:]*$/.test(seg) &&
+        !/^(division|div\.|section|sec\.|chamber|panel)\b/i.test(seg)) {
+      dockets.push("No. " + seg);
+    } else {
+      unparsed = true;
+    }
+  }
+  return { dockets: dockets, unparsed: unparsed };
 }
 
 function wlDomReadFacts(doc) {
@@ -2377,7 +2490,7 @@ function wlDomReadFacts(doc) {
         rawCourt = liText;
         courtLineFound = true;
       } else {
-        citations.push({ kind: "unparsed", text: liText });
+        citations.push({ kind: "unparsed", text: liText, raw: liText });
       }
     }
   }
@@ -2419,22 +2532,10 @@ function wlDomReadFacts(doc) {
 
   var docketBlocks = doc.querySelectorAll(".co_docketBlock");
   for (var db = 0; db < docketBlocks.length; db++) {
-    var docketText = wlDomClean(docketBlocks[db].textContent);
-    docketText = docketText.replace(/\.$/, "");
-    var docketParts = [];
-    if (docketText.indexOf("Nos.") === 0) {
-      var remainder = docketText.substring(4);
-      var splitParts = remainder.split(/,\s*|;\s*|\s+and\s+/);
-      for (var sp = 0; sp < splitParts.length; sp++) {
-        var trimmed = splitParts[sp].trim();
-        if (trimmed) docketParts.push("No. " + trimmed);
-      }
-    } else if (docketText.indexOf("No.") === 0) {
-      var noParts = docketText.split(/;\s*|,\s*|\s+and\s+/);
-      for (var np = 0; np < noParts.length; np++) {
-        var npTrimmed = noParts[np].trim();
-        if (npTrimmed) docketParts.push(npTrimmed);
-      }
+    var parsedDocket = wlDomParseDocketText(wlDomClean(docketBlocks[db].textContent));
+    var docketParts = parsedDocket.dockets;
+    if (parsedDocket.unparsed && reviewReasons.indexOf("docket-unparsed-text") === -1) {
+      reviewReasons.push("docket-unparsed-text");
     }
     for (var dp = 0; dp < docketParts.length; dp++) {
       var dpKey = typeof wlTextCompareKey === "function" ? wlTextCompareKey(docketParts[dp]) : docketParts[dp];
@@ -2482,12 +2583,40 @@ var wlMapHtmlRe = /<[a-zA-Z]/;
 var wlMapTokenRe = /ResourceToken|PageEventIdentifier|x-cobalt|Bearer /;
 var wlMapYearParenRe = /\(\d{4}\)/;
 var wlMapCiteRe = /\d+ [A-Z].* \d+/;
+var wlMapCaseNameCiteRe = /,?\s\d{1,4}\s+[A-Z][A-Za-z0-9.']*(?:\s+[A-Za-z0-9.']+){0,3}\s+\d{1,5}$/;
 var wlMapGuidRe = /^I[0-9a-f]{32}$/;
 var wlMapDashRe = /[\u2013\u2014]/g;
 var wlMapDocketCleanRe = /^[0-9a-zA-Z\u2013\u2014-]+$/;
 
+// Review reasons that are informational: they stay visible as an Extra line but never add the needs-review tag.
+var wlMapInformationalReasons = ["header-fallback"];
+var wlMapUnparsedPayloadMax = 200;
+
 function wlMapStripWatermark(str) {
   return str.replace(wlMapWatermarkRe, "");
+}
+
+function wlMapHasDemotingReason(reviewReasons) {
+  for (var i = 0; i < reviewReasons.length; i++) {
+    if (wlMapInformationalReasons.indexOf(reviewReasons[i]) === -1) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function wlMapUnparsedPayload(alt) {
+  var payload = "";
+  if (typeof alt.raw === "string" && alt.raw.trim() !== "") {
+    payload = alt.raw;
+  } else if (typeof alt.text === "string") {
+    payload = alt.text;
+  }
+  payload = wlMapStripWatermark(payload).replace(/\s+/g, " ").trim();
+  if (payload.length > wlMapUnparsedPayloadMax) {
+    payload = payload.slice(0, wlMapUnparsedPayloadMax) + "\u2026";
+  }
+  return payload;
 }
 
 function wlMapNormalizeDocketSingle(docket) {
@@ -2592,7 +2721,10 @@ function wlMapToZoteroFields(rec, opts) {
   }
   alternates.forEach(function(alt) {
     if (alt.kind === "unparsed") {
-      extraLines.push("Westlaw unparsed citation: " + wlMapStripWatermark(alt.raw || ""));
+      var payload = wlMapUnparsedPayload(alt);
+      if (payload !== "") {
+        extraLines.push("Westlaw unparsed citation: " + payload);
+      }
     }
   });
   extraLines.push("Westlaw court (raw): " + wlMapStripWatermark(rec.rawCourt || ""));
@@ -2605,7 +2737,7 @@ function wlMapToZoteroFields(rec, opts) {
   var extra = extraLines.join("\n");
 
   var tags = [];
-  if (reviewReasons.length > 0 || rec.status !== "validated-profile") {
+  if (wlMapHasDemotingReason(reviewReasons) || rec.status !== "validated-profile") {
     tags.push({ tag: "Westlaw: needs citation review" });
   }
 
@@ -2726,6 +2858,13 @@ function wlMapValidateOutgoing(fields) {
     }
   });
 
+  if (typeof fields.caseName === "string") {
+    var citeMatch = fields.caseName.match(wlMapCaseNameCiteRe);
+    if (citeMatch && citeMatch[0].indexOf(".") !== -1) {
+      problems.push("caseName-has-cite");
+    }
+  }
+
   if (fields.shortTitle) {
     if (fields.shortTitle === "Id.") {
       problems.push("shortTitle-is-Id");
@@ -2787,6 +2926,7 @@ function wlRecClean(s) {
 }
 
 function wlRecCitationMatchKey(c) {
+  if (c.kind === "unparsed") return "unparsed|" + wlRecClean(c.raw || c.text || "");
   return c.kind + "|" + c.volume + "|" + wlTextCompareKey(c.reporter || "") + "|" + c.page;
 }
 
@@ -2805,6 +2945,45 @@ function wlRecCitationInHistory(citation, history) {
   return re.test(histClean);
 }
 
+// First citation that is not kind "unparsed"; an unparsed line has no volume/reporter/page and can never be primary.
+function wlRecFirstParsedCitation(citations) {
+  for (var i = 0; i < (citations || []).length; i++) {
+    if (citations[i] && citations[i].kind !== "unparsed") return citations[i];
+  }
+  return null;
+}
+
+function wlRecAddEraReason(reviewReasons, classification) {
+  if (classification && classification.eraUncertain === true && reviewReasons.indexOf("court-era-uncertain") === -1) {
+    reviewReasons.push("court-era-uncertain");
+  }
+}
+
+function wlRecIsFullDate(date) {
+  return typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date);
+}
+
+// Docket tokens compared without the "No."/"Nos." label, whitespace, or case; a token list such as
+// "Nos. 1-2, 3-4" is split so it equals ["Nos. 1-2", "3-4"].
+function wlRecDocketKeys(dockets) {
+  var keys = [];
+  for (var i = 0; i < (dockets || []).length; i++) {
+    var parts = String(dockets[i]).split(/[,;&]|\band\b/i);
+    for (var j = 0; j < parts.length; j++) {
+      var key = wlRecClean(parts[j]).replace(/^nos?\.?\s*/i, "").replace(/\s+/g, "").toLowerCase();
+      if (key && keys.indexOf(key) === -1) keys.push(key);
+    }
+  }
+  return keys.sort();
+}
+
+function wlRecDocketsConflict(domDockets, serviceDockets) {
+  var a = wlRecDocketKeys(domDockets);
+  var b = wlRecDocketKeys(serviceDockets);
+  if (a.length === 0 || b.length === 0) return false;
+  return a.join("|") !== b.join("|");
+}
+
 function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenance) {
   var primary = null;
   if (dom.citations && dom.citations.length > 0) {
@@ -2815,22 +2994,24 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
       }
     }
     if (!primary) {
-      primary = dom.citations[0];
+      primary = wlRecFirstParsedCitation(dom.citations);
     }
   }
+  if (!primary) reviewReasons.push("no-citation");
 
-  var classification = wlProfClassifyCourt(dom.rawCourt || "");
+  var date = dom.date || null;
+  if (!date && dom.dateText) {
+    date = wlTextParseUSDate(dom.dateText);
+  }
+
+  var classification = wlProfClassifyCourt(dom.rawCourt || "", date);
   var courtResult = wlProfCourtForCitation(classification, primary, null);
   if (courtResult.reviewReasons) {
     for (var r = 0; r < courtResult.reviewReasons.length; r++) {
       reviewReasons.push(courtResult.reviewReasons[r]);
     }
   }
-
-  var date = dom.date || null;
-  if (!date && dom.dateText) {
-    date = wlTextParseUSDate(dom.dateText);
-  }
+  wlRecAddEraReason(reviewReasons, classification);
 
   provenance.caseName = "dom";
   provenance.primary = "dom";
@@ -2859,22 +3040,28 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
   };
 }
 
-// Forwards a service envelope's own review reasons (already code-only, never response text) once each.
-function wlRecAddEnvelopeReasons(reviewReasons, envelope) {
-  if (!envelope || !Array.isArray(envelope.reviewReasons)) return;
-  for (var i = 0; i < envelope.reviewReasons.length; i++) {
-    var reason = envelope.reviewReasons[i];
-    if (typeof reason === "string" && reviewReasons.indexOf(reason) === -1) reviewReasons.push(reason);
+// Forwards review reasons once each, keeping only code-only strings (never response or page text).
+// A reason that fails the filter becomes `droppedCode` (once) when one is given, so the degradation stays visible.
+function wlRecAddCodeReasons(reviewReasons, reasons, droppedCode) {
+  if (!Array.isArray(reasons)) return;
+  for (var i = 0; i < reasons.length; i++) {
+    var reason = reasons[i];
+    var codeOnly = typeof reason === "string" && /^[a-z0-9:-]+$/.test(reason);
+    var code = codeOnly ? reason : droppedCode;
+    if (code && reviewReasons.indexOf(code) === -1) reviewReasons.push(code);
   }
+}
+
+// Forwards a service envelope's own review reasons.
+function wlRecAddEnvelopeReasons(reviewReasons, envelope) {
+  if (!envelope) return;
+  wlRecAddCodeReasons(reviewReasons, envelope.reviewReasons, "envelope-reason-dropped");
 }
 
 // Forwards DomFacts review reasons (code-only strings such as conflicting-header, header-fallback) once each.
 function wlRecAddDomReasons(reviewReasons, dom) {
-  if (!dom || !Array.isArray(dom.reviewReasons)) return;
-  for (var i = 0; i < dom.reviewReasons.length; i++) {
-    var reason = dom.reviewReasons[i];
-    if (typeof reason === "string" && /^[a-z0-9:-]+$/.test(reason) && reviewReasons.indexOf(reason) === -1) reviewReasons.push(reason);
-  }
+  if (!dom) return;
+  wlRecAddCodeReasons(reviewReasons, dom.reviewReasons, null);
 }
 
 // Review reasons that are informational and must not stop a service-validated record from being validated-profile.
@@ -3047,8 +3234,8 @@ function wlRecReconcile(input) {
     } else if (domReporterCites.length > 0) {
       primary = domReporterCites[0];
       provenance.primary = "dom";
-    } else if (domCitations.length > 0) {
-      primary = domCitations[0];
+    } else if (wlRecFirstParsedCitation(domCitations)) {
+      primary = wlRecFirstParsedCitation(domCitations);
       provenance.primary = "dom";
     } else {
       reviewReasons.push("no-citation");
@@ -3079,6 +3266,9 @@ function wlRecReconcile(input) {
         if (key === historyCites[h]) return;
       }
       alternateKeys[key] = true;
+      if (cite.kind === "unparsed" && !cite.raw && cite.text) {
+        cite = { kind: "unparsed", raw: wlRecClean(cite.text) };
+      }
       alternates.push(cite);
     }
 
@@ -3123,8 +3313,28 @@ function wlRecReconcile(input) {
     provenance.alternates = "service";
 
     // 8. date
+    // A full date on the service long form (or the inventory) is compared with the DOM date. The DOM date is kept
+    // on conflict; a DOM date that is absent or year-only yields to a full service date.
+    var serviceFullDate = null;
+    if (parsedA && parsedA.ok && wlRecIsFullDate(parsedA.date)) {
+      serviceFullDate = parsedA.date;
+    } else if (parsedBinv && wlRecIsFullDate(parsedBinv.date)) {
+      serviceFullDate = parsedBinv.date;
+    }
     var date = null;
-    if (dom.date) {
+    if (dom.date && wlRecIsFullDate(dom.date)) {
+      date = dom.date;
+      provenance.date = "dom";
+      if (serviceFullDate && serviceFullDate !== dom.date) reviewReasons.push("date-conflict");
+    } else if (serviceFullDate) {
+      date = serviceFullDate;
+      provenance.date = "service";
+      if (dom.date && dom.date.substring(0, 4) !== serviceFullDate.substring(0, 4)) {
+        date = dom.date;
+        provenance.date = "dom";
+        reviewReasons.push("date-conflict");
+      }
+    } else if (dom.date) {
       date = dom.date;
       provenance.date = "dom";
     } else if (parsedBinv && parsedBinv.date) {
@@ -3153,6 +3363,9 @@ function wlRecReconcile(input) {
     if (dom.dockets && dom.dockets.length > 0) {
       dockets = dom.dockets.slice();
       provenance.dockets = "dom";
+      if (parsedA && parsedA.ok && wlRecDocketsConflict(dom.dockets, parsedA.dockets)) {
+        reviewReasons.push("docket-conflict");
+      }
     } else if (parsedBinv && parsedBinv.dockets && parsedBinv.dockets.length > 0) {
       dockets = parsedBinv.dockets.slice();
       provenance.dockets = "service";
@@ -3164,7 +3377,8 @@ function wlRecReconcile(input) {
     }
 
     // 10. court
-    var classification = wlProfClassifyCourt(dom.rawCourt || "");
+    var classification = wlProfClassifyCourt(dom.rawCourt || "", date);
+    wlRecAddEraReason(reviewReasons, classification);
     var serviceCourt = (parsedA && parsedA.ok) ? parsedA.court : "";
     var courtResult = wlProfCourtForCitation(classification, primary, serviceCourt);
     if (courtResult.reviewReasons) {
@@ -3315,6 +3529,78 @@ function wlTrReadService(result, req) {
   return { svc: { category: "ok", envelope: envelope }, echoReasons: [] };
 }
 
+var wlTrCodeReasonRe = /^[A-Za-z0-9:_-]{1,120}$/;
+var wlTrPageReasonRe = /^[a-z0-9:-]+$/;
+var wlTrHtmlTagRe = /<[^>]*>/g;
+var wlTrScalarFieldKeys = [
+  "caseName", "court", "dateDecided", "docketNumber",
+  "reporter", "reporterVolume", "firstPage", "history", "shortTitle", "url"
+];
+
+// Adds code-only reasons once each; any demoting reason moves a validated record to unverified.
+function wlTrAddReasons(rec, reasons) {
+  for (var i = 0; i < reasons.length; i++) {
+    if (rec.reviewReasons.indexOf(reasons[i]) === -1) rec.reviewReasons.push(reasons[i]);
+  }
+  if (rec.status === "validated-profile" && wlMapHasDemotingReason(rec.reviewReasons)) {
+    rec.status = "unverified-profile";
+  }
+}
+
+// Reasons are written verbatim into Extra, so anything that is not a short code is replaced by a fixed code.
+function wlTrCodeOnlyReasons(rec) {
+  var safe = [];
+  var unsafe = false;
+  for (var i = 0; i < rec.reviewReasons.length; i++) {
+    var reason = rec.reviewReasons[i];
+    if (typeof reason === "string" && wlTrCodeReasonRe.test(reason)) {
+      if (safe.indexOf(reason) === -1) safe.push(reason);
+    } else {
+      unsafe = true;
+    }
+  }
+  if (unsafe && safe.indexOf("unsafe-reason") === -1) safe.push("unsafe-reason");
+  rec.reviewReasons = safe;
+}
+
+// Validation problem strings look like "html:caseName", "token-leak:extra[3]" or "shortTitle-has-cite".
+function wlTrProblemCode(problem) {
+  return problem.split(":")[0];
+}
+
+function wlTrSanitizeFields(fields, problems) {
+  var dropExtraIndexes = {};
+  var leakedKeys = {};
+  for (var i = 0; i < problems.length; i++) {
+    var problem = problems[i];
+    var lineMatch = problem.match(/^(?:token-leak|html|watermark|value-too-long):extra\[(\d+)\]$/);
+    if (lineMatch) dropExtraIndexes[lineMatch[1]] = true;
+    var keyMatch = problem.match(/^token-leak:([A-Za-z]+)$/);
+    if (keyMatch) leakedKeys[keyMatch[1]] = true;
+    // Optional fields that caused problems are dropped rather than aborting the item
+    if (problem.indexOf("history") !== -1 && fields.history) fields.history = "";
+    if (problem.indexOf("shortTitle") !== -1 && fields.shortTitle) delete fields.shortTitle;
+    if (problem.indexOf("url") !== -1 && fields.url) delete fields.url;
+  }
+  for (var k = 0; k < wlTrScalarFieldKeys.length; k++) {
+    var key = wlTrScalarFieldKeys[k];
+    if (typeof fields[key] !== "string") continue;
+    if (leakedKeys[key]) {
+      fields[key] = "";
+      continue;
+    }
+    fields[key] = fields[key].replace(wlTrHtmlTagRe, "").replace(/\s{2,}/g, " ").trim();
+  }
+  if (typeof fields.extra === "string") {
+    var kept = [];
+    var lines = fields.extra.split("\n");
+    for (var n = 0; n < lines.length; n++) {
+      if (!dropExtraIndexes[String(n)]) kept.push(lines[n]);
+    }
+    fields.extra = kept.join("\n");
+  }
+}
+
 async function wlTrDoWeb(doc, url) {
   // 1. Capture page context + DOM facts FIRST (frozen)
   var frozenContext = wlDomReadPageContext(doc, url);
@@ -3394,35 +3680,37 @@ async function wlTrDoWeb(doc, url) {
   }
 
   if (!identityChanged) {
-    for (var e = 0; e < echoReasons.length; e++) {
-      if (rec.reviewReasons.indexOf(echoReasons[e]) === -1) rec.reviewReasons.push(echoReasons[e]);
-    }
+    wlTrAddReasons(rec, echoReasons);
   }
 
-  // 6. Map to Zotero fields
-  var fields = wlMapToZoteroFields(rec, { version: wlTrVersion });
+  // Page-context causes (ambiguous-config, missing-config, ...) explain why the service was skipped
+  var pageReasons = [];
+  var contextReasons = frozenContext.reviewReasons || [];
+  for (var e = 0; e < contextReasons.length; e++) {
+    if (typeof contextReasons[e] === "string" && wlTrPageReasonRe.test(contextReasons[e])) pageReasons.push(contextReasons[e]);
+  }
+  wlTrAddReasons(rec, pageReasons);
+  wlTrCodeOnlyReasons(rec);
 
-  // 7. Validate outgoing — drop offending optional fields rather than aborting
+  // 6. Map to Zotero fields; outgoing validation problems become demoting reasons BEFORE the final
+  // status/tag are computed, so a record that fails validation is never validated-profile and always tagged
+  var fields = wlMapToZoteroFields(rec, { version: wlTrVersion });
   var validation = wlMapValidateOutgoing(fields);
-  if (!validation.ok) {
-    for (var i = 0; i < validation.problems.length; i++) {
-      var problem = validation.problems[i];
-      var code = problem.split(":")[0];
-      // Drop optional fields that caused validation problems
-      if (problem.indexOf("history") !== -1 && fields.history) {
-        fields.history = "";
-      }
-      if (problem.indexOf("shortTitle") !== -1 && fields.shortTitle) {
-        delete fields.shortTitle;
-      }
-      if (problem.indexOf("url") !== -1 && fields.url) {
-        delete fields.url;
-      }
-      // Add review line for validation issues
-      var extraLines = fields.extra.split("\n");
-      extraLines.push("Westlaw review: validation-" + code);
-      fields.extra = extraLines.join("\n");
+  for (var pass = 0; pass < 3 && !validation.ok; pass++) {
+    var validationReasons = [];
+    for (var v = 0; v < validation.problems.length; v++) {
+      validationReasons.push("validation-" + wlTrProblemCode(validation.problems[v]));
     }
+    var before = rec.reviewReasons.length;
+    wlTrAddReasons(rec, validationReasons);
+    if (rec.reviewReasons.length === before && pass > 0) break;
+    fields = wlMapToZoteroFields(rec, { version: wlTrVersion });
+    validation = wlMapValidateOutgoing(fields);
+  }
+
+  // 7. Drop or sanitize whatever validation flagged (offending Extra lines, HTML, optional fields)
+  if (!validation.ok) {
+    wlTrSanitizeFields(fields, validation.problems);
   }
 
   // 8. Debug log (bounded codes only — no URLs, tokens, names, text)

@@ -788,3 +788,171 @@ describe("translator - doWeb DOM review reasons and request routing (W9)", funct
     assert.ok(item.extra.indexOf("Westlaw status: validated-profile") !== -1, item.extra);
   });
 });
+
+// ---- Review fixes (lane C): leak scrub, outgoing-validation demotion, page-context reasons, informational tag ----
+function lcRun(longA, opts) {
+  opts = opts || {};
+  var enhanced = longA.replace(/ \(5th Cir\. 1999\)/, "") + " (5th Cir. 1999), No. 98-40679, 1999 WL 652310";
+  var shorts = opts.shorts || ["Doe, 187 F.3d 486", "187 F.3d 486"];
+  var a = jsonResponse({ responses: [{
+    request: { styleId: "standard" },
+    forms: [{ name: "long", text: { "text/plain": longA } }].concat(shorts.map(function(t) {
+      return { name: "short", text: { "text/plain": t } };
+    }))
+  }] });
+  var b = jsonResponse({ responses: [
+    { request: { styleId: "standard" }, forms: [{ name: "long", text: { "text/plain": longA } }] },
+    { request: { styleId: "westlaw" }, forms: [{ name: "enhanced", text: { "text/plain": enhanced } }] }
+  ] });
+  return runDoWeb(makeSanchezDoc({ headerName: "Doe v. Roe" }), a, b);
+}
+
+function lcStatus(item) {
+  var m = item.extra.match(/^Westlaw status: (.*)$/m);
+  return m ? m[1] : null;
+}
+
+describe("translator - service response text never reaches Extra (P1-3)", function() {
+  it("duplicate unwanted styleId with token-like text: no reason, no leak, status unchanged", async function() {
+    var junk = "Bearer TEST-SECRETVALUE some opinion text";
+    var a = jsonResponse({ responses: [
+      w5StandardResponse(),
+      { request: { styleId: junk }, forms: [] },
+      { request: { styleId: junk }, forms: [] }
+    ] });
+    var result = await runDoWeb(makeSanchezDoc(), a,
+      jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
+    var item = result.fz.items[0];
+    assert.equal(item.extra.indexOf("TEST-SECRETVALUE"), -1);
+    assert.equal(item.extra.indexOf("opinion text"), -1);
+    assert.deepEqual(w5ReviewLines(item), []);
+    assert.equal(lcStatus(item), "validated-profile");
+  });
+
+  it("unparsed service segment carrying a token is dropped from Extra and validation-token-leak is kept", async function() {
+    var result = await lcRun("Doe v. Roe, 187 F.3d 486, Bearer TEST-XYZ some words (5th Cir. 1999)");
+    var item = result.fz.items[0];
+    assert.equal(item.extra.indexOf("TEST-XYZ"), -1, item.extra);
+    assert.equal(item.extra.indexOf("Bearer"), -1);
+    assert.ok(item.extra.indexOf("Westlaw review: validation-token-leak") !== -1, item.extra);
+    assert.notEqual(lcStatus(item), "validated-profile");
+    assert.ok(w5HasReviewTag(item));
+  });
+});
+
+describe("translator - outgoing validation problems demote and tag (P1-4)", function() {
+  it("HTML in caseName is stripped, flagged, unverified and tagged", async function() {
+    var result = await lcRun("Doe <i>v.</i> Roe, 187 F.3d 486 (5th Cir. 1999)");
+    var item = result.fz.items[0];
+    assert.equal(item.caseName.indexOf("<"), -1, item.caseName);
+    assert.equal(item.caseName, "Doe v. Roe");
+    assert.ok(item.extra.indexOf("Westlaw review: validation-html") !== -1, item.extra);
+    assert.equal(lcStatus(item), "unverified-profile");
+    assert.ok(w5HasReviewTag(item));
+  });
+
+  it("(year) in caseName is flagged, unverified and tagged", async function() {
+    var result = await lcRun("Doe v. Roe (1998), 187 F.3d 486 (5th Cir. 1999)");
+    var item = result.fz.items[0];
+    assert.ok(item.extra.indexOf("Westlaw review: validation-year-paren") !== -1, item.extra);
+    assert.equal(lcStatus(item), "unverified-profile");
+    assert.ok(w5HasReviewTag(item));
+  });
+
+  it("shortTitle that looks like a citation is dropped, flagged, unverified and tagged", async function() {
+    var result = await lcRun("Doe v. Roe, 187 F.3d 486 (5th Cir. 1999)", { shorts: ["Doe v. 7 Eleven 3, 187 F.3d 486", "187 F.3d 486"] });
+    var item = result.fz.items[0];
+    assert.equal(item.shortTitle, undefined, "shortTitle dropped");
+    assert.ok(item.extra.indexOf("Westlaw review: validation-shortTitle-has-cite") !== -1, item.extra);
+    assert.equal(lcStatus(item), "unverified-profile");
+    assert.ok(w5HasReviewTag(item));
+  });
+
+  it("caseName ending in an unknown-reporter citation is flagged, unverified and tagged", async function() {
+    var result = await lcRun("Doe v. Roe, 400 Mass. 100, 100 N.E.2d 200 (5th Cir. 1999)");
+    var item = result.fz.items[0];
+    assert.ok(item.extra.indexOf("Westlaw review: validation-caseName-has-cite") !== -1, item.extra);
+    assert.notEqual(lcStatus(item), "validated-profile");
+    assert.ok(w5HasReviewTag(item));
+  });
+
+  it("a clean record produces no validation reasons (regression)", async function() {
+    var result = await lcRun("Doe v. Roe, 187 F.3d 486 (5th Cir. 1999)");
+    var item = result.fz.items[0];
+    assert.equal(item.extra.indexOf("validation-"), -1);
+    assert.equal(lcStatus(item), "validated-profile");
+    assert.equal(w5HasReviewTag(item), false);
+  });
+});
+
+describe("translator - unparsed citation Extra payload is bounded (P2-12)", function() {
+  it("no Extra line exceeds the 200-char payload cap", async function() {
+    var result = await lcRun("Doe v. Roe, 187 F.3d 486, " + "lorem ".repeat(80) + "(5th Cir. 1999)");
+    var item = result.fz.items[0];
+    item.extra.split("\n").forEach(function(line) {
+      if (line.indexOf("Westlaw unparsed citation: ") === 0) {
+        assert.ok(line.length <= "Westlaw unparsed citation: ".length + 201, "capped");
+      }
+    });
+  });
+});
+
+describe("translator - page-context review reasons reach the record (P2-7)", function() {
+  function docWithConfigScripts(scriptTexts) {
+    var doc = makeSanchezDoc({ withConfig: false });
+    scriptTexts.forEach(function(t) { w9AppendToBody(doc, el("script", {}, t)); });
+    return doc;
+  }
+  var cfg = function(pei, rt) {
+    return 'var config = {"DocumentGuid":"I1234567890abcdef1234567890abcdef","ContentType":"Cases","PageEventIdentifier":"' + pei +
+      '","ResourceToken":"' + rt + '","RelatedInfo":"relatedinfo.next.westlaw.com"};';
+  };
+
+  it("two distinct PageEventIdentifier values -> service-none AND ambiguous-config, no calls", async function() {
+    var doc = docWithConfigScripts([cfg("TEST-PEI-0001", "TEST-RT-0001"), cfg("TEST-PEI-0002", "TEST-RT-0001")]);
+    var result = await runDoWeb(doc, null, null);
+    var item = result.fz.items[0];
+    var lines = w5ReviewLines(item);
+    assert.ok(lines.indexOf("Westlaw review: service-none") !== -1, item.extra);
+    assert.ok(lines.indexOf("Westlaw review: ambiguous-config") !== -1, item.extra);
+    assert.equal(result.fzu.getCalls().length, 0);
+    assert.equal(item.extra.indexOf("TEST-PEI"), -1);
+    assert.ok(w5HasReviewTag(item));
+  });
+
+  it("no config script at all -> missing-config is recorded", async function() {
+    var result = await runDoWeb(makeSanchezDoc({ withConfig: false }), null, null);
+    var item = result.fz.items[0];
+    assert.ok(w5ReviewLines(item).indexOf("Westlaw review: missing-config") !== -1, item.extra);
+    assert.ok(w5ReviewLines(item).indexOf("Westlaw review: service-none") !== -1, item.extra);
+  });
+
+  it("clean config adds no page-context reasons (regression)", async function() {
+    var r = w9Responses();
+    var result = await runDoWeb(makeSanchezDoc(), r.a, r.b);
+    assert.equal(result.fz.items[0].extra.indexOf("config"), -1);
+  });
+});
+
+describe("translator - informational header-fallback does not tag (P2-8)", function() {
+  it("service-validated record with only header-fallback: Extra line kept, no tag", async function() {
+    var r = w9Responses();
+    var doc = makeDoc({
+      title: "Sanchez v. Liggett & Myers, Inc. | Cases | Fifth Circuit | Westlaw Advantage",
+      href: "https://1.next.westlaw.com/Document/I1234567890abcdef1234567890abcdef/View/FullText.html",
+      hostname: "1.next.westlaw.com",
+      body: el("body", {},
+        el("div", { id: "co_docHeaderTitleLine" }, "Sanchez v. Liggett & Myers, Inc."),
+        el("div", { class: "co_courtBlock" }, "United States Court of Appeals, Fifth Circuit."),
+        el("div", { class: "co_cites" }, "187 F.3d 486"),
+        el("div", { class: "co_docketBlock" }, "No. 98-40679."),
+        el("script", {},
+          'var config = {"DocumentGuid":"I1234567890abcdef1234567890abcdef","ContentType":"Cases","PageEventIdentifier":"TEST-PEI-0001","ResourceToken":"TEST-RT-0001","RelatedInfo":"relatedinfo.next.westlaw.com"};'))
+    });
+    var result = await runDoWeb(doc, r.a, r.b);
+    var item = result.fz.items[0];
+    assert.deepEqual(w5ReviewLines(item), ["Westlaw review: header-fallback"]);
+    assert.equal(lcStatus(item), "validated-profile");
+    assert.equal(w5HasReviewTag(item), false, "validated + informational only -> no tag");
+  });
+});

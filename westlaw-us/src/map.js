@@ -3,12 +3,40 @@ var wlMapHtmlRe = /<[a-zA-Z]/;
 var wlMapTokenRe = /ResourceToken|PageEventIdentifier|x-cobalt|Bearer /;
 var wlMapYearParenRe = /\(\d{4}\)/;
 var wlMapCiteRe = /\d+ [A-Z].* \d+/;
+var wlMapCaseNameCiteRe = /,?\s\d{1,4}\s+[A-Z][A-Za-z0-9.']*(?:\s+[A-Za-z0-9.']+){0,3}\s+\d{1,5}$/;
 var wlMapGuidRe = /^I[0-9a-f]{32}$/;
 var wlMapDashRe = /[\u2013\u2014]/g;
 var wlMapDocketCleanRe = /^[0-9a-zA-Z\u2013\u2014-]+$/;
 
+// Review reasons that are informational: they stay visible as an Extra line but never add the needs-review tag.
+var wlMapInformationalReasons = ["header-fallback"];
+var wlMapUnparsedPayloadMax = 200;
+
 function wlMapStripWatermark(str) {
   return str.replace(wlMapWatermarkRe, "");
+}
+
+function wlMapHasDemotingReason(reviewReasons) {
+  for (var i = 0; i < reviewReasons.length; i++) {
+    if (wlMapInformationalReasons.indexOf(reviewReasons[i]) === -1) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function wlMapUnparsedPayload(alt) {
+  var payload = "";
+  if (typeof alt.raw === "string" && alt.raw.trim() !== "") {
+    payload = alt.raw;
+  } else if (typeof alt.text === "string") {
+    payload = alt.text;
+  }
+  payload = wlMapStripWatermark(payload).replace(/\s+/g, " ").trim();
+  if (payload.length > wlMapUnparsedPayloadMax) {
+    payload = payload.slice(0, wlMapUnparsedPayloadMax) + "\u2026";
+  }
+  return payload;
 }
 
 function wlMapNormalizeDocketSingle(docket) {
@@ -113,7 +141,10 @@ function wlMapToZoteroFields(rec, opts) {
   }
   alternates.forEach(function(alt) {
     if (alt.kind === "unparsed") {
-      extraLines.push("Westlaw unparsed citation: " + wlMapStripWatermark(alt.raw || ""));
+      var payload = wlMapUnparsedPayload(alt);
+      if (payload !== "") {
+        extraLines.push("Westlaw unparsed citation: " + payload);
+      }
     }
   });
   extraLines.push("Westlaw court (raw): " + wlMapStripWatermark(rec.rawCourt || ""));
@@ -126,7 +157,7 @@ function wlMapToZoteroFields(rec, opts) {
   var extra = extraLines.join("\n");
 
   var tags = [];
-  if (reviewReasons.length > 0 || rec.status !== "validated-profile") {
+  if (wlMapHasDemotingReason(reviewReasons) || rec.status !== "validated-profile") {
     tags.push({ tag: "Westlaw: needs citation review" });
   }
 
@@ -247,6 +278,13 @@ function wlMapValidateOutgoing(fields) {
     }
   });
 
+  if (typeof fields.caseName === "string") {
+    var citeMatch = fields.caseName.match(wlMapCaseNameCiteRe);
+    if (citeMatch && citeMatch[0].indexOf(".") !== -1) {
+      problems.push("caseName-has-cite");
+    }
+  }
+
   if (fields.shortTitle) {
     if (fields.shortTitle === "Id.") {
       problems.push("shortTitle-is-Id");
@@ -300,6 +338,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     wlMapToZoteroFields: wlMapToZoteroFields,
     wlMapValidateOutgoing: wlMapValidateOutgoing,
+    wlMapHasDemotingReason: wlMapHasDemotingReason,
     wlMapApply: wlMapApply
   };
 }

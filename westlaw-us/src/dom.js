@@ -47,6 +47,7 @@ function wlDomReadPageContext(doc, url) {
   var peiValues = kv["PageEventIdentifier"] || [];
   var rtValues = kv["ResourceToken"] || [];
 
+  var guidAmbiguous = false;
   var validGUIDs = [];
   for (var g = 0; g < guidValues.length; g++) {
     if (wlDomValidateGUID(guidValues[g])) {
@@ -61,6 +62,8 @@ function wlDomReadPageContext(doc, url) {
     }
     if (uniqGUIDs.length > 1) {
       ambiguous = true;
+      guidAmbiguous = true;
+      reviewReasons.push("ambiguous-guid");
     }
   }
 
@@ -123,6 +126,12 @@ function wlDomReadPageContext(doc, url) {
     }
   }
 
+  // Two distinct DocumentGuid values: even one matching the URL is not trustworthy for service calls.
+  if (guidAmbiguous) {
+    identityGUID = null;
+    if (identityReason !== "identity-mismatch") identityReason = "identity-ambiguous";
+  }
+
   config.guid = identityGUID;
   config.identityReason = identityReason;
   config.ambiguous = ambiguous;
@@ -161,6 +170,7 @@ function wlDomReadPageContext(doc, url) {
   } else {
     reviewReasons.push("missing-config");
   }
+  if (guidAmbiguous) secrets = null;
 
   return {
     ok: ok,
@@ -231,8 +241,9 @@ function wlDomInspectCaseReadiness(doc, url) {
 }
 
 function wlDomClassifyLI(liText) {
-  var date = wlTextParseUSDate(liText);
-  if (date) return { kind: "date", date: date, dateText: liText };
+  var dateLiText = liText.replace(/\.$/, "");
+  var date = wlTextParseUSDate(dateLiText);
+  if (date) return { kind: "date", date: date, dateText: dateLiText };
 
   if (wlDomPageCountRe.test(liText)) {
     return { kind: "pageCount", text: liText };
@@ -243,7 +254,36 @@ function wlDomClassifyLI(liText) {
     return { kind: "citation", citations: cits, text: liText };
   }
 
-  return { kind: "unparsed", text: liText };
+  return { kind: "unparsed", text: liText, raw: liText };
+}
+
+// Docket block text -> normalized "No. X" values. Anything that is not a docket number (parentheticals,
+// "Division B", unprefixed text) is reported through `unparsed` instead of becoming a docket or vanishing.
+function wlDomParseDocketText(text) {
+  var dockets = [];
+  var unparsed = false;
+  var work = text.replace(/\.+$/, "");
+  var withoutParens = work.replace(/\([^)]*\)/g, " ");
+  if (withoutParens !== work) unparsed = true;
+  work = wlDomClean(withoutParens).replace(/\.+$/, "");
+  work = work.replace(/^Docket\s+(?=Nos?\.?\s)/i, "");
+  if (!/^Nos?\.?\s/.test(work)) {
+    if (work) unparsed = true;
+    return { dockets: dockets, unparsed: unparsed };
+  }
+  work = work.replace(/\bconsolidated\s+with\b/gi, ";");
+  var segments = work.split(/;\s*|,\s*|\s+and\s+/);
+  for (var i = 0; i < segments.length; i++) {
+    var seg = segments[i].trim().replace(/\.+$/, "").replace(/^Nos?\.?\s*/, "").trim();
+    if (!seg) continue;
+    if (/[0-9]/.test(seg) && /^[A-Za-z0-9][A-Za-z0-9 .\-\u2010-\u2015\/:]*$/.test(seg) &&
+        !/^(division|div\.|section|sec\.|chamber|panel)\b/i.test(seg)) {
+      dockets.push("No. " + seg);
+    } else {
+      unparsed = true;
+    }
+  }
+  return { dockets: dockets, unparsed: unparsed };
 }
 
 function wlDomReadFacts(doc) {
@@ -336,7 +376,7 @@ function wlDomReadFacts(doc) {
         rawCourt = liText;
         courtLineFound = true;
       } else {
-        citations.push({ kind: "unparsed", text: liText });
+        citations.push({ kind: "unparsed", text: liText, raw: liText });
       }
     }
   }
@@ -378,22 +418,10 @@ function wlDomReadFacts(doc) {
 
   var docketBlocks = doc.querySelectorAll(".co_docketBlock");
   for (var db = 0; db < docketBlocks.length; db++) {
-    var docketText = wlDomClean(docketBlocks[db].textContent);
-    docketText = docketText.replace(/\.$/, "");
-    var docketParts = [];
-    if (docketText.indexOf("Nos.") === 0) {
-      var remainder = docketText.substring(4);
-      var splitParts = remainder.split(/,\s*|;\s*|\s+and\s+/);
-      for (var sp = 0; sp < splitParts.length; sp++) {
-        var trimmed = splitParts[sp].trim();
-        if (trimmed) docketParts.push("No. " + trimmed);
-      }
-    } else if (docketText.indexOf("No.") === 0) {
-      var noParts = docketText.split(/;\s*|,\s*|\s+and\s+/);
-      for (var np = 0; np < noParts.length; np++) {
-        var npTrimmed = noParts[np].trim();
-        if (npTrimmed) docketParts.push(npTrimmed);
-      }
+    var parsedDocket = wlDomParseDocketText(wlDomClean(docketBlocks[db].textContent));
+    var docketParts = parsedDocket.dockets;
+    if (parsedDocket.unparsed && reviewReasons.indexOf("docket-unparsed-text") === -1) {
+      reviewReasons.push("docket-unparsed-text");
     }
     for (var dp = 0; dp < docketParts.length; dp++) {
       var dpKey = typeof wlTextCompareKey === "function" ? wlTextCompareKey(docketParts[dp]) : docketParts[dp];

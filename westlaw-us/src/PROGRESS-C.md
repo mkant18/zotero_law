@@ -19,3 +19,8 @@
 - `dom.js` `wlDomReadFacts`: (1) `header-fallback` review reason when no `#co_docHeaderCitation` exists and court/citations came from `.co_courtBlock`/`.co_cites`; (2) duplicate headers naming different court lines (compared per list, case-insensitive) now add `conflicting-header` (previously only citations/dates); identical sticky copies and a truncated copy with no court line do not flag.
 - Reasons `wlDomReadFacts` can emit: `conflicting-header`, `header-fallback`. (`missing-config`/`ambiguous-config` come from `wlDomReadPageContext`, not DomFacts, and are not forwarded by reconcile.)
 - dom.test.mjs: the fallback todo is now a passing test; +5 tests (court conflicts, sticky/truncated no-flag, no-fallback-content no-flag). 0 todo.
+
+## Final review fixes (lane D) — P2-10, P2-11, P2-7 (dom side)
+- P2-10: new `wlDomParseDocketText` (internal). Docket blocks yield normalized `No. X` values only: `Consolidated with` splits, `Docket No.` prefix accepted, per-part trailing periods stripped, parentheticals and non-docket text (`Division B`, unprefixed text) are excluded and add DomFacts reason `docket-unparsed-text` (code-only; the text is not stored).
+- P2-11: a date li with a trailing period parses (`dateText` is stored without the period). Unparsed header li items keep `kind: "unparsed"` and now carry both `text` and `raw`.
+- P2-7: `wlDomReadPageContext` with two distinct valid `DocumentGuid` values pushes `ambiguous-guid` (in the returned `reviewReasons`, not DomFacts), sets `ambiguous: true`, `config.guid = null`, `config.identityReason = "identity-ambiguous"` (unless already `identity-mismatch`), and `secrets = null`; readiness capability falls to `dom-only`. Callers should check `ctx.reviewReasons`, `ctx.config.guid`, `ctx.secrets`.

@@ -941,3 +941,113 @@ describe("wlDomReadFacts — plan §12 selector fallbacks", function() {
     assert.equal(wlDomReadFacts(doc).headerName, "Placeholder v. Example");
   });
 });
+
+// ---- final-review fixes: P2-10 docket splitting, P2-11 header li, P2-7 ambiguous guid ----
+
+describe("wlDomReadFacts — P2-10 docket splitting", function() {
+  function docketFacts(text) {
+    return wlDomReadFacts(fallbackDoc([el("div", { class: "co_docketBlock" }, text)]));
+  }
+
+  it("splits 'Consolidated with' into separate dockets", function() {
+    var r = docketFacts("No. 98-1, Consolidated with No. 98-2.");
+    assert.deepEqual(plain(r.dockets), ["No. 98-1", "No. 98-2"]);
+    assert.equal(r.reviewReasons.indexOf("docket-unparsed-text"), -1);
+  });
+
+  it("keeps 'Division B' out of dockets and flags docket-unparsed-text", function() {
+    var r = docketFacts("No. 2020-CA-000123-MR, Division B.");
+    assert.deepEqual(plain(r.dockets), ["No. 2020-CA-000123-MR"]);
+    assert.equal(r.reviewReasons.indexOf("docket-unparsed-text") !== -1, true);
+  });
+
+  it("drops a trailing court/date parenthetical from the docket and flags docket-unparsed-text", function() {
+    var r = docketFacts("No. 98-1 (2d Cir. Jan. 5, 1999).");
+    assert.deepEqual(plain(r.dockets), ["No. 98-1"]);
+    assert.equal(r.reviewReasons.indexOf("docket-unparsed-text") !== -1, true);
+  });
+
+  it("reads 'Docket No.' as No. and does not drop it", function() {
+    var r = docketFacts("Docket No. 98-1.");
+    assert.deepEqual(plain(r.dockets), ["No. 98-1"]);
+    assert.equal(r.reviewReasons.indexOf("docket-unparsed-text"), -1);
+  });
+
+  it("flags docket text that has no No./Nos. prefix instead of dropping it silently", function() {
+    var r = docketFacts("Case Number Unknown");
+    assert.deepEqual(plain(r.dockets), []);
+    assert.equal(r.reviewReasons.indexOf("docket-unparsed-text") !== -1, true);
+  });
+
+  it("normalizes bare follow-on numbers in a No. block and strips per-part periods", function() {
+    assert.deepEqual(plain(docketFacts("No. 98-1, 98-2").dockets), ["No. 98-1", "No. 98-2"]);
+    assert.deepEqual(plain(docketFacts("No. 98-40679.; No. 99-12345").dockets), ["No. 98-40679", "No. 99-12345"]);
+  });
+
+  it("never emits an 'Nos.' docket value or docket values containing 'Consolidated'", function() {
+    var r = docketFacts("No. 98-1, Consolidated with No. 98-2.");
+    assert.equal(r.dockets.every(function(d) { return d.indexOf("Nos") === -1 && !/consolidated/i.test(d); }), true);
+  });
+});
+
+describe("wlDomReadFacts — P2-11 header li handling", function() {
+  it("accepts a date li with a trailing period", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"),
+      el("li", {}, "August 25, 1999."),
+      el("li", {}, "100 F.3d 200"));
+    var r = wlDomReadFacts(fallbackDoc([list]));
+    assert.equal(r.date, "1999-08-25");
+    assert.equal(r.dateText, "August 25, 1999");
+    assert.equal(r.reviewReasons.indexOf("conflicting-header"), -1);
+  });
+
+  it("preserves an unparsed li with both text and raw and keeps kind unparsed", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"),
+      el("li", {}, "August 25, 1999"),
+      el("li", {}, "100 F.3d 200"),
+      el("li", {}, "Rehearing Denied"));
+    var r = wlDomReadFacts(fallbackDoc([list]));
+    var un = r.citations.filter(function(c) { return c.kind === "unparsed"; });
+    assert.equal(un.length, 1);
+    assert.equal(un[0].text, "Rehearing Denied");
+    assert.equal(un[0].raw, "Rehearing Denied");
+  });
+});
+
+describe("wlDomReadPageContext — P2-7 ambiguous DocumentGuid", function() {
+  function guidDoc(cfg) {
+    return makeDoc({
+      title: "Case Name | Cases | Jurisdiction | Westlaw Advantage",
+      body: el("body", {},
+        el("div", { id: "co_docHeaderTitleLine" }, "Case Name"),
+        el("div", { id: "co_docHeaderCitation" }, el("li", {}, "187 F.3d 486")),
+        el("script", {}, cfg))
+    });
+  }
+  var cfg = 'var config = {"DocumentGuid":"' + GUID + '","DocumentGuid":"' + GUID2 + '","ContentType":"Cases","RelatedInfo":"relatedinfo.test.invalid","PageEventIdentifier":"TEST-PE-0001","ResourceToken":"TEST-RT-0001"};';
+  var url = "https://1.next.westlaw.com/Document/" + GUID + "/View/FullText.html";
+
+  it("pushes ambiguous-guid and makes the guid and secrets unusable even when one matches the URL", function() {
+    var r = wlDomReadPageContext(guidDoc(cfg), url);
+    assert.equal(r.ambiguous, true);
+    assert.equal(r.reviewReasons.indexOf("ambiguous-guid") !== -1, true);
+    assert.equal(r.config.guid, null);
+    assert.equal(r.secrets, null);
+  });
+
+  it("downgrades readiness capability to dom-only", function() {
+    var d = guidDoc(cfg);
+    d.location = { hostname: "1.next.westlaw.com" };
+    var r = wlDomInspectCaseReadiness(d, url);
+    assert.equal(r.capability, "dom-only");
+  });
+
+  it("does not push ambiguous-guid for repeated identical guids", function() {
+    var same = 'var config = {"DocumentGuid":"' + GUID + '","DocumentGuid":"' + GUID + '","ContentType":"Cases","PageEventIdentifier":"TEST-PE-0001","ResourceToken":"TEST-RT-0001"};';
+    var r = wlDomReadPageContext(guidDoc(same), url);
+    assert.equal(r.reviewReasons.indexOf("ambiguous-guid"), -1);
+    assert.equal(r.config.guid, GUID);
+  });
+});

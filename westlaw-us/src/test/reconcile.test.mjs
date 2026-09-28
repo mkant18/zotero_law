@@ -997,3 +997,233 @@ describe("wlRecReconcile - DOM review reasons", function() {
     assert.equal(JSON.stringify(result.reviewReasons), "[]");
   });
 });
+
+// ---- Review-final fixes (P1-2, P1-3, P2-9, P1-6) ----
+describe("wlRecReconcile - review-final fixes", function() {
+  var stdStyle = {
+    long: "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999)",
+    shorts: ["Sanchez, 187 F.3d 486", "187 F.3d 486"],
+    id: "standard",
+    enhanced: null
+  };
+  var wlStyle = {
+    long: null,
+    shorts: [],
+    id: "westlaw",
+    enhanced: "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999), No. 98-40679, 1999 WL 652310"
+  };
+  var GUID = "I1234567890abcdef1234567890abcdef";
+  var WL_CITE = { kind: "wl", volume: "1999", reporter: "WL", page: "652310", raw: "1999 WL 652310" };
+  var wlLong = {
+    long: "Doe v. Roe, No. 98-40679, 1999 WL 652310 (5th Cir. Aug. 25, 1999)",
+    shorts: [], id: "standard", enhanced: null
+  };
+
+  function fifth(o) {
+    o = o || {};
+    return makeDom({
+      guid: GUID,
+      headerName: "Sanchez v. Liggett & Myers, Inc.",
+      rawCourt: o.rawCourt || "United States Court of Appeals, Fifth Circuit.",
+      date: "date" in o ? o.date : "1999-08-25",
+      citations: o.citations || [{ kind: "reporter", volume: "187", reporter: "F.3d", page: "486", raw: "187 F.3d 486" }],
+      dockets: "dockets" in o ? o.dockets : ["No. 98-40679"],
+      reviewReasons: o.reviewReasons || []
+    });
+  }
+
+  function reconcile(dom, aStyle, bStyles) {
+    return wlRecReconcile({
+      context: { guid: GUID, url: "" },
+      dom: dom,
+      svcA: makeSvc("ok", makeEnvelope({ standard: aStyle || stdStyle })),
+      svcB: makeSvc("ok", makeEnvelope(bStyles || { standard: stdStyle, westlaw: wlStyle })),
+      profile: "standard"
+    });
+  }
+
+  describe("P1-2 unparsed DOM citations are never primary", function() {
+    var cases = [
+      { label: "NY slip op", court: "Supreme Court, Appellate Division, First Department, New York.", raw: "2023 NY Slip Op 12345",
+        long: "Doe v. Roe, 2023 N.Y. Slip Op. 12345 (App. Div. 2023)" },
+      { label: "IL App", court: "Appellate Court of Illinois, First District.", raw: "2019 IL App (1st) 180123",
+        long: "Doe v. Roe, 2019 IL App (1st) 180123 (Ill. App. Ct. 2019)" }
+    ];
+    cases.forEach(function(c) {
+      var style = { long: c.long, shorts: [], id: "standard", enhanced: null };
+      var result = reconcile(
+        makeDom({
+          guid: GUID, headerName: "Doe v. Roe", rawCourt: c.court, date: "2023-05-05",
+          citations: [{ kind: "unparsed", text: c.raw }], dockets: ["No. 1"]
+        }),
+        style,
+        { standard: style }
+      );
+      it(c.label + ": primary is null, no-citation demotes, status metadata-only", function() {
+        assert.equal(result.primary, null);
+        assert.ok(result.reviewReasons.indexOf("no-citation") !== -1);
+        assert.equal(result.status, "metadata-only");
+      });
+      it(c.label + ": raw text is kept in alternates as unparsed", function() {
+        var kept = result.alternates.filter(function(a) { return a.kind === "unparsed" && a.raw === c.raw; });
+        assert.equal(kept.length, 1);
+      });
+    });
+
+    it("distinct unparsed DOM lines are not collapsed into one alternate", function() {
+      var result = reconcile(fifth({ citations: [
+        { kind: "reporter", volume: "187", reporter: "F.3d", page: "486", raw: "187 F.3d 486" },
+        { kind: "unparsed", text: "First odd cite" },
+        { kind: "unparsed", text: "Second odd cite" }
+      ] }));
+      var raws = result.alternates.filter(function(a) { return a.kind === "unparsed"; }).map(function(a) { return a.raw; });
+      assert.equal(JSON.stringify(raws), JSON.stringify(["First odd cite", "Second odd cite"]));
+    });
+
+    it("DOM-only (service failed) record never selects an unparsed primary", function() {
+      var result = wlRecReconcile({
+        context: { guid: GUID, url: "" },
+        dom: makeDom({ guid: GUID, headerName: "Doe v. Roe", rawCourt: "Appellate Court of Illinois, First District.",
+          date: "2019-05-05", citations: [{ kind: "unparsed", text: "2019 IL App (1st) 180123" }] }),
+        svcA: makeSvc("timeout", null),
+        svcB: makeSvc("none", null),
+        profile: "standard"
+      });
+      assert.equal(result.primary, null);
+      assert.equal(result.status, "metadata-only");
+      assert.ok(result.reviewReasons.indexOf("no-citation") !== -1);
+    });
+  });
+
+  describe("P1-3 envelope reasons are code-only", function() {
+    function withEnvelopeReasons(aReasons, bReasons) {
+      return wlRecReconcile({
+        context: { guid: GUID, url: "" },
+        dom: fifth(),
+        svcA: makeSvc("ok", { ok: true, styles: { standard: stdStyle }, reviewReasons: aReasons }),
+        svcB: makeSvc("ok", { ok: true, styles: { standard: stdStyle, westlaw: wlStyle }, reviewReasons: bReasons || [] }),
+        profile: "standard"
+      });
+    }
+    it("a free-text reason is replaced by envelope-reason-dropped and demotes", function() {
+      var result = withEnvelopeReasons(["duplicate-style:Bearer SECRETVALUE some opinion text"]);
+      assert.equal(JSON.stringify(result.reviewReasons), JSON.stringify(["envelope-reason-dropped"]));
+      assert.equal(result.status, "unverified-profile");
+    });
+    it("several dropped reasons yield one envelope-reason-dropped; valid codes pass through", function() {
+      var result = withEnvelopeReasons(["missing-style:westlaw", "Some Text!", "Other Text?", 42]);
+      assert.equal(JSON.stringify(result.reviewReasons), JSON.stringify(["missing-style:westlaw", "envelope-reason-dropped"]));
+    });
+    it("the filter is also applied to envelope B", function() {
+      var result = withEnvelopeReasons([], ["a b c"]);
+      assert.equal(JSON.stringify(result.reviewReasons), JSON.stringify(["envelope-reason-dropped"]));
+    });
+  });
+
+  describe("P2-9 date and docket conflicts", function() {
+    it("service full date differing from DOM date -> date-conflict, DOM date kept", function() {
+      var result = reconcile(fifth({ date: "1999-08-26", citations: [WL_CITE] }), wlLong, { standard: wlLong });
+      assert.ok(result.reviewReasons.indexOf("date-conflict") !== -1);
+      assert.equal(result.date, "1999-08-26");
+      assert.equal(result.status, "unverified-profile");
+    });
+
+    it("inventory date differing from DOM date -> date-conflict", function() {
+      var b = { standard: stdStyle, westlaw: { long: null, shorts: [], id: "westlaw",
+        enhanced: "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. Aug. 25, 1999), No. 98-40679, 1999 WL 652310" } };
+      var result = reconcile(fifth({ date: "1999-08-26" }), stdStyle, b);
+      assert.ok(result.reviewReasons.indexOf("date-conflict") !== -1);
+      assert.equal(result.date, "1999-08-26");
+    });
+
+    it("matching DOM date and service date -> no conflict", function() {
+      var result = reconcile(fifth({ citations: [WL_CITE] }), wlLong, { standard: wlLong });
+      assert.equal(result.reviewReasons.indexOf("date-conflict"), -1);
+      assert.equal(result.date, "1999-08-25");
+    });
+
+    it("year-only DOM date + service full date -> service date used, no reason, no wl-missing-date", function() {
+      var result = reconcile(fifth({ date: "1999", citations: [WL_CITE] }), wlLong, { standard: wlLong });
+      assert.equal(result.date, "1999-08-25");
+      assert.equal(result.reviewReasons.indexOf("wl-missing-date"), -1);
+      assert.equal(result.reviewReasons.indexOf("date-conflict"), -1);
+    });
+
+    it("missing DOM date + service full date -> service date used", function() {
+      var result = reconcile(fifth({ date: null, citations: [WL_CITE] }), wlLong, { standard: wlLong });
+      assert.equal(result.date, "1999-08-25");
+      assert.equal(result.reviewReasons.indexOf("wl-missing-date"), -1);
+    });
+
+    it("DOM docket differing from service docket -> docket-conflict, DOM docket kept", function() {
+      var result = reconcile(fifth({ dockets: ["No. 11-1"], citations: [WL_CITE] }), wlLong, { standard: wlLong });
+      assert.ok(result.reviewReasons.indexOf("docket-conflict") !== -1);
+      assert.equal(JSON.stringify(result.dockets), JSON.stringify(["No. 11-1"]));
+      assert.equal(result.status, "unverified-profile");
+    });
+
+    it("docket token lists compare as sets (Nos. 98-1, 98-2 vs No. 98-1 / 98-2)", function() {
+      var style = { long: "Doe v. Roe, Nos. 98-1, 98-2, 1999 WL 652310 (5th Cir. Aug. 25, 1999)", shorts: [], id: "standard", enhanced: null };
+      var result = reconcile(fifth({ dockets: ["Nos. 98-2, 98-1"], citations: [WL_CITE] }), style, { standard: style });
+      assert.equal(result.reviewReasons.indexOf("docket-conflict"), -1);
+    });
+
+    it("docket comparison ignores No./Nos. prefix, whitespace and case", function() {
+      var result = reconcile(fifth({ dockets: ["NOS.  98-40679"], citations: [WL_CITE] }), wlLong, { standard: wlLong });
+      assert.equal(result.reviewReasons.indexOf("docket-conflict"), -1);
+    });
+  });
+
+  describe("P1-6 court era", function() {
+    it("classification is called with the decision date", function() {
+      var seen = null;
+      var original = ctx.wlProfClassifyCourt;
+      ctx.wlProfClassifyCourt = function(raw, date) { seen = date; return original(raw, date); };
+      try {
+        reconcile(fifth());
+      } finally {
+        ctx.wlProfClassifyCourt = original;
+      }
+      assert.equal(seen, "1999-08-25");
+    });
+
+    it("eraUncertain classification -> court-era-uncertain demotes (stubbed classifier)", function() {
+      var original = ctx.wlProfClassifyCourt;
+      ctx.wlProfClassifyCourt = function(raw, date) {
+        var c = original(raw, date);
+        return Object.assign({}, c, { eraUncertain: true });
+      };
+      var result;
+      try {
+        result = reconcile(fifth());
+      } finally {
+        ctx.wlProfClassifyCourt = original;
+      }
+      assert.ok(result.reviewReasons.indexOf("court-era-uncertain") !== -1);
+      assert.equal(result.reviewReasons.filter(function(r) { return r === "court-era-uncertain"; }).length, 1);
+      assert.equal(result.status, "unverified-profile");
+    });
+
+    var kyStyle = { long: "Doe v. Roe, 100 S.W.2d 200 (Ky. 1950)", shorts: [], id: "standard", enhanced: null };
+    function kyDom(date) {
+      return makeDom({
+        guid: GUID, headerName: "Doe v. Roe", rawCourt: "Court of Appeals of Kentucky.", date: date,
+        citations: [{ kind: "reporter", volume: "100", reporter: "S.W.2d", page: "200", raw: "100 S.W.2d 200" }],
+        dockets: ["No. 1"]
+      });
+    }
+
+    it("real Kentucky Court of Appeals with a pre-1976 date -> Ky., no era reason", function() {
+      var result = reconcile(kyDom("1950-03-03"), kyStyle, { standard: kyStyle });
+      assert.equal(result.court, "Ky.");
+      assert.equal(result.reviewReasons.indexOf("court-era-uncertain"), -1);
+    });
+
+    it("real Kentucky Court of Appeals with no usable date -> court-era-uncertain demotes", function() {
+      var noDate = { long: "Doe v. Roe, 100 S.W.2d 200 (Ky. Ct. App.)", shorts: [], id: "standard", enhanced: null };
+      var result = reconcile(kyDom(null), noDate, { standard: noDate });
+      assert.ok(result.reviewReasons.indexOf("court-era-uncertain") !== -1);
+      assert.equal(result.status, "unverified-profile");
+    });
+  });
+});

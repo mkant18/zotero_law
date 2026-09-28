@@ -37,6 +37,78 @@ function wlTrReadService(result, req) {
   return { svc: { category: "ok", envelope: envelope }, echoReasons: [] };
 }
 
+var wlTrCodeReasonRe = /^[A-Za-z0-9:_-]{1,120}$/;
+var wlTrPageReasonRe = /^[a-z0-9:-]+$/;
+var wlTrHtmlTagRe = /<[^>]*>/g;
+var wlTrScalarFieldKeys = [
+  "caseName", "court", "dateDecided", "docketNumber",
+  "reporter", "reporterVolume", "firstPage", "history", "shortTitle", "url"
+];
+
+// Adds code-only reasons once each; any demoting reason moves a validated record to unverified.
+function wlTrAddReasons(rec, reasons) {
+  for (var i = 0; i < reasons.length; i++) {
+    if (rec.reviewReasons.indexOf(reasons[i]) === -1) rec.reviewReasons.push(reasons[i]);
+  }
+  if (rec.status === "validated-profile" && wlMapHasDemotingReason(rec.reviewReasons)) {
+    rec.status = "unverified-profile";
+  }
+}
+
+// Reasons are written verbatim into Extra, so anything that is not a short code is replaced by a fixed code.
+function wlTrCodeOnlyReasons(rec) {
+  var safe = [];
+  var unsafe = false;
+  for (var i = 0; i < rec.reviewReasons.length; i++) {
+    var reason = rec.reviewReasons[i];
+    if (typeof reason === "string" && wlTrCodeReasonRe.test(reason)) {
+      if (safe.indexOf(reason) === -1) safe.push(reason);
+    } else {
+      unsafe = true;
+    }
+  }
+  if (unsafe && safe.indexOf("unsafe-reason") === -1) safe.push("unsafe-reason");
+  rec.reviewReasons = safe;
+}
+
+// Validation problem strings look like "html:caseName", "token-leak:extra[3]" or "shortTitle-has-cite".
+function wlTrProblemCode(problem) {
+  return problem.split(":")[0];
+}
+
+function wlTrSanitizeFields(fields, problems) {
+  var dropExtraIndexes = {};
+  var leakedKeys = {};
+  for (var i = 0; i < problems.length; i++) {
+    var problem = problems[i];
+    var lineMatch = problem.match(/^(?:token-leak|html|watermark|value-too-long):extra\[(\d+)\]$/);
+    if (lineMatch) dropExtraIndexes[lineMatch[1]] = true;
+    var keyMatch = problem.match(/^token-leak:([A-Za-z]+)$/);
+    if (keyMatch) leakedKeys[keyMatch[1]] = true;
+    // Optional fields that caused problems are dropped rather than aborting the item
+    if (problem.indexOf("history") !== -1 && fields.history) fields.history = "";
+    if (problem.indexOf("shortTitle") !== -1 && fields.shortTitle) delete fields.shortTitle;
+    if (problem.indexOf("url") !== -1 && fields.url) delete fields.url;
+  }
+  for (var k = 0; k < wlTrScalarFieldKeys.length; k++) {
+    var key = wlTrScalarFieldKeys[k];
+    if (typeof fields[key] !== "string") continue;
+    if (leakedKeys[key]) {
+      fields[key] = "";
+      continue;
+    }
+    fields[key] = fields[key].replace(wlTrHtmlTagRe, "").replace(/\s{2,}/g, " ").trim();
+  }
+  if (typeof fields.extra === "string") {
+    var kept = [];
+    var lines = fields.extra.split("\n");
+    for (var n = 0; n < lines.length; n++) {
+      if (!dropExtraIndexes[String(n)]) kept.push(lines[n]);
+    }
+    fields.extra = kept.join("\n");
+  }
+}
+
 async function wlTrDoWeb(doc, url) {
   // 1. Capture page context + DOM facts FIRST (frozen)
   var frozenContext = wlDomReadPageContext(doc, url);
@@ -116,35 +188,37 @@ async function wlTrDoWeb(doc, url) {
   }
 
   if (!identityChanged) {
-    for (var e = 0; e < echoReasons.length; e++) {
-      if (rec.reviewReasons.indexOf(echoReasons[e]) === -1) rec.reviewReasons.push(echoReasons[e]);
-    }
+    wlTrAddReasons(rec, echoReasons);
   }
 
-  // 6. Map to Zotero fields
-  var fields = wlMapToZoteroFields(rec, { version: wlTrVersion });
+  // Page-context causes (ambiguous-config, missing-config, ...) explain why the service was skipped
+  var pageReasons = [];
+  var contextReasons = frozenContext.reviewReasons || [];
+  for (var e = 0; e < contextReasons.length; e++) {
+    if (typeof contextReasons[e] === "string" && wlTrPageReasonRe.test(contextReasons[e])) pageReasons.push(contextReasons[e]);
+  }
+  wlTrAddReasons(rec, pageReasons);
+  wlTrCodeOnlyReasons(rec);
 
-  // 7. Validate outgoing — drop offending optional fields rather than aborting
+  // 6. Map to Zotero fields; outgoing validation problems become demoting reasons BEFORE the final
+  // status/tag are computed, so a record that fails validation is never validated-profile and always tagged
+  var fields = wlMapToZoteroFields(rec, { version: wlTrVersion });
   var validation = wlMapValidateOutgoing(fields);
-  if (!validation.ok) {
-    for (var i = 0; i < validation.problems.length; i++) {
-      var problem = validation.problems[i];
-      var code = problem.split(":")[0];
-      // Drop optional fields that caused validation problems
-      if (problem.indexOf("history") !== -1 && fields.history) {
-        fields.history = "";
-      }
-      if (problem.indexOf("shortTitle") !== -1 && fields.shortTitle) {
-        delete fields.shortTitle;
-      }
-      if (problem.indexOf("url") !== -1 && fields.url) {
-        delete fields.url;
-      }
-      // Add review line for validation issues
-      var extraLines = fields.extra.split("\n");
-      extraLines.push("Westlaw review: validation-" + code);
-      fields.extra = extraLines.join("\n");
+  for (var pass = 0; pass < 3 && !validation.ok; pass++) {
+    var validationReasons = [];
+    for (var v = 0; v < validation.problems.length; v++) {
+      validationReasons.push("validation-" + wlTrProblemCode(validation.problems[v]));
     }
+    var before = rec.reviewReasons.length;
+    wlTrAddReasons(rec, validationReasons);
+    if (rec.reviewReasons.length === before && pass > 0) break;
+    fields = wlMapToZoteroFields(rec, { version: wlTrVersion });
+    validation = wlMapValidateOutgoing(fields);
+  }
+
+  // 7. Drop or sanitize whatever validation flagged (offending Extra lines, HTML, optional fields)
+  if (!validation.ok) {
+    wlTrSanitizeFields(fields, validation.problems);
   }
 
   // 8. Debug log (bounded codes only — no URLs, tokens, names, text)
