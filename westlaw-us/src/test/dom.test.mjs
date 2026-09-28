@@ -151,12 +151,56 @@ describe("wlDomReadPageContext", function() {
   });
 
   it("never includes token values in config or reviewReasons", function() {
-    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases","PageEventIdentifier":"SECRET-PCID","ResourceToken":"SECRET-RTID"};')];
+    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases","PageEventIdentifier":"TEST-PE-0001","ResourceToken":"TEST-RT-0001"};')];
     var doc = makeDocWithScripts(scripts);
     var result = wlDomReadPageContext(doc, "https://1.next.westlaw.com/Document/" + GUID + "/View/FullText.html");
-    var json = JSON.stringify(result);
-    assert.equal(json.includes("SECRET-PCID"), false);
-    assert.equal(json.includes("SECRET-RTID"), false);
+    var configJson = JSON.stringify(result.config);
+    var reviewJson = JSON.stringify(result.reviewReasons);
+    assert.equal(configJson.includes("TEST-PE-0001"), false);
+    assert.equal(configJson.includes("TEST-RT-0001"), false);
+    assert.equal(reviewJson.includes("TEST-PE-0001"), false);
+    assert.equal(reviewJson.includes("TEST-RT-0001"), false);
+  });
+
+  it("returns secrets with validated tokens when both are valid and unambiguous", function() {
+    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases","PageEventIdentifier":"TEST-PE-0001","ResourceToken":"TEST-RT-0001"};')];
+    var doc = makeDocWithScripts(scripts);
+    var result = wlDomReadPageContext(doc, "https://1.next.westlaw.com/Document/" + GUID + "/View/FullText.html");
+    assert.equal(result.secrets !== null, true);
+    assert.equal(result.secrets.pageEventId, "TEST-PE-0001");
+    assert.equal(result.secrets.resourceToken, "TEST-RT-0001");
+  });
+
+  it("returns secrets null with missing-config when tokens are missing", function() {
+    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases"};')];
+    var doc = makeDocWithScripts(scripts);
+    var result = wlDomReadPageContext(doc, "https://1.next.westlaw.com/Document/" + GUID + "/View/FullText.html");
+    assert.equal(result.secrets, null);
+    assert.equal(result.reviewReasons.indexOf("missing-config") !== -1, true);
+  });
+
+  it("returns secrets null with ambiguous-config when tokens have duplicate different values", function() {
+    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases","PageEventIdentifier":"TEST-PE-0001","PageEventIdentifier":"TEST-PE-0002","ResourceToken":"TEST-RT-0001"};')];
+    var doc = makeDocWithScripts(scripts);
+    var result = wlDomReadPageContext(doc, "https://1.next.westlaw.com/Document/" + GUID + "/View/FullText.html");
+    assert.equal(result.secrets, null);
+    assert.equal(result.reviewReasons.indexOf("ambiguous-config") !== -1, true);
+  });
+
+  it("returns secrets null when token fails validation", function() {
+    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases","PageEventIdentifier":"short","ResourceToken":"TEST-RT-0001"};')];
+    var doc = makeDocWithScripts(scripts);
+    var result = wlDomReadPageContext(doc, "https://1.next.westlaw.com/Document/" + GUID + "/View/FullText.html");
+    assert.equal(result.secrets, null);
+  });
+
+  it("asserts JSON.stringify of config/reviewReasons never contains token values", function() {
+    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases","PageEventIdentifier":"TEST-PE-0001","ResourceToken":"TEST-RT-0001"};')];
+    var doc = makeDocWithScripts(scripts);
+    var result = wlDomReadPageContext(doc, "https://1.next.westlaw.com/Document/" + GUID + "/View/FullText.html");
+    var json = JSON.stringify({ config: result.config, reviewReasons: result.reviewReasons });
+    assert.equal(json.includes("TEST-PE-0001"), false);
+    assert.equal(json.includes("TEST-RT-0001"), false);
   });
 
   it("returns identity-mismatch when URL GUID differs from config GUID", function() {
@@ -218,12 +262,20 @@ describe("wlDomInspectCaseReadiness", function() {
     });
   }
 
-  it("detects case with ContentType Cases and | Cases | title", function() {
-    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases"};')];
+  it("detects case with ContentType Cases and | Cases | title and all secrets → service", function() {
+    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases","PageEventIdentifier":"TEST-PE-0001","ResourceToken":"TEST-RT-0001","RelatedInfo":"relatedinfo.test.invalid"};')];
     var doc = makeCaseDoc({ scripts: scripts });
     var result = wlDomInspectCaseReadiness(doc, doc.title);
     assert.equal(result.isCase, true);
     assert.equal(result.capability, "service");
+  });
+
+  it("detects case with ContentType Cases but missing secrets → dom-only", function() {
+    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases"};')];
+    var doc = makeCaseDoc({ scripts: scripts });
+    var result = wlDomInspectCaseReadiness(doc, doc.title);
+    assert.equal(result.isCase, true);
+    assert.equal(result.capability, "dom-only");
   });
 
   it("returns dom-only when config missing but title + case DOM agree", function() {
@@ -490,6 +542,95 @@ describe("wlDomReadFacts", function() {
 
     var result = wlDomReadFacts(doc);
     assert.equal(result.dockets.length, 2);
+  });
+
+  it("parses Nos. list with en dashes into separate dockets", function() {
+    var header = el("div", { id: "co_docHeaderTitleLine" }, "Test Case");
+    var citationList = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "187 F.3d 486"));
+    var docket = el("div", { class: "co_docketBlock" }, "Nos. 98\u201340679, 98\u201340680.");
+    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases"};')];
+
+    var doc = makeDoc({
+      title: "Test Case | Cases | Fifth Circuit | Westlaw Advantage",
+      body: el("body", {}, header, citationList, docket, el("script", {}, ""), ...scripts)
+    });
+
+    var result = wlDomReadFacts(doc);
+    assert.equal(result.dockets.length, 2);
+    assert.equal(result.dockets[0], "No. 98\u201340679");
+    assert.equal(result.dockets[1], "No. 98\u201340680");
+  });
+
+  it("parses Nos. list with 'and' connector into separate dockets", function() {
+    var header = el("div", { id: "co_docHeaderTitleLine" }, "Test Case");
+    var citationList = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "187 F.3d 486"));
+    var docket = el("div", { class: "co_docketBlock" }, "Nos. 1, 2 and 3.");
+    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases"};')];
+
+    var doc = makeDoc({
+      title: "Test Case | Cases | Fifth Circuit | Westlaw Advantage",
+      body: el("body", {}, header, citationList, docket, el("script", {}, ""), ...scripts)
+    });
+
+    var result = wlDomReadFacts(doc);
+    assert.equal(result.dockets.length, 3);
+    assert.equal(result.dockets[0], "No. 1");
+    assert.equal(result.dockets[1], "No. 2");
+    assert.equal(result.dockets[2], "No. 3");
+  });
+
+  it("parses Nos. list with semicolons into separate dockets", function() {
+    var header = el("div", { id: "co_docHeaderTitleLine" }, "Test Case");
+    var citationList = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "187 F.3d 486"));
+    var docket = el("div", { class: "co_docketBlock" }, "Nos. 1; 2; 3.");
+    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases"};')];
+
+    var doc = makeDoc({
+      title: "Test Case | Cases | Fifth Circuit | Westlaw Advantage",
+      body: el("body", {}, header, citationList, docket, el("script", {}, ""), ...scripts)
+    });
+
+    var result = wlDomReadFacts(doc);
+    assert.equal(result.dockets.length, 3);
+    assert.equal(result.dockets[0], "No. 1");
+    assert.equal(result.dockets[1], "No. 2");
+    assert.equal(result.dockets[2], "No. 3");
+  });
+
+  it("handles two separate .co_docketBlock elements", function() {
+    var header = el("div", { id: "co_docHeaderTitleLine" }, "Test Case");
+    var citationList = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "187 F.3d 486"));
+    var docket1 = el("div", { class: "co_docketBlock" }, "No. 98-40679.");
+    var docket2 = el("div", { class: "co_docketBlock" }, "No. 99-12345.");
+    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases"};')];
+
+    var doc = makeDoc({
+      title: "Test Case | Cases | Fifth Circuit | Westlaw Advantage",
+      body: el("body", {}, header, citationList, docket1, docket2, el("script", {}, ""), ...scripts)
+    });
+
+    var result = wlDomReadFacts(doc);
+    assert.equal(result.dockets.length, 2);
+  });
+
+  it("dedupes duplicate docket entries from sticky header", function() {
+    var header = el("div", { id: "co_docHeaderTitleLine" }, "Test Case");
+    var citationList = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "187 F.3d 486"));
+    var docket = el("div", { class: "co_docketBlock" }, "No. 98-40679.");
+    var scripts = [el("script", {}, 'var config = {"DocumentGuid":"' + GUID + '","ContentType":"Cases"};')];
+
+    var doc = makeDoc({
+      title: "Test Case | Cases | Fifth Circuit | Westlaw Advantage",
+      body: el("body", {}, header, citationList, docket, docket, el("script", {}, ""), ...scripts)
+    });
+
+    var result = wlDomReadFacts(doc);
+    assert.equal(result.dockets.length, 1);
   });
 
   it("strips trailing period from docket text", function() {

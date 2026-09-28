@@ -26,7 +26,7 @@ function wlDomReadPageContext(doc, url) {
 
   var scripts = doc.querySelectorAll("script");
   var kv = {};
-  var keyPattern = /"(DocumentGuid|ContentType|RelatedInfo)"\s*:\s*"([^"]*)"/g;
+  var keyPattern = /"(DocumentGuid|ContentType|RelatedInfo|PageEventIdentifier|ResourceToken)"\s*:\s*"([^"]*)"/g;
 
   for (var i = 0; i < scripts.length; i++) {
     var text = scripts[i].textContent;
@@ -43,6 +43,8 @@ function wlDomReadPageContext(doc, url) {
   var guidValues = kv["DocumentGuid"] || [];
   var contentTypeValues = kv["ContentType"] || [];
   var riValues = kv["RelatedInfo"] || [];
+  var peiValues = kv["PageEventIdentifier"] || [];
+  var rtValues = kv["ResourceToken"] || [];
 
   var validGUIDs = [];
   for (var g = 0; g < guidValues.length; g++) {
@@ -126,10 +128,43 @@ function wlDomReadPageContext(doc, url) {
 
   var ok = validGUIDs.length > 0 || identityGUID !== null;
 
+  // Validate and resolve secrets
+  var tokenPattern = /^[A-Za-z0-9._~+\/=:-]{8,512}$/;
+  var peiValid = [];
+  for (var p = 0; p < peiValues.length; p++) {
+    if (tokenPattern.test(peiValues[p])) peiValid.push(peiValues[p]);
+  }
+  var rtValid = [];
+  for (var r = 0; r < rtValues.length; r++) {
+    if (tokenPattern.test(rtValues[r])) rtValid.push(rtValues[r]);
+  }
+
+  var peiUniq = [];
+  for (var p2 = 0; p2 < peiValid.length; p2++) {
+    if (peiUniq.indexOf(peiValid[p2]) === -1) peiUniq.push(peiValid[p2]);
+  }
+  var rtUniq = [];
+  for (var r2 = 0; r2 < rtValid.length; r2++) {
+    if (rtUniq.indexOf(rtValid[r2]) === -1) rtUniq.push(rtValid[r2]);
+  }
+
+  var secrets = null;
+  if (peiUniq.length === 1 && rtUniq.length === 1) {
+    secrets = { resourceToken: rtUniq[0], pageEventId: peiUniq[0] };
+  } else if (peiValues.length > 0 || rtValues.length > 0) {
+    if (peiUniq.length === 0 || rtUniq.length === 0) {
+      reviewReasons.push("missing-config");
+    } else {
+      reviewReasons.push("ambiguous-config");
+    }
+  } else {
+    reviewReasons.push("missing-config");
+  }
+
   return {
     ok: ok,
     config: config,
-    secrets: null,
+    secrets: secrets,
     ambiguous: ambiguous,
     reviewReasons: reviewReasons
   };
@@ -176,15 +211,15 @@ function wlDomInspectCaseReadiness(doc, url) {
 
   if (contentType) {
     if (contentType !== "Cases") {
-      if (hasCasesTitle && hasCaseDOM) {
-        return { isCase: false, capability: null, reason: "non-case-content-type" };
-      }
       return { isCase: false, capability: null, reason: "non-case-content-type" };
     }
     if (hasCasesTitle && hasCaseDOM) {
-      return { isCase: true, capability: "service", reason: "content-type-cases" };
+      if (ctx.config.guid && ctx.config.relatedInfoHost && ctx.secrets) {
+        return { isCase: true, capability: "service", reason: "content-type-cases" };
+      }
+      return { isCase: true, capability: "dom-only", reason: "content-type-cases-no-secrets" };
     }
-    return { isCase: true, capability: "service", reason: "content-type-cases" };
+    return { isCase: true, capability: "dom-only", reason: "content-type-cases" };
   }
 
   if (hasCasesTitle && hasCaseDOM) {
@@ -281,19 +316,33 @@ function wlDomReadFacts(doc) {
     }
   }
 
-  var docketBlock = doc.querySelector(".co_docketBlock");
-  if (docketBlock) {
-    var docketText = wlDomClean(docketBlock.textContent);
-    docketText = docketText.replace(/\s*No\.?\s*/g, "No. ").replace(/\.$/, "");
-    var docketParts = docketText.split(/;\s*/);
-    for (var d = 0; d < docketParts.length; d++) {
-      var dp = docketParts[d].trim();
-      if (dp) {
-        if (dp.indexOf("Nos.") === -1 && dp.indexOf("No.") === -1) {
-          dp = "No. " + dp;
-        }
-        dockets.push(dp);
+  var docketBlocks = doc.querySelectorAll(".co_docketBlock");
+  for (var db = 0; db < docketBlocks.length; db++) {
+    var docketText = wlDomClean(docketBlocks[db].textContent);
+    docketText = docketText.replace(/\.$/, "");
+    var docketParts = [];
+    if (docketText.indexOf("Nos.") === 0) {
+      var remainder = docketText.substring(4);
+      var splitParts = remainder.split(/,\s*|;\s*|\s+and\s+/);
+      for (var sp = 0; sp < splitParts.length; sp++) {
+        var trimmed = splitParts[sp].trim();
+        if (trimmed) docketParts.push("No. " + trimmed);
       }
+    } else if (docketText.indexOf("No.") === 0) {
+      var noParts = docketText.split(/;\s*|,\s*|\s+and\s+/);
+      for (var np = 0; np < noParts.length; np++) {
+        var npTrimmed = noParts[np].trim();
+        if (npTrimmed) docketParts.push(npTrimmed);
+      }
+    }
+    for (var dp = 0; dp < docketParts.length; dp++) {
+      var dpKey = typeof wlTextCompareKey === "function" ? wlTextCompareKey(docketParts[dp]) : docketParts[dp];
+      var isDup = false;
+      for (var dk = 0; dk < dockets.length; dk++) {
+        var dkKey = typeof wlTextCompareKey === "function" ? wlTextCompareKey(dockets[dk]) : dockets[dk];
+        if (dkKey === dpKey) { isDup = true; break; }
+      }
+      if (!isDup) dockets.push(docketParts[dp]);
     }
   }
 

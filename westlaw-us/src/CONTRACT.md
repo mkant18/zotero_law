@@ -28,7 +28,11 @@ origin test) is still pending user authorization. These modules are needed under
 | `reporters.js` (reporter registry + alias normalization) | `wlRep` | M1-A |
 | `cite-parse.js` (parseStandardForm, parseTexasForm, parseWestlawInventory, parseReporterCitation, parseShortName) | `wlCite` | M1-A |
 | `dom.js` (inspectCaseReadiness, readPageContext, readDOMFacts) | `wlDom` | M1-C |
-| `map.js` (reconcileCaseRecord, mapCaseToZotero, validateOutgoingItem) | `wlMap` | M1-D |
+| `map.js` (mapCaseToZotero, validateOutgoingItem) | `wlMap` | M1-D |
+| `service.js` (buildCitationRequests, fetchCitationForms, readResponseEnvelope) | `wlSvc` | M1-E |
+| `profile.js` (classifyCourt, selectCitationProfile, court-omission policy) | `wlProf` | M1-G |
+| `reconcile.js` (reconcileCaseRecord: DomFacts + parsed service forms \u2192 CaseRecord) | `wlRec` | M1-H |
+| `translator.js` (header, detectWeb, doWeb shell, testCases) + build script | `wl` (entry points unprefixed as Zotero requires) | M1-I |
 
 ## Shared value shapes (plain objects)
 
