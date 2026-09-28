@@ -81,6 +81,25 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
   };
 }
 
+// Forwards DOM review reason codes once each. Non-codes are dropped.
+function wlRecAddDomReasons(reviewReasons, dom) {
+  if (!dom || !Array.isArray(dom.reviewReasons)) return;
+  for (var i = 0; i < dom.reviewReasons.length; i++) {
+    var reason = dom.reviewReasons[i];
+    if (typeof reason === "string" && /^[a-z0-9:-]+$/.test(reason) && reviewReasons.indexOf(reason) === -1) {
+      reviewReasons.push(reason);
+    }
+  }
+}
+
+// header-fallback is recorded but does not by itself block validated-profile.
+function wlRecHasDemotingReason(reviewReasons) {
+  for (var i = 0; i < reviewReasons.length; i++) {
+    if (reviewReasons[i] !== "header-fallback") return true;
+  }
+  return false;
+}
+
 // Forwards a service envelope's own review reasons (already code-only, never response text) once each.
 function wlRecAddEnvelopeReasons(reviewReasons, envelope) {
   if (!envelope || !Array.isArray(envelope.reviewReasons)) return;
@@ -103,6 +122,8 @@ function wlRecReconcile(input) {
   var provenance = {};
 
   try {
+    wlRecAddDomReasons(reviewReasons, dom);
+
     // 1. Service A failure → metadata-only from DOM
     if (svcA.category !== "ok") {
       reviewReasons.push("service-" + (svcA.category || "unknown"));
@@ -423,7 +444,7 @@ function wlRecReconcile(input) {
       var bEnvelopeOk = true;
       if (svcB.category !== "ok") bEnvelopeOk = false;
       if (svcB.envelope && !svcB.envelope.ok) bEnvelopeOk = false;
-      if (reviewReasons.length === 0 && classification.confidence === "table" && bEnvelopeOk) {
+      if (!wlRecHasDemotingReason(reviewReasons) && classification.confidence === "table" && bEnvelopeOk) {
         status = "validated-profile";
       } else {
         status = "unverified-profile";

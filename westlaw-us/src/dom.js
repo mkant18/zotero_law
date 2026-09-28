@@ -246,6 +246,29 @@ function wlDomClassifyLI(liText) {
   return { kind: "unparsed", text: liText };
 }
 
+// First acceptable unparsed line in one header list, same rule as rawCourt.
+function wlDomHeaderListCourtLine(listEl) {
+  var kids = listEl.children || [];
+  var dateSeen = false;
+  var courtLineFound = false;
+  var courtLine = "";
+  for (var kd = 0; kd < kids.length; kd++) {
+    if (String(kids[kd].tagName).toUpperCase() !== "LI") continue;
+    var liText = wlDomClean(kids[kd].textContent);
+    if (!liText) continue;
+    var classified = wlDomClassifyLI(liText);
+    if (classified.kind === "date") {
+      dateSeen = true;
+    } else if (classified.kind === "unparsed") {
+      if (!courtLineFound && (!dateSeen || wlDomCourtLineRe.test(liText))) {
+        courtLine = liText;
+        courtLineFound = true;
+      }
+    }
+  }
+  return courtLine;
+}
+
 function wlDomReadFacts(doc) {
   var reviewReasons = [];
   var citations = [];
@@ -345,10 +368,31 @@ function wlDomReadFacts(doc) {
     }
   }
 
+  if (headerLists.length >= 2 && reviewReasons.indexOf("conflicting-header") === -1) {
+    var headerCourtLines = [];
+    for (var hc = 0; hc < headerLists.length; hc++) {
+      var headerCourtLine = wlDomHeaderListCourtLine(headerLists[hc]);
+      if (headerCourtLine) headerCourtLines.push(headerCourtLine.toLowerCase());
+    }
+    if (headerCourtLines.length >= 2) {
+      for (var hx = 1; hx < headerCourtLines.length; hx++) {
+        if (headerCourtLines[hx] !== headerCourtLines[0]) {
+          reviewReasons.push("conflicting-header");
+          break;
+        }
+      }
+    }
+  }
+
+  var courtFallbackSupplied = false;
   if (!rawCourt) {
     var courtBlock = doc.querySelector(".co_courtBlock");
     if (courtBlock) {
-      rawCourt = wlDomClean(courtBlock.textContent);
+      var courtFallbackText = wlDomClean(courtBlock.textContent);
+      if (courtFallbackText) {
+        rawCourt = courtFallbackText;
+        courtFallbackSupplied = true;
+      }
     }
   }
 
@@ -382,15 +426,21 @@ function wlDomReadFacts(doc) {
     }
   }
 
+  var citesFallbackSupplied = false;
   if (!citations.length) {
     var citesFallback = doc.querySelector(".co_cites");
     if (citesFallback) {
       var citesText = wlDomClean(citesFallback.textContent);
       var fallbackCits = wlRepFindCitations(citesText);
+      if (fallbackCits.length > 0) citesFallbackSupplied = true;
       for (var fc = 0; fc < fallbackCits.length; fc++) {
         citations.push(fallbackCits[fc]);
       }
     }
+  }
+
+  if (headerLists.length === 0 && (courtFallbackSupplied || citesFallbackSupplied)) {
+    reviewReasons.push("header-fallback");
   }
 
   return {

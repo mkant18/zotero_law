@@ -909,3 +909,83 @@ describe("wlRecReconcile - service envelope review reasons", function() {
     assert.ok(result.reviewReasons.indexOf("inventory-timeout") !== -1);
   });
 });
+
+// ---- DOM review reasons (header-fallback is visible, not demoting) ----
+describe("wlRecReconcile - DOM review reasons", function() {
+  var stdStyle = {
+    long: "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999)",
+    shorts: ["Sanchez, 187 F.3d 486", "187 F.3d 486"],
+    id: "standard",
+    enhanced: null
+  };
+  var wlStyle = {
+    long: null,
+    shorts: [],
+    id: "westlaw",
+    enhanced: "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999), No. 98-40679, 1999 WL 652310"
+  };
+  var context = {
+    guid: "I1234567890abcdef1234567890abcdef",
+    url: "https://1.next.westlaw.com/Document/I1234567890abcdef1234567890abcdef/View/FullText.html"
+  };
+
+  function domWithReasons(reasons) {
+    var dom = makeDom({
+      guid: "I1234567890abcdef1234567890abcdef",
+      headerName: "Sanchez v. Liggett & Myers, Inc.",
+      rawCourt: "United States Court of Appeals, Fifth Circuit.",
+      date: "1999-08-25",
+      citations: [{ kind: "reporter", volume: "187", reporter: "F.3d", page: "486", raw: "187 F.3d 486" }],
+      dockets: ["No. 98-40679"]
+    });
+    dom.reviewReasons = reasons;
+    return dom;
+  }
+
+  function reconcileOk(reasons) {
+    return wlRecReconcile({
+      context: context,
+      dom: domWithReasons(reasons),
+      svcA: makeSvc("ok", makeEnvelope({ standard: stdStyle })),
+      svcB: makeSvc("ok", makeEnvelope({ standard: stdStyle, westlaw: wlStyle })),
+      profile: "standard"
+    });
+  }
+
+  it("conflicting-header is copied and blocks validated-profile", function() {
+    var result = reconcileOk(["conflicting-header"]);
+    assert.ok(result.reviewReasons.indexOf("conflicting-header") !== -1);
+    assert.notEqual(result.status, "validated-profile");
+  });
+
+  it("header-fallback alone stays on a table-confidence record and keeps validated-profile", function() {
+    var result = reconcileOk(["header-fallback"]);
+    assert.ok(result.reviewReasons.indexOf("header-fallback") !== -1);
+    assert.equal(result.status, "validated-profile");
+  });
+
+  it("header-fallback plus another DOM reason is not validated-profile", function() {
+    var result = reconcileOk(["header-fallback", "conflicting-header"]);
+    assert.ok(result.reviewReasons.indexOf("header-fallback") !== -1);
+    assert.ok(result.reviewReasons.indexOf("conflicting-header") !== -1);
+    assert.notEqual(result.status, "validated-profile");
+  });
+
+  it("copies only unique reason codes and drops non-codes", function() {
+    var result = reconcileOk(["header-fallback", "header-fallback", "NOT A CODE", 3]);
+    // JSON, not deepEqual: reviewReasons is an array from the vm loader realm.
+    assert.equal(JSON.stringify(result.reviewReasons), JSON.stringify(["header-fallback"]));
+  });
+
+  it("metadata-only auth failure still includes header-fallback", function() {
+    var result = wlRecReconcile({
+      context: context,
+      dom: domWithReasons(["header-fallback"]),
+      svcA: makeSvc("auth", null),
+      svcB: makeSvc("ok", makeEnvelope({ standard: stdStyle, westlaw: wlStyle })),
+      profile: "standard"
+    });
+    assert.equal(result.status, "metadata-only");
+    assert.ok(result.reviewReasons.indexOf("header-fallback") !== -1);
+  });
+});

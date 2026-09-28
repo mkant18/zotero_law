@@ -867,11 +867,26 @@ describe("wlDomReadFacts — plan §12 selector fallbacks", function() {
     assert.equal(result.reviewReasons.indexOf("conflicting-header"), -1);
   });
 
-  it("with no header list, marks the result as fallback-sourced via a review reason", { todo: "dom.js emits no review reason when the header list is absent (fallback silently used); reason code not specified by plan section 12 - orchestrator decision" }, function() {
+  it("with no header list, marks the result as fallback-sourced via a review reason", function() {
     var courtBlock = el("div", { class: "co_courtBlock" }, "Placeholder Court of Appeals");
     var cites = el("div", { class: "co_cites" }, "100 F.3d 200");
     var result = wlDomReadFacts(fallbackDoc([courtBlock, cites]));
     assert.equal(result.reviewReasons.indexOf("header-fallback") !== -1, true);
+  });
+
+  it("does not mark header-fallback when the header list exists", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "100 F.3d 200"));
+    var courtBlock = el("div", { class: "co_courtBlock" }, "Other Court");
+    var result = wlDomReadFacts(fallbackDoc([list, courtBlock]));
+    assert.equal(result.reviewReasons.indexOf("header-fallback"), -1);
+  });
+
+  it("flags conflicting-header when two header lists name different courts", function() {
+    var first = el("div", { id: "co_docHeaderCitation" }, el("li", {}, "United States Court of Appeals, Fifth Circuit."));
+    var second = el("div", { id: "co_docHeaderCitation" }, el("li", {}, "United States District Court, District of Kansas."));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.equal(result.reviewReasons.indexOf("conflicting-header") !== -1, true);
   });
 
   it("prefers header li values over .co_courtBlock/.co_cites when the header is present", function() {
