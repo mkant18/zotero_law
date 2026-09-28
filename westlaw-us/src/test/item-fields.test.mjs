@@ -17,22 +17,6 @@ const ctx = loadModules([
 const expectedAll = JSON.parse(readFileSync(new URL('./fixtures/item-fields-expected.json', import.meta.url), 'utf8'));
 const TEST_VERSION = '0.0.0-test';
 
-// golden-inputs.mjs G2/G3/G5/G7 use placeholder GUIDs that are not I + 32 hex, so wlMapToZoteroFields drops the url and adds
-// a bad-guid review reason. This snapshot substitutes valid placeholder GUIDs (fixture-owner defect is reported separately).
-const VALID_GUID = { G2: "I" + "2".repeat(32), G5: "I" + "5".repeat(32), G7: "I" + "7".repeat(32) };
-
-function withValidGuid(goldenInput, guid) {
-  return {
-    ...goldenInput,
-    context: {
-      ...goldenInput.context,
-      guid,
-      url: `https://1.next.westlaw.com/Document/${guid}/View/FullText.html`
-    },
-    dom: { ...goldenInput.dom, guid }
-  };
-}
-
 // Emitted fields as a plain object; `extra` (a \n-joined string) is split into lines to match the fixture shape.
 function outgoingFields(goldenInput) {
   const rec = ctx.wlRecReconcile(goldenInput);
@@ -121,18 +105,18 @@ describe('item-fields diff helper', () => {
 
 describe('golden-inputs.mjs placeholder GUIDs', () => {
   for (const [label, input] of Object.entries({ G1, G2, G4, G5, G7 })) {
-    const bad = !GUID_RE.test(input.context.guid) || !GUID_RE.test(input.dom.guid);
-    it(`${label} input GUID is I + 32 hex`, bad ? { todo: 'golden-inputs.mjs (read-only for this task) uses a malformed placeholder GUID; mapper then drops url and adds bad-guid review + tag' } : {}, () => {
+    it(`${label} input GUID is I + 32 hex`, () => {
       assert.match(input.context.guid, GUID_RE);
       assert.match(input.dom.guid, GUID_RE);
+      assert.equal(input.context.url, `https://1.next.westlaw.com/Document/${input.context.guid}/View/FullText.html`);
     });
   }
 });
 
 describe('item-fields snapshot (plan section 5 field contract)', () => {
   it('G1 Sanchez (federal appellate) full field object', () => assertFieldsMatch('G1', G1));
-  it('G2 Philip Morris (federal district + history) full field object', () => assertFieldsMatch('G2', withValidGuid(G2, VALID_GUID.G2)));
+  it('G2 Philip Morris (federal district + history) full field object', () => assertFieldsMatch('G2', G2));
   it('G4 Miele (NY App. Div., parallel + WL alternates) full field object', () => assertFieldsMatch('G4', G4));
-  it('G5 Rogers (Texas App., writ + history) full field object', () => assertFieldsMatch('G5', withValidGuid(G5, VALID_GUID.G5)));
-  it('G7 Example (WL-only) full field object', () => assertFieldsMatch('G7', withValidGuid(G7, VALID_GUID.G7)));
+  it('G5 Rogers (Texas App., writ + history) full field object', () => assertFieldsMatch('G5', G5));
+  it('G7 Example (WL-only) full field object', () => assertFieldsMatch('G7', G7));
 });
