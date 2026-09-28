@@ -602,8 +602,8 @@ function wlCiteRoundTrip(parsed, originalText) {
   // History
   if (parsed.history) recomposed += ', ' + parsed.history;
 
-  // Normalize whitespace only
-  var normalized = recomposed.replace(/\s+/g, " ").trim();
+  // Normalize whitespace and NFC to match wlTextClean behavior on original
+  var normalized = recomposed.replace(/\s+/g, " ").trim().normalize("NFC");
 
   // Compare to original cleaned input
   var originalCleaned = wlTextClean(originalText);

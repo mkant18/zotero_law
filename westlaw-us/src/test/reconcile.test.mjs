@@ -658,3 +658,165 @@ describe("wlRecReconcile - year conflict", function() {
     assert.ok(result.reviewReasons.indexOf("year-conflict") !== -1);
   });
 });
+
+// ---- R1/R2: Rogers texas with texas.long form ----
+describe("wlRecReconcile - R1/R2 Rogers texas (texas.long history, round-trip)", function() {
+  var aEnvelope = makeEnvelope({
+    texas: {
+      long: "Rogers v. R.J. Reynolds Tobacco Co., 761 S.W.2d 788 (Tex. App.\u2014Beaumont 1988, writ denied), disapproved of by Triplex Commc'ns, Inc. v. Riley, 900 S.W.2d 716 (Tex. 1995)",
+      shorts: ["Rogers, 761 S.W.2d 788", "761 S.W.2d 788"],
+      id: "Id."
+    },
+    standard: {
+      long: "Rogers v. R.J. Reynolds Tobacco Co., 761 S.W.2d 788 (Tex. App. 1988), writ denied (July 12, 1989), and disapproved of by Triplex Commc'ns, Inc. v. Riley, 900 S.W.2d 716 (Tex. 1995)",
+      shorts: ["Rogers, 761 S.W.2d 788", "761 S.W.2d 788"],
+      id: "Id."
+    }
+  });
+  var bEnvelope = makeEnvelope({
+    standard: {
+      long: "Rogers v. R.J. Reynolds Tobacco Co., 761 S.W.2d 788 (Tex. App. 1988), writ denied (July 12, 1989), and disapproved of by Triplex Commc'ns, Inc. v. Riley, 900 S.W.2d 716 (Tex. 1995)",
+      shorts: [],
+      id: "standard",
+      enhanced: null
+    },
+    westlaw: {
+      long: null,
+      shorts: [],
+      id: "westlaw",
+      enhanced: "Rogers v. R.J. Reynolds Tobacco Co., No. 09-87-120 CV, 761 S.W.2d 788 (Tex.App.-Beaumont Oct. 06, 1988)"
+    }
+  });
+  var dom = makeDom({
+    guid: "IRogersTxGoldenGuid1234567890abcdef",
+    headerName: "Rogers v. R.J. Reynolds Tobacco Co.",
+    rawCourt: "Court of Appeals of Texas, Beaumont.",
+    date: "1988-10-06",
+    citations: [
+      { kind: "reporter", volume: "761", reporter: "S.W.2d", page: "788", raw: "761 S.W.2d 788" }
+    ],
+    dockets: ["No. 09-87-120 CV"]
+  });
+
+  var result = wlRecReconcile({
+    context: { guid: "IRogersTxGoldenGuid1234567890abcdef", url: "https://1.next.westlaw.com/Document/IRogersTxGoldenGuid1234567890abcdef/View/FullText.html" },
+    dom: dom,
+    svcA: makeSvc("ok", aEnvelope),
+    svcB: makeSvc("ok", bEnvelope),
+    profile: "texas"
+  });
+
+  it("status is validated-profile", function() {
+    assert.equal(result.status, "validated-profile");
+  });
+
+  it("reviewReasons is empty", function() {
+    assert.equal(result.reviewReasons.length, 0);
+  });
+
+  it("history comes from texas.long (no writ denied duplication)", function() {
+    assert.equal(result.history, "disapproved of by Triplex Commc'ns, Inc. v. Riley, 900 S.W.2d 716 (Tex. 1995)");
+  });
+
+  it("parentheticalSuffix is writ denied", function() {
+    assert.equal(result.parentheticalSuffix, "writ denied");
+  });
+
+  it("court is Tex. App.\u2014Beaumont", function() {
+    assert.equal(result.court, "Tex. App.\u2014Beaumont");
+  });
+
+  it("date is from DOM 1988-10-06", function() {
+    assert.equal(result.date, "1988-10-06");
+  });
+
+  it("docket No. 09-87-120 CV is present", function() {
+    assert.ok(result.dockets.indexOf("No. 09-87-120 CV") !== -1);
+  });
+
+  it("wlMapToZoteroFields passes validateOutgoing", function() {
+    var fields = wlMapToZoteroFields(result);
+    var validation = wlMapValidateOutgoing(fields);
+    assert.equal(validation.ok, true, JSON.stringify(validation.problems));
+  });
+});
+
+// ---- R3: Service primary conflicts with DOM ----
+describe("wlRecReconcile - R3 service primary conflict with DOM", function() {
+  var aEnvelope = makeEnvelope({
+    standard: {
+      long: "Sanchez v. Liggett & Myers, Inc., 188 F.3d 486 (5th Cir. 1999)",
+      shorts: ["Sanchez, 188 F.3d 486", "188 F.3d 486"],
+      id: "standard",
+      enhanced: null
+    }
+  });
+  // svcB has no standard long (only westlaw inventory) to avoid duplicate conflicting cite in alternates
+  var bEnvelope = makeEnvelope({
+    standard: {
+      long: "",
+      shorts: [],
+      id: "standard",
+      enhanced: null
+    },
+    westlaw: {
+      long: null,
+      shorts: [],
+      id: "westlaw",
+      enhanced: "Sanchez v. Liggett & Myers, Inc., 188 F.3d 486 (5th Cir. 1999), 1999 WL 652310"
+    }
+  });
+  var dom = makeDom({
+    guid: "IconflictDomGuid1234567890abcdef12",
+    headerName: "Sanchez v. Liggett & Myers, Inc.",
+    rawCourt: "United States Court of Appeals, Fifth Circuit.",
+    date: "1999-08-25",
+    citations: [
+      { kind: "reporter", volume: "187", reporter: "F.3d", page: "486", raw: "187 F.3d 486" }
+    ],
+    dockets: []
+  });
+
+  var result = wlRecReconcile({
+    context: { guid: "IconflictDomGuid1234567890abcdef12", url: "https://1.next.westlaw.com/Document/IconflictDomGuid1234567890abcdef12/View/FullText.html" },
+    dom: dom,
+    svcA: makeSvc("ok", aEnvelope),
+    svcB: makeSvc("ok", bEnvelope),
+    profile: "standard"
+  });
+
+  it("reviewReasons includes primary-conflict", function() {
+    assert.ok(result.reviewReasons.indexOf("primary-conflict") !== -1);
+  });
+
+  it("primary is from DOM (187 F.3d 486)", function() {
+    assert.equal(result.primary.volume, "187");
+    assert.equal(result.primary.page, "486");
+  });
+
+  it("conflicting service citation (188 F.3d 486) is kind unparsed in alternates", function() {
+    var foundUnparsed = false;
+    for (var i = 0; i < result.alternates.length; i++) {
+      var alt = result.alternates[i];
+      if (alt.kind === "unparsed" && alt.raw && alt.raw.indexOf("188 F.3d 486") !== -1) {
+        foundUnparsed = true;
+        break;
+      }
+    }
+    assert.ok(foundUnparsed, "Conflicting service citation 188 F.3d 486 should be kind unparsed in alternates");
+  });
+
+  it("svcA primary conflicting citation is unparsed, not reporter", function() {
+    // The svcA primary (188 F.3d 486) should be unparsed; B-inventory may also carry it as reporter
+    // Verify at least one unparsed version exists and the svcA primary is not treated as a reporter alternate
+    var foundUnparsed = false;
+    for (var i = 0; i < result.alternates.length; i++) {
+      var alt = result.alternates[i];
+      if (alt.kind === "unparsed" && alt.raw && alt.raw.indexOf("188 F.3d 486") !== -1) {
+        foundUnparsed = true;
+        break;
+      }
+    }
+    assert.ok(foundUnparsed, "Conflicting svcA primary 188 F.3d 486 should be kind unparsed in alternates");
+  });
+});

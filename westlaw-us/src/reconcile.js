@@ -100,13 +100,18 @@ function wlRecReconcile(input) {
       return wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenance);
     }
 
-    // 2. Parse A forms
+    // 2. Parse A forms — for texas profile, prefer texas.long; fall back to standard.long
     var parsedA = null;
     var aLongText = null;
     var aShorts = [];
     if (svcA.envelope) {
-      aLongText = svcA.envelope.styles.standard && svcA.envelope.styles.standard.long;
-      aShorts = svcA.envelope.styles.standard && svcA.envelope.styles.standard.shorts || [];
+      if (profile === "texas" && svcA.envelope.styles.texas && svcA.envelope.styles.texas.long) {
+        aLongText = svcA.envelope.styles.texas.long;
+        aShorts = svcA.envelope.styles.texas.shorts || [];
+      } else {
+        aLongText = svcA.envelope.styles.standard && svcA.envelope.styles.standard.long;
+        aShorts = svcA.envelope.styles.standard && svcA.envelope.styles.standard.shorts || [];
+      }
       if (aLongText) {
         if (profile === "texas") {
           parsedA = wlCiteParseTexasForm(aLongText);
@@ -190,6 +195,9 @@ function wlRecReconcile(input) {
       }
     }
 
+    // Track whether service primary conflicts with DOM (for R3: conflicting service cites become unparsed)
+    var servicePrimaryConflictsWithDOM = false;
+
     // Determine primary
     if (firstReporterCite) {
       // Check if service reporter citation matches a DOM citation
@@ -216,6 +224,7 @@ function wlRecReconcile(input) {
         }
         reviewReasons.push("primary-conflict");
         provenance.primary = "dom";
+        servicePrimaryConflictsWithDOM = true;
       }
     } else if (firstWLCite) {
       primary = firstWLCite;
@@ -260,9 +269,21 @@ function wlRecReconcile(input) {
     }
 
     // Service A main run citations (excluding primary)
+    // R3: conflicting service primary becomes kind "unparsed" in alternates
+    var convertedToUnparsed = {};
     if (parsedA && parsedA.ok && parsedA.citations) {
       for (var ac = 0; ac < parsedA.citations.length; ac++) {
-        wlRecAddAlternate(parsedA.citations[ac]);
+        var cite = parsedA.citations[ac];
+        if (servicePrimaryConflictsWithDOM && cite.kind === "reporter" && firstReporterCite && wlRecCitationMatchKey(cite) === wlRecCitationMatchKey(firstReporterCite)) {
+          // This is the conflicting service primary — keep as unparsed
+          var unparsedCite = { kind: "unparsed", raw: cite.raw || (cite.volume + " " + cite.reporter + " " + cite.page) };
+          wlRecAddAlternate(unparsedCite);
+          convertedToUnparsed[wlRecCitationMatchKey(cite)] = true;
+        } else if (convertedToUnparsed[wlRecCitationMatchKey(cite)]) {
+          // Skip original reporter version of a converted citation
+        } else {
+          wlRecAddAlternate(cite);
+        }
       }
     }
 
