@@ -327,6 +327,187 @@ describe("wlProfCourtForCitation omission rules", function() {
   });
 });
 
+describe("P1 - SCOTUS any reporter omits court", function() {
+  it("SCOTUS + S. Ct. reporter omits court", function() {
+    var c = wlProfClassifyCourt("Supreme Court of the United States");
+    var result = wlProfCourtForCitation(c, { reporter: "S. Ct." }, null);
+    assert.equal(result.court, "");
+    assert.equal(result.reviewReasons.length, 0);
+  });
+  it("SCOTUS + L. Ed. reporter omits court", function() {
+    var c = wlProfClassifyCourt("Supreme Court of the United States");
+    var result = wlProfCourtForCitation(c, { reporter: "L. Ed." }, null);
+    assert.equal(result.court, "");
+    assert.equal(result.reviewReasons.length, 0);
+  });
+  it("SCOTUS + L. Ed. 2d reporter omits court", function() {
+    var c = wlProfClassifyCourt("Supreme Court of the United States");
+    var result = wlProfCourtForCitation(c, { reporter: "L. Ed. 2d" }, null);
+    assert.equal(result.court, "");
+    assert.equal(result.reviewReasons.length, 0);
+  });
+});
+
+describe("P2 - new court table rules", function() {
+  it("United States District Court, S.D. Texas, Houston Division", function() {
+    var r = wlProfClassifyCourt("United States District Court, S.D. Texas, Houston Division.");
+    assert.equal(r.system, "federal");
+    assert.equal(r.level, "district");
+    assert.equal(r.district, "S.D. Tex.");
+    assert.equal(r.bluebook, "S.D. Tex.");
+  });
+  it("United States District Court, S.D. New York, Southern Division", function() {
+    var r = wlProfClassifyCourt("United States District Court, S.D. New York, Southern Division.");
+    assert.equal(r.district, "S.D.N.Y.");
+  });
+  it("United States Bankruptcy Court, S.D. New York", function() {
+    var r = wlProfClassifyCourt("United States Bankruptcy Court, S.D. New York.");
+    assert.equal(r.system, "federal");
+    assert.equal(r.level, "bankruptcy");
+    assert.equal(r.bluebook, "Bankr. S.D.N.Y.");
+  });
+  it("United States Bankruptcy Court, S.D. Texas", function() {
+    var r = wlProfClassifyCourt("United States Bankruptcy Court, S.D. Texas.");
+    assert.equal(r.bluebook, "Bankr. S.D. Tex.");
+  });
+  it("Court of Criminal Appeals of Texas", function() {
+    var r = wlProfClassifyCourt("Court of Criminal Appeals of Texas.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "supreme");
+    assert.equal(r.state, "TX");
+    assert.equal(r.bluebook, "Tex. Crim. App.");
+  });
+  it("Court of Criminal Appeals of Oklahoma", function() {
+    var r = wlProfClassifyCourt("Court of Criminal Appeals of Oklahoma.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "supreme");
+    assert.equal(r.state, "OK");
+    assert.equal(r.bluebook, "Okla. Crim. App.");
+  });
+  it("Court of Appeals of New York", function() {
+    var r = wlProfClassifyCourt("Court of Appeals of New York.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "supreme");
+    assert.equal(r.state, "NY");
+    assert.equal(r.bluebook, "N.Y.");
+  });
+  it("Court of Appeals of Maryland", function() {
+    var r = wlProfClassifyCourt("Court of Appeals of Maryland.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.state, "MD");
+    assert.equal(r.bluebook, "Md.");
+  });
+  it("Supreme Court of Maryland", function() {
+    var r = wlProfClassifyCourt("Supreme Court of Maryland.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "supreme");
+    assert.equal(r.state, "MD");
+    assert.equal(r.bluebook, "Md.");
+  });
+  it("Appellate Court of Maryland", function() {
+    var r = wlProfClassifyCourt("Appellate Court of Maryland.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.state, "MD");
+    assert.equal(r.bluebook, "Md. App. Ct.");
+  });
+  it("Supreme Judicial Court of Massachusetts", function() {
+    var r = wlProfClassifyCourt("Supreme Judicial Court of Massachusetts.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "supreme");
+    assert.equal(r.state, "MA");
+    assert.equal(r.bluebook, "Mass.");
+  });
+  it("Supreme Judicial Court of Massachusetts, Suffolk County", function() {
+    var r = wlProfClassifyCourt("Supreme Judicial Court of Massachusetts, Suffolk County.");
+    assert.equal(r.bluebook, "Mass.");
+  });
+  it("Supreme Judicial Court of Maine", function() {
+    var r = wlProfClassifyCourt("Supreme Judicial Court of Maine.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "supreme");
+    assert.equal(r.state, "ME");
+    assert.equal(r.bluebook, "Me.");
+  });
+  it("Appeals Court of Massachusetts", function() {
+    var r = wlProfClassifyCourt("Appeals Court of Massachusetts.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.state, "MA");
+    assert.equal(r.bluebook, "Mass. App. Ct.");
+  });
+  it("Appeals Court of Massachusetts, Middlesex County", function() {
+    var r = wlProfClassifyCourt("Appeals Court of Massachusetts, Middlesex County.");
+    assert.equal(r.bluebook, "Mass. App. Ct.");
+  });
+  it("Court of Appeal, First District, Division 2, California", function() {
+    var r = wlProfClassifyCourt("Court of Appeal, First District, Division 2, California.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.state, "CA");
+    assert.equal(r.bluebook, "Cal. Ct. App.");
+  });
+  it("Court of Appeal, Second District, California", function() {
+    var r = wlProfClassifyCourt("Court of Appeal, Second District, California.");
+    assert.equal(r.bluebook, "Cal. Ct. App.");
+  });
+  it("Appellate Court of Illinois, 1st District", function() {
+    var r = wlProfClassifyCourt("Appellate Court of Illinois, 1st District.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.state, "IL");
+    assert.equal(r.bluebook, "Ill. App. Ct.");
+  });
+  it("Appellate Court of Illinois, 1st District, 2 Division", function() {
+    var r = wlProfClassifyCourt("Appellate Court of Illinois, 1st District, 2 Division.");
+    assert.equal(r.bluebook, "Ill. App. Ct.");
+  });
+  it("Court of Appeals of Georgia", function() {
+    var r = wlProfClassifyCourt("Court of Appeals of Georgia.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.state, "GA");
+    assert.equal(r.bluebook, "Ga. Ct. App.");
+  });
+  it("Court of Appeals of Michigan", function() {
+    var r = wlProfClassifyCourt("Court of Appeals of Michigan.");
+    assert.equal(r.bluebook, "Mich. Ct. App.");
+  });
+  it("Court of Appeals of Ohio", function() {
+    var r = wlProfClassifyCourt("Court of Appeals of Ohio, 1st District.");
+    assert.equal(r.bluebook, "Ohio Ct. App.");
+  });
+  it("Court of Appeals of Missouri", function() {
+    var r = wlProfClassifyCourt("Court of Appeals of Missouri.");
+    assert.equal(r.bluebook, "Mo. Ct. App.");
+  });
+  it("Court of Appeals of Indiana", function() {
+    var r = wlProfClassifyCourt("Court of Appeals of Indiana.");
+    assert.equal(r.bluebook, "Ind. Ct. App.");
+  });
+  it("Court of Appeals of Nebraska", function() {
+    var r = wlProfClassifyCourt("Court of Appeals of Nebraska.");
+    assert.equal(r.bluebook, "Neb. Ct. App.");
+  });
+});
+
+describe("P3 - court-unclassified for unknown classification with service court", function() {
+  it("unknown classification + service court keeps service court with court-unclassified", function() {
+    var c = wlProfClassifyCourt("Some Unknown Court");
+    var result = wlProfCourtForCitation(c, { reporter: "F.3d" }, "5th Cir.");
+    assert.equal(result.court, "5th Cir.");
+    assert.equal(result.reviewReasons.length, 1);
+    assert.equal(result.reviewReasons[0], "court-unclassified");
+  });
+  it("unknown classification + no service court still returns court-unresolved", function() {
+    var c = wlProfClassifyCourt("Some Unknown Court");
+    var result = wlProfCourtForCitation(c, { reporter: "F.3d" }, null);
+    assert.equal(result.court, "");
+    assert.equal(result.reviewReasons[0], "court-unresolved");
+  });
+});
+
 describe("wlProfT10 coverage", function() {
   it("includes all 50 states + D.C. + P.R. (52 entries)", function() {
     var keys = Object.keys(wlProfT10);

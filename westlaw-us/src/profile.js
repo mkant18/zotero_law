@@ -137,6 +137,29 @@ var wlProfOfficialHighCourtReporters = {
   "N.Y.": true, "N.Y.2d": true, "N.Y.3d": true
 };
 
+var wlProfIntermediateAppellateMap = {
+  "georgia": "Ga. Ct. App.",
+  "michigan": "Mich. Ct. App.",
+  "ohio": "Ohio Ct. App.",
+  "arizona": "Ariz. Ct. App.",
+  "colorado": "Colo. Ct. App.",
+  "iowa": "Iowa Ct. App.",
+  "kansas": "Kan. Ct. App.",
+  "kentucky": "Ky. Ct. App.",
+  "minnesota": "Minn. Ct. App.",
+  "north carolina": "N.C. Ct. App.",
+  "new mexico": "N.M. Ct. App.",
+  "oregon": "Ore. Ct. App.",
+  "south carolina": "S.C. Ct. App.",
+  "tennessee": "Tenn. Ct. App.",
+  "utah": "Utah Ct. App.",
+  "washington": "Wash. Ct. App.",
+  "wisconsin": "Wis. Ct. App.",
+  "missouri": "Mo. Ct. App.",
+  "indiana": "Ind. Ct. App.",
+  "nebraska": "Neb. Ct. App."
+};
+
 var wlProfTexasCourts = {
   "houston": "Tex. App.\u2014Houston [1st Dist.]",
   "houston (1st dist.)": "Tex. App.\u2014Houston [1st Dist.]",
@@ -172,7 +195,29 @@ var wlProfDistrictMap = {
   "s.d. tex": "S.D. Tex.",
   "southern district of texas": "S.D. Tex.",
   "n.d. tex": "N.D. Tex.",
-  "northern district of texas": "N.D. Tex."
+  "northern district of texas": "N.D. Tex.",
+  "s.d. texas": "S.D. Tex.",
+  "s.d. california": "S.D. Cal.",
+  "s.d. illinois": "S.D. Ill.",
+  "s.d. new jersey": "S.D.N.J.",
+  "s.d. florida": "S.D. Fla.",
+  "s.d. ohio": "S.D. Ohio",
+  "s.d. pennsylvania": "S.D. Pa.",
+  "s.d. virginia": "S.D. Va.",
+  "n.d. california": "N.D. Cal.",
+  "n.d. texas": "N.D. Tex.",
+  "n.d. illinois": "N.D. Ill.",
+  "n.d. new york": "N.D.N.Y.",
+  "c.d. texas": "C.D. Tex.",
+  "c.d. california": "C.D. Cal.",
+  "e.d. texas": "E.D. Tex.",
+  "e.d. california": "E.D. Cal.",
+  "e.d. new york": "E.D.N.Y.",
+  "w.d. texas": "W.D. Tex.",
+  "w.d. oklahoma": "W.D. Okla.",
+  "d. massachusetts": "D. Mass.",
+  "d. maryland": "D. Md.",
+  "d. connecticut": "D. Conn."
 };
 
 var wlProfCourtTable = [
@@ -301,6 +346,14 @@ var wlProfCourtTable = [
     res: { system: "federal", level: "district", state: null, circuit: null, district: "N.D. Tex.", bluebook: "N.D. Tex.", confidence: "table" }
   },
   {
+    re: /^united states district court, (.+)$/,
+    res: function(m) {
+      var districtText = m[1].toLowerCase();
+      var district = wlProfDistrictMap[districtText] || null;
+      return { system: "federal", level: "district", state: null, circuit: null, district: district, bluebook: district, confidence: district ? "table" : "none" };
+    }
+  },
+  {
     re: /^supreme court, appellate division, second department, new york$/,
     res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "App. Div.", confidence: "table" }
   },
@@ -324,6 +377,68 @@ var wlProfCourtTable = [
       var state = bluebook ? (wlProfStateCodes[stateName] || null) : null;
       return { system: "state", level: "supreme", state: state, circuit: null, district: null, bluebook: bluebook, confidence: "table" };
     }
+  },
+  {
+    re: /^supreme court of maryland$/,
+    res: { system: "state", level: "supreme", state: "MD", circuit: null, district: null, bluebook: "Md.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of maryland$/,
+    res: { system: "state", level: "intermediate", state: "MD", circuit: null, district: null, bluebook: "Md.", confidence: "table" }
+  },
+  {
+    re: /^appellate court of maryland$/,
+    res: { system: "state", level: "intermediate", state: "MD", circuit: null, district: null, bluebook: "Md. App. Ct.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of new york$/,
+    res: { system: "state", level: "supreme", state: "NY", circuit: null, district: null, bluebook: "N.Y.", confidence: "table" }
+  },
+  {
+    re: /^court of criminal appeals of texas$/,
+    res: { system: "state", level: "supreme", state: "TX", circuit: null, district: null, bluebook: "Tex. Crim. App.", confidence: "table" }
+  },
+  {
+    re: /^court of criminal appeals of oklahoma$/,
+    res: { system: "state", level: "supreme", state: "OK", circuit: null, district: null, bluebook: "Okla. Crim. App.", confidence: "table" }
+  },
+  {
+    re: /^supreme judicial court of massachusetts(?:,\s*.+)?$/,
+    res: { system: "state", level: "supreme", state: "MA", circuit: null, district: null, bluebook: "Mass.", confidence: "table" }
+  },
+  {
+    re: /^supreme judicial court of maine$/,
+    res: { system: "state", level: "supreme", state: "ME", circuit: null, district: null, bluebook: "Me.", confidence: "table" }
+  },
+  {
+    re: /^appeals court of massachusetts(?:,\s*.+)?$/,
+    res: { system: "state", level: "intermediate", state: "MA", circuit: null, district: null, bluebook: "Mass. App. Ct.", confidence: "table" }
+  },
+  {
+    re: /^court of appeal, .+?\s+district(?:,\s*division\s+\d+)?,\s*california$/,
+    res: { system: "state", level: "intermediate", state: "CA", circuit: null, district: null, bluebook: "Cal. Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^appellate court of illinois, \d+(?:st|nd|rd|th)?\s+district(?:,\s*\d+(?:st|nd|rd|th)?\s+division)?$/,
+    res: { system: "state", level: "intermediate", state: "IL", circuit: null, district: null, bluebook: "Ill. App. Ct.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of (georgia|michigan|ohio|arizona|colorado|iowa|kansas|kentucky|minnesota|north carolina|new mexico|oregon|south carolina|tennessee|utah|washington|wisconsin|missouri|indiana|nebraska)(?:,\s*\d+(?:st|nd|rd|th)?\s+district)?$/,
+    res: function(m) {
+      var stateName = m[1].toLowerCase();
+      var bluebook = wlProfIntermediateAppellateMap[stateName] || null;
+      var state = bluebook ? (wlProfStateCodes[stateName] || null) : null;
+      return { system: "state", level: "intermediate", state: state, circuit: null, district: null, bluebook: bluebook, confidence: "table" };
+    }
+  },
+  {
+    re: /^united states bankruptcy court, (.+)$/,
+    res: function(m) {
+      var districtText = m[1].toLowerCase();
+      var district = wlProfDistrictMap[districtText] || null;
+      var bluebook = district ? "Bankr. " + district : null;
+      return { system: "federal", level: "bankruptcy", state: null, circuit: null, district: district, bluebook: bluebook, confidence: "table" };
+    }
   }
 ];
 
@@ -333,6 +448,8 @@ function wlProfProcessCourt(rawCourt) {
   if (lowered.charAt(lowered.length - 1) === ".") {
     lowered = lowered.slice(0, -1);
   }
+  // strip ", <Name> Division" suffix from district court names
+  lowered = lowered.replace(/,\s*[^,\s]+(?:\s+[^,\s]+)*\s+division\.?$/, "");
   return lowered;
 }
 
@@ -373,7 +490,7 @@ function wlProfIsOfficialHighCourtReporter(reporter) {
 function wlProfCourtForCitation(classification, primary, serviceCourt) {
   var reviewReasons = [];
 
-  if (classification && classification.system === "federal" && classification.level === "supreme" && primary && primary.reporter === "U.S.") {
+  if (classification && classification.system === "federal" && classification.level === "supreme") {
     return { court: "", reviewReasons: reviewReasons };
   }
 
@@ -392,6 +509,9 @@ function wlProfCourtForCitation(classification, primary, serviceCourt) {
       return { court: serviceCourt, reviewReasons: reviewReasons };
     } else if (classification && classification.bluebook) {
       reviewReasons.push("court-conflict");
+      return { court: serviceCourt, reviewReasons: reviewReasons };
+    } else if (classification && classification.confidence === "none") {
+      reviewReasons.push("court-unclassified");
       return { court: serviceCourt, reviewReasons: reviewReasons };
     } else {
       return { court: serviceCourt, reviewReasons: reviewReasons };
