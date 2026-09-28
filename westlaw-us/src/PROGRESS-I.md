@@ -21,8 +21,16 @@ Added per orchestrator review:
 - B5: Test that JSON.parse of header block succeeds and has expected label/target/priority/translatorType
 - Fixed `loadBuiltFile` to strip bare JSON header before vm.runInContext (required because bare JSON is not valid JS)
 
+## Step 4 → pass/24
+T1: Replaced `var detectWeb = wlTrDetectWeb; var doWeb = wlTrDoWeb;` in src/translator.js with real function declarations:
+- `function detectWeb(doc, url) { return wlTrDetectWeb(doc, url); }`
+- `async function doWeb(doc, url) { return wlTrDoWeb(doc, url); }`
+Added 2 tests asserting the built file matches `/^function detectWeb\(/m` and `/^async function doWeb\(/m`.
+
+T2: Added trailing newline after `/** END TEST CASES **/` in build-translator.mjs (append empty string to outputParts).
+
 ## Commands run
 - `node westlaw-us/tools/build-translator.mjs` → success
-- `node --test "westlaw-us/src/test/translator.test.mjs"` → 22/22 pass
+- `node --test "westlaw-us/src/test/translator.test.mjs"` → 24/24 pass
 - `node --test "westlaw-us/src/test/*.test.mjs"` → 419/419 pass
 - `node westlaw-us/tools/check-private-data.mjs --paths westlaw-us` → fail=0 warn=0

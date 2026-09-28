@@ -535,6 +535,18 @@ describe("translator - build script", function() {
     assert.equal(content.indexOf("require("), -1, "built file must not contain require(");
   });
 
+  it("built file has real function detectWeb declaration (not var alias)", function() {
+    var content = readFileSync(builtFile, "utf8");
+    assert.ok(/^function detectWeb\(/m.test(content),
+      "built file must contain 'function detectWeb(' as a real declaration");
+  });
+
+  it("built file has real async function doWeb declaration (not var alias)", function() {
+    var content = readFileSync(builtFile, "utf8");
+    assert.ok(/^async function doWeb\(/m.test(content),
+      "built file must contain 'async function doWeb(' as a real declaration");
+  });
+
   it("header block JSON parses and has expected label/target/priority/translatorType", function() {
     var content = readFileSync(builtFile, "utf8");
     // Extract header block: text from start up to the first line that is exactly "}"

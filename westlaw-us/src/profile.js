@@ -108,6 +108,22 @@ var wlProfStateCodes = {
   "wyoming": "WY"
 };
 
+var wlProfCircuitForTheMap = {
+  "first circuit": "1",
+  "second circuit": "2",
+  "third circuit": "3",
+  "fourth circuit": "4",
+  "fifth circuit": "5",
+  "sixth circuit": "6",
+  "seventh circuit": "7",
+  "eighth circuit": "8",
+  "ninth circuit": "9",
+  "tenth circuit": "10",
+  "eleventh circuit": "11",
+  "district of columbia circuit": "DC",
+  "federal circuit": "Fed"
+};
+
 var wlProfCircuitMap = {
   "1": "1st Cir.",
   "2": "2nd Cir.",
@@ -120,6 +136,8 @@ var wlProfCircuitMap = {
   "9": "9th Cir.",
   "10": "10th Cir.",
   "11": "11th Cir.",
+  "DC": "D.C. Cir.",
+  "Fed": "Fed. Cir.",
   "dc": "D.C. Cir.",
   "fed": "Fed. Cir."
 };
@@ -278,6 +296,15 @@ var wlProfCourtTable = [
     res: { system: "federal", level: "appellate", state: null, circuit: "Fed", district: null, bluebook: "Fed. Cir.", confidence: "table" }
   },
   {
+    re: /^united states court of appeals for the (.+)$/,
+    res: function(m) {
+      var circuitKey = m[1].toLowerCase();
+      var circuitNum = wlProfCircuitForTheMap[circuitKey] || null;
+      var bluebook = circuitNum ? (wlProfCircuitMap[circuitNum] || null) : null;
+      return { system: "federal", level: "appellate", state: null, circuit: circuitNum, district: null, bluebook: bluebook, confidence: bluebook ? "table" : "none" };
+    }
+  },
+  {
     re: /^united states district court, district of columbia$/,
     res: { system: "federal", level: "district", state: null, circuit: null, district: "D.D.C.", bluebook: "D.D.C.", confidence: "table" }
   },
@@ -346,6 +373,14 @@ var wlProfCourtTable = [
     res: { system: "federal", level: "district", state: null, circuit: null, district: "N.D. Tex.", bluebook: "N.D. Tex.", confidence: "table" }
   },
   {
+    re: /^united states district court for the (.+)$/,
+    res: function(m) {
+      var districtText = m[1].toLowerCase();
+      var district = wlProfDistrictMap[districtText] || null;
+      return { system: "federal", level: "district", state: null, circuit: null, district: district, bluebook: district, confidence: district ? "table" : "none" };
+    }
+  },
+  {
     re: /^united states district court, (.+)$/,
     res: function(m) {
       var districtText = m[1].toLowerCase();
@@ -370,7 +405,27 @@ var wlProfCourtTable = [
     res: { system: "state", level: "supreme", state: "CA", circuit: null, district: null, bluebook: "Cal.", confidence: "table" }
   },
   {
-    re: /^supreme court of (.+)$/,
+    re: /^supreme court of new york, appellate division(?:,\s*(?:\d+(?:st|nd|rd|th)?|[a-z]+)\s+department)?$/,
+    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "App. Div.", confidence: "table" }
+  },
+  {
+    re: /^supreme court, appellate division, (?:\d+(?:st|nd|rd|th)?|[a-z]+)\s+department, new york$/,
+    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "App. Div.", confidence: "table" }
+  },
+  {
+    re: /^supreme court, appellate term(?:,\s*(?:\d+(?:st|nd|rd|th)?|[a-z]+)(?:\s+\w+)*\s+department)?(?:,\s*new york)?$/,
+    res: { system: "state", level: "intermediate", state: "NY", circuit: null, district: null, bluebook: "N.Y. App. Term", confidence: "table" }
+  },
+  {
+    re: /^supreme court, [a-z ]+ county, new york$/,
+    res: { system: "state", level: "trial", state: "NY", circuit: null, district: null, bluebook: "N.Y. Sup. Ct.", confidence: "table" }
+  },
+  {
+    re: /^supreme court of new york, [a-z ]+ county$/,
+    res: { system: "state", level: "trial", state: "NY", circuit: null, district: null, bluebook: "N.Y. Sup. Ct.", confidence: "table" }
+  },
+  {
+    re: /^supreme court of ([a-z]+(?:\s+[a-z]+)?)(?:,\s*[a-z ]+ county)?$/,
     res: function(m) {
       var stateName = m[1].toLowerCase();
       var bluebook = wlProfT10[stateName] || null;
@@ -419,7 +474,7 @@ var wlProfCourtTable = [
     res: { system: "state", level: "intermediate", state: "CA", circuit: null, district: null, bluebook: "Cal. Ct. App.", confidence: "table" }
   },
   {
-    re: /^appellate court of illinois, \d+(?:st|nd|rd|th)?\s+district(?:,\s*\d+(?:st|nd|rd|th)?\s+division)?$/,
+    re: /^appellate court of illinois, (?:\d+(?:st|nd|rd|th)?|[a-z]+)\s+district(?:,\s*(?:\d+(?:st|nd|rd|th)?|[a-z]+)\s+division)?$/,
     res: { system: "state", level: "intermediate", state: "IL", circuit: null, district: null, bluebook: "Ill. App. Ct.", confidence: "table" }
   },
   {
@@ -429,6 +484,15 @@ var wlProfCourtTable = [
       var bluebook = wlProfIntermediateAppellateMap[stateName] || null;
       var state = bluebook ? (wlProfStateCodes[stateName] || null) : null;
       return { system: "state", level: "intermediate", state: state, circuit: null, district: null, bluebook: bluebook, confidence: "table" };
+    }
+  },
+  {
+    re: /^united states bankruptcy court for the (.+)$/,
+    res: function(m) {
+      var districtText = m[1].toLowerCase();
+      var district = wlProfDistrictMap[districtText] || null;
+      var bluebook = district ? "Bankr. " + district : null;
+      return { system: "federal", level: "bankruptcy", state: null, circuit: null, district: district, bluebook: bluebook, confidence: district ? "table" : "none" };
     }
   },
   {
@@ -448,8 +512,10 @@ function wlProfProcessCourt(rawCourt) {
   if (lowered.charAt(lowered.length - 1) === ".") {
     lowered = lowered.slice(0, -1);
   }
-  // strip ", <Name> Division" suffix from district court names
-  lowered = lowered.replace(/,\s*[^,\s]+(?:\s+[^,\s]+)*\s+division\.?$/, "");
+  // strip ", <Name> Division" suffix only from district/bankruptcy court names
+  if (/^united states (district|bankruptcy) court/.test(lowered)) {
+    lowered = lowered.replace(/,\s*[^,\s]+(?:\s+[^,\s]+)*\s+division\.?$/, "");
+  }
   return lowered;
 }
 

@@ -141,9 +141,10 @@ async function wlTrDoWeb(doc, url) {
   item.complete();
 }
 
-// Zotero requires these unprefixed entry points
-var detectWeb = wlTrDetectWeb;
-var doWeb = wlTrDoWeb;
+// Zotero requires real function declarations (not var aliases) so its tooling
+// greps for "function detectWeb" / "function doWeb" and finds them as globals.
+function detectWeb(doc, url) { return wlTrDetectWeb(doc, url); }
+async function doWeb(doc, url) { return wlTrDoWeb(doc, url); }
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {

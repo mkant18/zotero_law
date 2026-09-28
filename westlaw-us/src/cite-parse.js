@@ -19,42 +19,42 @@ function wlCiteParseParentheticalStandard(content) {
   var dm = content.match(wlCiteMonthRe);
   if (dm) {
     var dateStr = wlTextParseUSDate(dm[2] + ' ' + dm[3] + ', ' + dm[4]);
-    return { court: dm[1].trim().replace(/,$/, ''), year: dm[4], date: dateStr, parentheticalSuffix: '' };
+    return { court: dm[1].trim().replace(/,$/, ''), year: dm[4], date: dateStr, dateText: dm[2], parentheticalSuffix: '' };
   }
 
   // Try Texas form: <court> <year>, <status>
   var tm = content.match(/^(.*?)\s+(\d{4}),\s+(.+)$/);
   if (tm) {
-    return { court: tm[1].trim(), year: tm[2], date: null, parentheticalSuffix: tm[3].trim() };
+    return { court: tm[1].trim(), year: tm[2], date: null, dateText: null, parentheticalSuffix: tm[3].trim() };
   }
 
   // Try standard form: <court> <year>
   var sm = content.match(/^(.*?)\s+(\d{4})$/);
   if (sm) {
-    return { court: sm[1].trim(), year: sm[2], date: null, parentheticalSuffix: '' };
+    return { court: sm[1].trim(), year: sm[2], date: null, dateText: null, parentheticalSuffix: '' };
   }
 
   // Year only
   var ym = content.match(/^(\d{4})$/);
   if (ym) {
-    return { court: '', year: ym[1], date: null, parentheticalSuffix: '' };
+    return { court: '', year: ym[1], date: null, dateText: null, parentheticalSuffix: '' };
   }
 
-  return { court: '', year: '', date: null, parentheticalSuffix: '' };
+  return { court: '', year: '', date: null, dateText: null, parentheticalSuffix: '' };
 }
 
 function wlCiteParseParentheticalTexas(content) {
   // Texas form: <court> <year>[, <status>]
   var tm = content.match(/^(.*?)\s+(\d{4}),\s*(.*)$/);
   if (tm) {
-    return { court: tm[1].trim(), year: tm[2], date: null, parentheticalSuffix: tm[3].trim() };
+    return { court: tm[1].trim(), year: tm[2], date: null, dateText: null, parentheticalSuffix: tm[3].trim() };
   }
   // Year only
   var ym = content.match(/^(\d{4})$/);
   if (ym) {
-    return { court: '', year: ym[1], date: null, parentheticalSuffix: '' };
+    return { court: '', year: ym[1], date: null, dateText: null, parentheticalSuffix: '' };
   }
-  return { court: '', year: '', date: null, parentheticalSuffix: '' };
+  return { court: '', year: '', date: null, dateText: null, parentheticalSuffix: '' };
 }
 
 function wlCiteBuildCitation(anchor) {

@@ -137,6 +137,7 @@ export function buildTranslator() {
   outputParts.push('var testCases = [');
   outputParts.push(']');
   outputParts.push('/** END TEST CASES **/');
+  outputParts.push('');
 
   // Join all parts
   var output = outputParts.join('\n');

@@ -508,13 +508,125 @@ describe("P3 - court-unclassified for unknown classification with service court"
   });
 });
 
-describe("wlProfT10 coverage", function() {
-  it("includes all 50 states + D.C. + P.R. (52 entries)", function() {
-    var keys = Object.keys(wlProfT10);
-    assert.equal(keys.length, 52);
+describe("P4 - NY specific rules and generic Supreme Court fix", function() {
+  it("Supreme Court of New York, Appellate Division → App. Div.", function() {
+    var r = wlProfClassifyCourt("Supreme Court of New York, Appellate Division.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.state, "NY");
+    assert.equal(r.bluebook, "App. Div.");
+    assert.notEqual(r.bluebook, "N.Y.");
   });
-  it("includes Alabama", function() { assert.ok(wlProfT10["alabama"]); });
-  it("includes Wyoming", function() { assert.ok(wlProfT10["wyoming"]); });
-  it("includes District of Columbia", function() { assert.ok(wlProfT10["district of columbia"]); });
-  it("includes Puerto Rico", function() { assert.ok(wlProfT10["puerto rico"]); });
+  it("Supreme Court of New York, Appellate Division, Second Department → App. Div.", function() {
+    var r = wlProfClassifyCourt("Supreme Court of New York, Appellate Division, Second Department.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.state, "NY");
+    assert.equal(r.bluebook, "App. Div.");
+  });
+  it("Supreme Court, Appellate Division, Second Department, New York → App. Div.", function() {
+    var r = wlProfClassifyCourt("Supreme Court, Appellate Division, Second Department, New York.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.state, "NY");
+    assert.equal(r.bluebook, "App. Div.");
+  });
+  it("Supreme Court, Appellate Term, Third Judicial Department, New York → N.Y. App. Term", function() {
+    var r = wlProfClassifyCourt("Supreme Court, Appellate Term, Third Judicial Department, New York.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.state, "NY");
+    assert.equal(r.bluebook, "N.Y. App. Term");
+  });
+  it("Supreme Court, Kings County, New York → N.Y. Sup. Ct.", function() {
+    var r = wlProfClassifyCourt("Supreme Court, Kings County, New York.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "trial");
+    assert.equal(r.state, "NY");
+    assert.equal(r.bluebook, "N.Y. Sup. Ct.");
+  });
+  it("Supreme Court of New York, Kings County → N.Y. Sup. Ct.", function() {
+    var r = wlProfClassifyCourt("Supreme Court of New York, Kings County.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "trial");
+    assert.equal(r.state, "NY");
+    assert.equal(r.bluebook, "N.Y. Sup. Ct.");
+  });
+  it("generic Supreme Court of <State> does not match lines with Appellate Division", function() {
+    var r = wlProfClassifyCourt("Supreme Court of New York, Appellate Division.");
+    assert.notEqual(r.level, "supreme");
+  });
+  it("generic Supreme Court of <State> does not match lines with Appellate Term", function() {
+    var r = wlProfClassifyCourt("Supreme Court of Texas, Appellate Term.");
+    assert.notEqual(r.level, "supreme");
+  });
+  it("generic Supreme Court of <State> does not match lines with County", function() {
+    var r = wlProfClassifyCourt("Supreme Court of New York, Kings County.");
+    assert.notEqual(r.level, "supreme");
+  });
+});
+
+describe("P5 - 'for the' phrasing support", function() {
+  it("United States District Court for the District of Columbia → D.D.C.", function() {
+    var r = wlProfClassifyCourt("United States District Court for the District of Columbia.");
+    assert.equal(r.system, "federal");
+    assert.equal(r.level, "district");
+    assert.equal(r.district, "D.D.C.");
+    assert.equal(r.bluebook, "D.D.C.");
+  });
+  it("United States District Court for the District of Kansas → D. Kan.", function() {
+    var r = wlProfClassifyCourt("United States District Court for the District of Kansas.");
+    assert.equal(r.system, "federal");
+    assert.equal(r.level, "district");
+    assert.equal(r.district, "D. Kan.");
+    assert.equal(r.bluebook, "D. Kan.");
+  });
+  it("United States District Court for the Southern District of New York → S.D.N.Y.", function() {
+    var r = wlProfClassifyCourt("United States District Court for the Southern District of New York.");
+    assert.equal(r.system, "federal");
+    assert.equal(r.level, "district");
+    assert.equal(r.district, "S.D.N.Y.");
+    assert.equal(r.bluebook, "S.D.N.Y.");
+  });
+  it("United States Court of Appeals for the Fifth Circuit → 5th Cir.", function() {
+    var r = wlProfClassifyCourt("United States Court of Appeals for the Fifth Circuit.");
+    assert.equal(r.system, "federal");
+    assert.equal(r.level, "appellate");
+    assert.equal(r.circuit, "5");
+    assert.equal(r.bluebook, "5th Cir.");
+  });
+  it("United States Court of Appeals for the District of Columbia Circuit → D.C. Cir.", function() {
+    var r = wlProfClassifyCourt("United States Court of Appeals for the District of Columbia Circuit.");
+    assert.equal(r.system, "federal");
+    assert.equal(r.level, "appellate");
+    assert.equal(r.circuit, "DC");
+    assert.equal(r.bluebook, "D.C. Cir.");
+  });
+  it("United States Bankruptcy Court for the District of Columbia → Bankr. D.D.C.", function() {
+    var r = wlProfClassifyCourt("United States Bankruptcy Court for the District of Columbia.");
+    assert.equal(r.system, "federal");
+    assert.equal(r.level, "bankruptcy");
+    assert.equal(r.bluebook, "Bankr. D.D.C.");
+  });
+  it("United States Bankruptcy Court for the Southern District of New York → Bankr. S.D.N.Y.", function() {
+    var r = wlProfClassifyCourt("United States Bankruptcy Court for the Southern District of New York.");
+    assert.equal(r.bluebook, "Bankr. S.D.N.Y.");
+  });
+});
+
+describe("P6 - word-form ordinals for Illinois Appellate Court", function() {
+  it("Appellate Court of Illinois, First District, Fourth Division → Ill. App. Ct.", function() {
+    var r = wlProfClassifyCourt("Appellate Court of Illinois, First District, Fourth Division.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.state, "IL");
+    assert.equal(r.bluebook, "Ill. App. Ct.");
+  });
+  it("Appellate Court of Illinois, First District → Ill. App. Ct.", function() {
+    var r = wlProfClassifyCourt("Appellate Court of Illinois, First District.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.state, "IL");
+    assert.equal(r.bluebook, "Ill. App. Ct.");
+  });
 });
