@@ -366,3 +366,138 @@ describe("wlCiteParseShortName", function() {
     assert.equal(r, "Sanchez");
   });
 });
+
+describe("wlCiteRoundTrip: dockets, full date text, pin forms (R4)", function() {
+  function assertField(r, name, expected) {
+    assert.equal(JSON.stringify(r[name]), JSON.stringify(expected), name);
+  }
+
+  it("R4-1: WL form with docket, at-pin and full date recomposes exactly", function() {
+    var text = "Example v. Sample, No. 24-123, 2024 WL 1234567, at *4 (D. Kan. Mar. 1, 2024)";
+    var r = ctx.wlCiteParseStandardForm(text);
+    assert.equal(r.ok, true);
+    assert.equal(r.name, "Example v. Sample");
+    assertField(r, "dockets", ["No. 24-123"]);
+    assert.equal(r.citations.length, 1);
+    assert.equal(r.citations[0].kind, "wl");
+    assert.equal(r.citations[0].raw, "2024 WL 1234567");
+    assert.equal(r.pin, "*4");
+    assert.equal(r.court, "D. Kan.");
+    assert.equal(r.year, "2024");
+    assert.equal(r.date, "2024-03-01");
+    assert.equal(r.dateText, "Mar. 1, 2024");
+    var rt = ctx.wlCiteRoundTrip(r, text);
+    assert.equal(rt.ok, true);
+    assert.equal(rt.residual, "");
+  });
+
+  it("R4-2: WL form with docket, no pin, Sept. date recomposes exactly", function() {
+    var text = "Sample v. Example, No. 24-456, 2024 WL 7654321 (D. Kan. Sept. 5, 2024)";
+    var r = ctx.wlCiteParseStandardForm(text);
+    assert.equal(r.ok, true);
+    assert.equal(r.name, "Sample v. Example");
+    assertField(r, "dockets", ["No. 24-456"]);
+    assert.equal(r.pin, null);
+    assert.equal(r.court, "D. Kan.");
+    assert.equal(r.year, "2024");
+    assert.equal(r.date, "2024-09-05");
+    assert.equal(r.dateText, "Sept. 5, 2024");
+    var rt = ctx.wlCiteRoundTrip(r, text);
+    assert.equal(rt.ok, true);
+    assert.equal(rt.residual, "");
+  });
+
+  it("R4-3: bare pinpoint after a reporter citation recomposes without 'at'", function() {
+    var text = "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486, 490 (5th Cir. 1999)";
+    var r = ctx.wlCiteParseStandardForm(text);
+    assert.equal(r.ok, true);
+    assert.equal(r.name, "Sanchez v. Liggett & Myers, Inc.");
+    assert.equal(r.citations.length, 1);
+    assert.equal(r.citations[0].raw, "187 F.3d 486");
+    assert.equal(r.pin, "490");
+    assert.equal(r.court, "5th Cir.");
+    assert.equal(r.year, "1999");
+    assert.equal(r.date, null);
+    assert.equal(r.dateText, null);
+    assertField(r, "dockets", []);
+    var rt = ctx.wlCiteRoundTrip(r, text);
+    assert.equal(rt.ok, true);
+    assert.equal(rt.residual, "");
+  });
+
+  it("R4-4a: Miele parallel run (A.D.3d + N.Y.S.2d) round-trips", function() {
+    var text = fixtures.synthetic.parallelRun.long;
+    var r = ctx.wlCiteParseStandardForm(text);
+    assert.equal(r.ok, true);
+    assert.equal(r.citations.length, 2);
+    assert.equal(r.citations[0].raw, "2 A.D.3d 799");
+    assert.equal(r.citations[1].raw, "770 N.Y.S.2d 386");
+    assert.equal(r.pin, null);
+    assert.equal(r.court, "");
+    assert.equal(r.year, "2003");
+    var rt = ctx.wlCiteRoundTrip(r, text);
+    assert.equal(rt.ok, true);
+    assert.equal(rt.residual, "");
+  });
+
+  it("R4-4b: Miele parallel run with a pinpoint between the parallels round-trips", function() {
+    var text = fixtures.G4pin.long;
+    var r = ctx.wlCiteParseStandardForm(text);
+    assert.equal(r.ok, true);
+    assert.equal(r.citations.length, 2);
+    assert.equal(r.pin, "802");
+    assert.equal(r.pinAfter, 0);
+    assert.equal(r.pinAt, false);
+    var rt = ctx.wlCiteRoundTrip(r, text);
+    assert.equal(rt.ok, true);
+    assert.equal(rt.residual, "");
+  });
+
+  it("R4-4c: Miele N.Y.S.2d + Slip Op. alternate round-trips", function() {
+    var text = fixtures.synthetic.d1UnparsedBetweenCitationAndParen.long;
+    var r = ctx.wlCiteParseStandardForm(text);
+    assert.equal(r.ok, true);
+    assert.equal(r.citations.length, 2);
+    assert.equal(r.citations[1].kind, "unparsed");
+    assert.equal(r.court, "App. Div.");
+    var rt = ctx.wlCiteRoundTrip(r, text);
+    assert.equal(rt.ok, true);
+    assert.equal(rt.residual, "");
+  });
+
+  it("R4: multi-number docket list keeps original tokens and round-trips", function() {
+    var text = "Foo v. Bar, Nos. 1-2, 3-4, 187 F.3d 486 (5th Cir. 1999)";
+    var r = ctx.wlCiteParseStandardForm(text);
+    assert.equal(r.ok, true);
+    assert.equal(r.name, "Foo v. Bar");
+    assertField(r, "dockets", ["Nos. 1-2", "3-4"]);
+    var rt = ctx.wlCiteRoundTrip(r, text);
+    assert.equal(rt.ok, true);
+  });
+
+  it("R4: bare numbers in a party name are not dockets", function() {
+    var text = "Local 3, 5 Workers v. Roe, 1 F.3d 2 (5th Cir. 1999)";
+    var r = ctx.wlCiteParseStandardForm(text);
+    assert.equal(r.ok, true);
+    assertField(r, "dockets", []);
+    assert.equal(r.name, "Local 3, 5 Workers v. Roe");
+  });
+
+  it("R4 negative: mutated dateText is still a round-trip mismatch", function() {
+    var text = "Example v. Sample, No. 24-123, 2024 WL 1234567, at *4 (D. Kan. Mar. 1, 2024)";
+    var r = ctx.wlCiteParseStandardForm(text);
+    r.dateText = "Mar. 2, 2024";
+    var rt = ctx.wlCiteRoundTrip(r, text);
+    assert.equal(rt.ok, false);
+    assert.ok(rt.residual.indexOf("Mar. 2, 2024") !== -1);
+  });
+
+  it("R4 negative: dropped docket or altered original text is a mismatch", function() {
+    var text = "Example v. Sample, No. 24-123, 2024 WL 1234567, at *4 (D. Kan. Mar. 1, 2024)";
+    var r = ctx.wlCiteParseStandardForm(text);
+    r.dockets = [];
+    assert.equal(ctx.wlCiteRoundTrip(r, text).ok, false);
+    var r2 = ctx.wlCiteParseStandardForm(text);
+    assert.equal(ctx.wlCiteRoundTrip(r2, text.replace("Mar. 1, 2024", "Mar. 3, 2024")).ok, false);
+  });
+});

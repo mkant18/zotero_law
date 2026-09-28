@@ -9,7 +9,7 @@
 	"inRepository": false,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
-	"lastUpdated": "2026-09-28 10:46:32"
+	"lastUpdated": "2026-09-28 20:23:22"
 }
 
 /*
@@ -320,7 +320,7 @@ function wlCiteParseParentheticalStandard(content) {
   var dm = content.match(wlCiteMonthRe);
   if (dm) {
     var dateStr = wlTextParseUSDate(dm[2] + ' ' + dm[3] + ', ' + dm[4]);
-    return { court: dm[1].trim().replace(/,$/, ''), year: dm[4], date: dateStr, dateText: dm[2], parentheticalSuffix: '' };
+    return { court: dm[1].trim().replace(/,$/, ''), year: dm[4], date: dateStr, dateText: content.substring(dm[1].length).trim(), parentheticalSuffix: '' };
   }
 
   // Try Texas form: <court> <year>, <status>
@@ -356,6 +356,38 @@ function wlCiteParseParentheticalTexas(content) {
     return { court: '', year: ym[1], date: null, dateText: null, parentheticalSuffix: '' };
   }
   return { court: '', year: '', date: null, dateText: null, parentheticalSuffix: '' };
+}
+
+// Peel trailing docket segments ("No. 24-123", or "Nos. 1-2, 3-4" as ["Nos. 1-2", "3-4"]) off the
+// text before the first citation anchor. Segments keep their original text. Bare numbers only count
+// as dockets when a "No./Nos." segment precedes them; otherwise they stay in the name.
+function wlCitePeelDockets(beforeAnchor) {
+  var rest = beforeAnchor.replace(/,\s*$/, '');
+  var docketRe = /^(Nos?\. [0-9A-Za-z][\w\-\/:. ]*)$/;
+  var bareDocketRe = /^[0-9][\w\-\/:.]*$/;
+  var dockets = [];
+  var pendingBare = [];
+  while (true) {
+    var lastComma = rest.lastIndexOf(', ');
+    if (lastComma === -1) break;
+    var lastSegment = rest.substring(lastComma + 2);
+    if (docketRe.test(lastSegment)) {
+      dockets = [lastSegment].concat(pendingBare, dockets);
+      pendingBare = [];
+      rest = rest.substring(0, lastComma);
+    } else if (bareDocketRe.test(lastSegment)) {
+      pendingBare.unshift(lastSegment);
+      rest = rest.substring(0, lastComma);
+    } else {
+      break;
+    }
+  }
+  if (pendingBare.length > 0) {
+    // Bare numbers with no preceding "No./Nos." segment belong to the name.
+    rest = rest + ', ' + pendingBare.join(', ');
+    pendingBare = [];
+  }
+  return { name: rest, dockets: dockets };
 }
 
 function wlCiteBuildCitation(anchor) {
@@ -420,6 +452,8 @@ function wlCiteParseStandardForm(text) {
   // Build main citation run: first anchor + every anchor separated by ", " or ", <pin>, "
   var mainRun = [anchors[0]];
   var pin = null;
+  var pinAfter = null;
+  var pinAt = false;
   var pinFound = false;
 
   for (var i = 1; i < anchors.length; i++) {
@@ -432,6 +466,8 @@ function wlCiteParseStandardForm(text) {
       var pinMatch = sep.match(/^,\s*(\*?\d+(?:-\d+)?)\s*,\s*$/);
       if (pinMatch) {
         pin = pinMatch[1];
+        pinAfter = i - 1;
+        pinAt = false;
         pinFound = true;
         mainRun.push(anchors[i]);
       } else {
@@ -450,24 +486,9 @@ function wlCiteParseStandardForm(text) {
   var nameEnd = mainRun[0].index;
   var beforeName = cleaned.substring(0, nameEnd);
   // Strip trailing separator before first anchor, then peel off dockets from the end
-  var nameCandidates = beforeName.replace(/,\s*$/, '');
-  var dockets = [];
-  var docketRe = /^(Nos?\. [0-9A-Za-z][\w\-\/:. ]*)$/;
-  var changed = true;
-  while (changed) {
-    changed = false;
-    var lastComma = nameCandidates.lastIndexOf(', ');
-    if (lastComma === -1) break;
-    var lastSegment = nameCandidates.substring(lastComma + 2);
-    if (docketRe.test(lastSegment)) {
-      dockets.unshift(lastSegment);
-      nameCandidates = nameCandidates.substring(0, lastComma);
-      changed = true;
-    } else {
-      break;
-    }
-  }
-  var name = nameCandidates;
+  var peeled = wlCitePeelDockets(beforeName);
+  var dockets = peeled.dockets;
+  var name = peeled.name;
 
   // Find main parenthetical: first balanced ( … ) immediately after the main run
   var runEnd = mainRun[mainRun.length - 1].index + mainRun[mainRun.length - 1].length;
@@ -488,6 +509,8 @@ function wlCiteParseStandardForm(text) {
       var pinAfterMatch = textToParen.match(/(?:,\s*|at\s+)(\*\d+(?:-\d+)?|\d+(?:-\d+)?)(?=\s*(?:,|\(|$))/);
       if (pinAfterMatch) {
         pin = pinAfterMatch[1];
+        pinAfter = mainRun.length - 1;
+        pinAt = pinAfterMatch[0].charAt(0) === 'a';
       } else {
         // No valid pin found. Check for an unparsed citation segment between the last citation and the parenthetical.
         var unparsedMatch = textToParen.match(/^(?:,\s*|at\s+)(.+)$/);
@@ -550,9 +573,12 @@ function wlCiteParseStandardForm(text) {
     dockets: dockets,
     citations: citations,
     pin: pin,
+    pinAfter: pinAfter,
+    pinAt: pinAt,
     court: parenParsed.court,
     year: parenParsed.year,
     date: parenParsed.date,
+    dateText: parenParsed.dateText,
     parentheticalSuffix: parenParsed.parentheticalSuffix,
     history: history,
     unparsedTail: "",
@@ -570,6 +596,8 @@ function wlCiteParseTexasForm(text) {
   // Build main citation run
   var mainRun = [anchors[0]];
   var pin = null;
+  var pinAfter = null;
+  var pinAt = false;
   var pinFound = false;
 
   for (var i = 1; i < anchors.length; i++) {
@@ -582,6 +610,8 @@ function wlCiteParseTexasForm(text) {
       var pinMatch = sep.match(/^,\s*(\*?\d+(?:-\d+)?)\s*,\s*$/);
       if (pinMatch) {
         pin = pinMatch[1];
+        pinAfter = i - 1;
+        pinAt = false;
         pinFound = true;
         mainRun.push(anchors[i]);
       } else {
@@ -596,24 +626,9 @@ function wlCiteParseTexasForm(text) {
   // Also strip any docket region from the end of the name (same logic as standard form).
   var nameEnd = mainRun[0].index;
   var beforeName = cleaned.substring(0, nameEnd);
-  var nameCandidates = beforeName.replace(/,\s*$/, '');
-  var dockets = [];
-  var docketRe = /^(Nos?\. [0-9A-Za-z][\w\-\/:. ]*)$/;
-  var changed = true;
-  while (changed) {
-    changed = false;
-    var lastComma = nameCandidates.lastIndexOf(', ');
-    if (lastComma === -1) break;
-    var lastSegment = nameCandidates.substring(lastComma + 2);
-    if (docketRe.test(lastSegment)) {
-      dockets.unshift(lastSegment);
-      nameCandidates = nameCandidates.substring(0, lastComma);
-      changed = true;
-    } else {
-      break;
-    }
-  }
-  var name = nameCandidates;
+  var peeled = wlCitePeelDockets(beforeName);
+  var dockets = peeled.dockets;
+  var name = peeled.name;
 
   // Find main parenthetical
   var runEnd = mainRun[mainRun.length - 1].index + mainRun[mainRun.length - 1].length;
@@ -652,9 +667,12 @@ function wlCiteParseTexasForm(text) {
     dockets: dockets,
     citations: citations,
     pin: pin,
+    pinAfter: pinAfter,
+    pinAt: pinAt,
     court: parenParsed.court,
     year: parenParsed.year,
     date: parenParsed.date,
+    dateText: parenParsed.dateText,
     parentheticalSuffix: parenParsed.parentheticalSuffix,
     history: history,
     unparsedTail: "",
@@ -858,13 +876,20 @@ function wlCiteSelectShortName(forms, primary) {
 function wlCiteRoundTrip(parsed, originalText) {
   if (!parsed || !parsed.ok) return { ok: false, residual: "parsed not ok" };
 
-  // Recompose: name, <citations joined ", "> [, at *pin] (<court> <year>[, suffix])[, history]
+  // Recompose: name[, dockets], citations (pin placed where the parser found it) (<court> <dateText|year>[, suffix])[, history]
   var recomposed = '';
 
   // Name
   if (parsed.name) recomposed = parsed.name;
 
-  // Citations
+  // Dockets (raw tokens, original text)
+  if (parsed.dockets && parsed.dockets.length > 0) {
+    recomposed += ', ' + parsed.dockets.join(", ");
+  }
+
+  // Citations, with the pinpoint at its original position ("490" or "at *4")
+  var pinToken = parsed.pin ? ((parsed.pinAt ? 'at ' : '') + parsed.pin) : '';
+  var pinPlaced = !parsed.pin;
   if (parsed.citations && parsed.citations.length > 0) {
     var citeStrs = [];
     for (var i = 0; i < parsed.citations.length; i++) {
@@ -876,17 +901,20 @@ function wlCiteRoundTrip(parsed, originalText) {
       } else {
         citeStrs.push(c.volume + " " + c.reporter + " " + c.page);
       }
+      if (!pinPlaced && parsed.pinAfter === i) {
+        citeStrs.push(pinToken);
+        pinPlaced = true;
+      }
     }
     recomposed += ', ' + citeStrs.join(", ");
   }
+  if (!pinPlaced) recomposed += ', at ' + parsed.pin;
 
-  // Pin (locator)
-  if (parsed.pin) recomposed += ', at ' + parsed.pin;
-
-  // Parenthetical
+  // Parenthetical: court + full date text (WL/enhanced forms) or year, then optional suffix
   var parenParts = [];
   if (parsed.court) parenParts.push(parsed.court.replace(/,$/, ''));
-  if (parsed.year) parenParts.push(parsed.year);
+  var dateToken = parsed.dateText || parsed.year;
+  if (dateToken) parenParts.push(dateToken);
   if (parsed.parentheticalSuffix) parenParts.push(parsed.parentheticalSuffix);
   if (parenParts.length > 0) {
     // Texas form: (court year, suffix) - comma only before suffix
@@ -1079,7 +1107,7 @@ var wlProfIntermediateAppellateMap = {
   "michigan": "Mich. Ct. App.",
   "ohio": "Ohio Ct. App.",
   "arizona": "Ariz. Ct. App.",
-  "colorado": "Colo. Ct. App.",
+  "colorado": "Colo. App.",
   "iowa": "Iowa Ct. App.",
   "kansas": "Kan. Ct. App.",
   "kentucky": "Ky. Ct. App.",
@@ -1405,6 +1433,69 @@ var wlProfCourtTable = [
       return { system: "state", level: "intermediate", state: state, circuit: null, district: null, bluebook: bluebook, confidence: "table" };
     }
   },
+  // State court lines added for the court-table backlog. Every pattern is full-match; a trailing
+  // district/division/county qualifier is accepted only where written out in that pattern. The qualifier
+  // is not carried into the abbreviation (same convention as Ill. App. Ct. and Cal. Ct. App.).
+  {
+    re: /^supreme court of pennsylvania(?:,\s*(?:eastern|middle|western)\s+district)?$/,
+    res: { system: "state", level: "supreme", state: "PA", circuit: null, district: null, bluebook: "Pa.", confidence: "table" }
+  },
+  {
+    re: /^superior court of pennsylvania$/,
+    res: { system: "state", level: "intermediate", state: "PA", circuit: null, district: null, bluebook: "Pa. Super. Ct.", confidence: "table" }
+  },
+  {
+    re: /^commonwealth court of pennsylvania$/,
+    res: { system: "state", level: "intermediate", state: "PA", circuit: null, district: null, bluebook: "Pa. Commw. Ct.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of ohio(?:,\s*(?:1st|2nd|3rd|[4-9]th|1[0-2]th|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth)\s+district(?:,\s*[a-z]+(?:\s+[a-z]+)?\s+county)?)?$/,
+    res: { system: "state", level: "intermediate", state: "OH", circuit: null, district: null, bluebook: "Ohio Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^district court of appeal of florida(?:,\s*(?:1st|2nd|3rd|[4-6]th|first|second|third|fourth|fifth|sixth)\s+district)?$/,
+    res: { system: "state", level: "intermediate", state: "FL", circuit: null, district: null, bluebook: "Fla. Dist. Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^superior court of new jersey, appellate division$/,
+    res: { system: "state", level: "intermediate", state: "NJ", circuit: null, district: null, bluebook: "N.J. Super. Ct. App. Div.", confidence: "table" }
+  },
+  {
+    re: /^court of appeal of louisiana(?:,\s*(?:1st|2nd|3rd|[4-5]th|first|second|third|fourth|fifth)\s+circuit)?$/,
+    res: { system: "state", level: "intermediate", state: "LA", circuit: null, district: null, bluebook: "La. Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of virginia$/,
+    res: { system: "state", level: "intermediate", state: "VA", circuit: null, district: null, bluebook: "Va. Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^court of special appeals of maryland$/,
+    res: { system: "state", level: "intermediate", state: "MD", circuit: null, district: null, bluebook: "Md. Ct. Spec. App.", confidence: "table" }
+  },
+  {
+    re: /^appellate court of connecticut$/,
+    res: { system: "state", level: "intermediate", state: "CT", circuit: null, district: null, bluebook: "Conn. App. Ct.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of tennessee(?:,\s*at\s+(?:nashville|knoxville|jackson))?$/,
+    res: { system: "state", level: "intermediate", state: "TN", circuit: null, district: null, bluebook: "Tenn. Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^court of criminal appeals of tennessee(?:,\s*at\s+(?:nashville|knoxville|jackson))?$/,
+    res: { system: "state", level: "intermediate", state: "TN", circuit: null, district: null, bluebook: "Tenn. Crim. App.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of missouri,\s*(?:eastern|western|southern)\s+district$/,
+    res: { system: "state", level: "intermediate", state: "MO", circuit: null, district: null, bluebook: "Mo. Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of washington,\s*division\s+(?:1|2|3|one|two|three)$/,
+    res: { system: "state", level: "intermediate", state: "WA", circuit: null, district: null, bluebook: "Wash. Ct. App.", confidence: "table" }
+  },
+  {
+    re: /^court of appeals of arizona,\s*division\s+(?:1|2|one|two)$/,
+    res: { system: "state", level: "intermediate", state: "AZ", circuit: null, district: null, bluebook: "Ariz. Ct. App.", confidence: "table" }
+  },
   {
     re: /^united states bankruptcy court for the (.+)$/,
     res: function(m) {
@@ -1530,6 +1621,7 @@ var wlSvcLimits = {
 
 function wlSvcClean(s) {
   if (s == null) return "";
+  if (typeof s !== "string") return "";
   return s
     .replace(wlSvcWatermarkRe, "")
     .replace(wlSvcNbspRe, " ")
@@ -1538,22 +1630,48 @@ function wlSvcClean(s) {
     .normalize("NFC");
 }
 
+// Fixed format options sent on every request; also the echo-check expectations.
+var wlSvcFixedOptions = {
+  underline: "false",
+  bold: "false",
+  italicize: "false",
+  subStyle: "LegalBriefs"
+};
+
+// One source of truth for a request's format options: the URL query and `expect` both derive from it.
+function wlSvcFormatOptions(history, parallelCiteRule) {
+  return {
+    history: history,
+    parallelCiteRule: parallelCiteRule,
+    subStyle: wlSvcFixedOptions.subStyle,
+    underline: wlSvcFixedOptions.underline,
+    bold: wlSvcFixedOptions.bold,
+    italicize: wlSvcFixedOptions.italicize
+  };
+}
+
+function wlSvcFormatQuery(o) {
+  return "contextData=(sc.Default)&underline=" + o.underline + "&bold=" + o.bold + "&italicize=" + o.italicize +
+    "&subStyle=" + o.subStyle + "&history=" + o.history + "&parallelCiteRule=" + o.parallelCiteRule;
+}
+
 function wlSvcBuildRequests(config, secrets, profile) {
   if (!config || !config.guid || !config.relatedInfoHost) return [];
   if (!secrets || !secrets.pageEventId || !secrets.resourceToken) return [];
   if (!/^I[0-9a-f]{32}$/.test(config.guid)) return [];
 
   var base = "https://1.next.westlaw.com/RelatedInfo/v2/citestyles/" + config.guid;
-  var commonOpts = "contextData=(sc.Default)&underline=false&bold=false&italicize=false&subStyle=LegalBriefs";
+  var optsA = wlSvcFormatOptions("true", wlSvcRecipes.citationFormA);
+  var optsB = wlSvcFormatOptions("false", wlSvcRecipes.citationFormB);
 
   var styleIdsA = profile === "texas" ? ["texas", "standard"] : ["standard"];
 
-  var urlA = base + "?styleIDs=" + styleIdsA[0] + "&" + commonOpts + "&history=true&parallelCiteRule=" + wlSvcRecipes.citationFormA;
+  var urlA = base + "?styleIDs=" + styleIdsA[0] + "&" + wlSvcFormatQuery(optsA);
   if (styleIdsA.length > 1) {
     urlA += "&styleIDs=" + styleIdsA[1];
   }
 
-  var urlB = base + "?styleIDs=standard&styleIDs=westlaw&" + commonOpts + "&history=false&parallelCiteRule=" + wlSvcRecipes.citationFormB;
+  var urlB = base + "?styleIDs=standard&styleIDs=westlaw&" + wlSvcFormatQuery(optsB);
 
   var headers = {
     "X-Requested-With": "XMLHttpRequest",
@@ -1564,8 +1682,8 @@ function wlSvcBuildRequests(config, secrets, profile) {
   };
 
   return [
-    { label: "A", url: urlA, headers: headers, styleIds: styleIdsA },
-    { label: "B", url: urlB, headers: headers, styleIds: ["standard", "westlaw"] }
+    { label: "A", url: urlA, headers: headers, styleIds: styleIdsA, expect: optsA },
+    { label: "B", url: urlB, headers: headers, styleIds: ["standard", "westlaw"], expect: optsB }
   ];
 }
 
@@ -1705,16 +1823,60 @@ async function wlSvcFetchAll(requests, deps) {
   return results;
 }
 
-function wlSvcReadEnvelope(json, wantedStyleIds) {
+function wlSvcIsObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function wlSvcNormalizeEcho(v) {
+  return String(v).trim().toLowerCase();
+}
+
+// Returns the first `expect` key whose echoed value is present and differs, or "" if none.
+// Absent (undefined/null) echo keys are not failures: the live envelope may not echo them.
+function wlSvcFindEchoMismatch(echoedRequest, expect) {
+  if (!wlSvcIsObject(expect)) return "";
+  for (var key in expect) {
+    if (!Object.prototype.hasOwnProperty.call(expect, key)) continue;
+    if (!Object.prototype.hasOwnProperty.call(echoedRequest, key)) continue;
+    var echoed = echoedRequest[key];
+    if (echoed === undefined || echoed === null) continue;
+    if (wlSvcNormalizeEcho(echoed) !== wlSvcNormalizeEcho(expect[key])) return key;
+  }
+  return "";
+}
+
+function wlSvcFormText(form) {
+  if (!wlSvcIsObject(form.text)) return "";
+  var plain = form.text["text/plain"];
+  return typeof plain === "string" ? wlSvcClean(plain) : "";
+}
+
+// Reads a citestyles envelope. Never throws.
+// `expect` (optional) is the request's format-option map; echoed options that contradict it make the
+// style unusable: the style is OMITTED from `styles` and `echo-mismatch:<styleId>:<key>` is recorded
+// (key names only, never option values), so consumers see neither a missing-style duplicate nor bad text.
+// A style with neither a long nor an enhanced form is kept (long: null) and flagged `missing-form:<id>:long`.
+function wlSvcReadEnvelope(json, wantedStyleIds, expect) {
   var reviewReasons = [];
   var styles = {};
   var seenStyleIds = {};
+  var rejectedStyleIds = {};
 
-  var responses = json.responses || [];
+  if (!wlSvcIsObject(json) || !Array.isArray(json.responses) || !Array.isArray(wantedStyleIds)) {
+    return { ok: false, styles: styles, reviewReasons: ["malformed-envelope"] };
+  }
+
+  var malformed = false;
+  var responses = json.responses;
   for (var i = 0; i < responses.length; i++) {
     var resp = responses[i];
-    var req = resp.request || {};
-    var styleId = req.styleId || "";
+    if (!wlSvcIsObject(resp)) {
+      malformed = true;
+      continue;
+    }
+    var req = wlSvcIsObject(resp.request) ? resp.request : {};
+    var styleId = typeof req.styleId === "string" ? req.styleId : "";
+    if (styleId === "") continue;
 
     if (seenStyleIds[styleId]) {
       reviewReasons.push("duplicate-style:" + styleId);
@@ -1726,25 +1888,38 @@ function wlSvcReadEnvelope(json, wantedStyleIds) {
       continue;
     }
 
-    var forms = resp.forms || [];
+    var mismatchKey = wlSvcFindEchoMismatch(req, expect);
+    if (mismatchKey) {
+      reviewReasons.push("echo-mismatch:" + styleId + ":" + mismatchKey);
+      rejectedStyleIds[styleId] = true;
+      continue;
+    }
+
+    var forms = Array.isArray(resp.forms) ? resp.forms : [];
     var longText = null;
     var shorts = [];
     var enhanced = null;
 
     for (var f = 0; f < forms.length; f++) {
       var form = forms[f];
-      var fname = form.name || "unknown";
+      if (!wlSvcIsObject(form)) {
+        malformed = true;
+        continue;
+      }
+      var fname = form.name;
+      var text = wlSvcFormText(form);
 
       if (fname === "long") {
-        var plainText = (form.text && form.text["text/plain"]) || "";
-        longText = wlSvcClean(plainText);
+        if (text) longText = text;
       } else if (fname === "short") {
-        var shortText = (form.text && form.text["text/plain"]) || "";
-        shorts.push(wlSvcClean(shortText));
+        shorts.push(text);
       } else if (fname === "enhanced") {
-        var enhText = (form.text && form.text["text/plain"]) || "";
-        enhanced = wlSvcClean(enhText);
+        if (text) enhanced = text;
       }
+    }
+
+    if (longText === null && enhanced === null) {
+      reviewReasons.push("missing-form:" + styleId + ":long");
     }
 
     styles[styleId] = {
@@ -1755,8 +1930,12 @@ function wlSvcReadEnvelope(json, wantedStyleIds) {
     };
   }
 
+  if (malformed) {
+    reviewReasons.push("malformed-envelope");
+  }
+
   for (var w = 0; w < wantedStyleIds.length; w++) {
-    if (!styles[wantedStyleIds[w]]) {
+    if (!styles[wantedStyleIds[w]] && !rejectedStyleIds[wantedStyleIds[w]]) {
       reviewReasons.push("missing-style:" + wantedStyleIds[w]);
     }
   }
@@ -2931,6 +3110,21 @@ function wlTrDetectWeb(doc, url) {
   return false;
 }
 
+function wlTrReadService(result, req) {
+  if (result.category !== "ok" || !result.json) {
+    return { svc: { category: result.category, envelope: null }, echoReasons: [] };
+  }
+  var envelope = wlSvcReadEnvelope(result.json, req.styleIds, req.expect);
+  var echoReasons = [];
+  for (var i = 0; i < envelope.reviewReasons.length; i++) {
+    if (envelope.reviewReasons[i].indexOf("echo-mismatch:") === 0) echoReasons.push(envelope.reviewReasons[i]);
+  }
+  if (echoReasons.length > 0) {
+    return { svc: { category: "echo-mismatch", envelope: null }, echoReasons: echoReasons };
+  }
+  return { svc: { category: "ok", envelope: envelope }, echoReasons: [] };
+}
+
 async function wlTrDoWeb(doc, url) {
   // 1. Capture page context + DOM facts FIRST (frozen)
   var frozenContext = wlDomReadPageContext(doc, url);
@@ -2950,6 +3144,7 @@ async function wlTrDoWeb(doc, url) {
   var svcA = { category: "none", envelope: null };
   var svcB = { category: "none", envelope: null };
   var identityChanged = false;
+  var echoReasons = [];
 
   if (capability === "service" && frozenContext.secrets && frozenGuid) {
     var reqs = wlSvcBuildRequests(
@@ -2965,20 +3160,16 @@ async function wlTrDoWeb(doc, url) {
         clearTimeout: clearTimeout
       });
 
-      // Read envelopes
+      // Read envelopes; an echoed format option that contradicts the request makes that envelope unusable
       if (results[0]) {
-        if (results[0].category === "ok" && results[0].json) {
-          svcA = { category: "ok", envelope: wlSvcReadEnvelope(results[0].json, profile === "texas" ? ["texas", "standard"] : ["standard"]) };
-        } else {
-          svcA = { category: results[0].category, envelope: null };
-        }
+        var readA = wlTrReadService(results[0], reqs[0]);
+        svcA = readA.svc;
+        echoReasons = echoReasons.concat(readA.echoReasons);
       }
       if (results[1]) {
-        if (results[1].category === "ok" && results[1].json) {
-          svcB = { category: "ok", envelope: wlSvcReadEnvelope(results[1].json, ["standard", "westlaw"]) };
-        } else {
-          svcB = { category: results[1].category, envelope: null };
-        }
+        var readB = wlTrReadService(results[1], reqs[1]);
+        svcB = readB.svc;
+        echoReasons = echoReasons.concat(readB.echoReasons);
       }
 
       // Re-read page context after requests — check GUID change
@@ -3010,6 +3201,12 @@ async function wlTrDoWeb(doc, url) {
       svcB: svcB,
       profile: profile
     });
+  }
+
+  if (!identityChanged) {
+    for (var e = 0; e < echoReasons.length; e++) {
+      if (rec.reviewReasons.indexOf(echoReasons[e]) === -1) rec.reviewReasons.push(echoReasons[e]);
+    }
   }
 
   // 6. Map to Zotero fields

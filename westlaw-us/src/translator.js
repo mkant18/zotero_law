@@ -22,6 +22,21 @@ function wlTrDetectWeb(doc, url) {
   return false;
 }
 
+function wlTrReadService(result, req) {
+  if (result.category !== "ok" || !result.json) {
+    return { svc: { category: result.category, envelope: null }, echoReasons: [] };
+  }
+  var envelope = wlSvcReadEnvelope(result.json, req.styleIds, req.expect);
+  var echoReasons = [];
+  for (var i = 0; i < envelope.reviewReasons.length; i++) {
+    if (envelope.reviewReasons[i].indexOf("echo-mismatch:") === 0) echoReasons.push(envelope.reviewReasons[i]);
+  }
+  if (echoReasons.length > 0) {
+    return { svc: { category: "echo-mismatch", envelope: null }, echoReasons: echoReasons };
+  }
+  return { svc: { category: "ok", envelope: envelope }, echoReasons: [] };
+}
+
 async function wlTrDoWeb(doc, url) {
   // 1. Capture page context + DOM facts FIRST (frozen)
   var frozenContext = wlDomReadPageContext(doc, url);
@@ -41,6 +56,7 @@ async function wlTrDoWeb(doc, url) {
   var svcA = { category: "none", envelope: null };
   var svcB = { category: "none", envelope: null };
   var identityChanged = false;
+  var echoReasons = [];
 
   if (capability === "service" && frozenContext.secrets && frozenGuid) {
     var reqs = wlSvcBuildRequests(
@@ -56,20 +72,16 @@ async function wlTrDoWeb(doc, url) {
         clearTimeout: clearTimeout
       });
 
-      // Read envelopes
+      // Read envelopes; an echoed format option that contradicts the request makes that envelope unusable
       if (results[0]) {
-        if (results[0].category === "ok" && results[0].json) {
-          svcA = { category: "ok", envelope: wlSvcReadEnvelope(results[0].json, profile === "texas" ? ["texas", "standard"] : ["standard"]) };
-        } else {
-          svcA = { category: results[0].category, envelope: null };
-        }
+        var readA = wlTrReadService(results[0], reqs[0]);
+        svcA = readA.svc;
+        echoReasons = echoReasons.concat(readA.echoReasons);
       }
       if (results[1]) {
-        if (results[1].category === "ok" && results[1].json) {
-          svcB = { category: "ok", envelope: wlSvcReadEnvelope(results[1].json, ["standard", "westlaw"]) };
-        } else {
-          svcB = { category: results[1].category, envelope: null };
-        }
+        var readB = wlTrReadService(results[1], reqs[1]);
+        svcB = readB.svc;
+        echoReasons = echoReasons.concat(readB.echoReasons);
       }
 
       // Re-read page context after requests — check GUID change
@@ -101,6 +113,12 @@ async function wlTrDoWeb(doc, url) {
       svcB: svcB,
       profile: profile
     });
+  }
+
+  if (!identityChanged) {
+    for (var e = 0; e < echoReasons.length; e++) {
+      if (rec.reviewReasons.indexOf(echoReasons[e]) === -1) rec.reviewReasons.push(echoReasons[e]);
+    }
   }
 
   // 6. Map to Zotero fields

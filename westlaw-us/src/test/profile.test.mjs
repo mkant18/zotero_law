@@ -630,3 +630,127 @@ describe("P6 - word-form ordinals for Illinois Appellate Court", function() {
     assert.equal(r.bluebook, "Ill. App. Ct.");
   });
 });
+
+describe("W3 - state court-table backlog", function() {
+  var positives = [
+    ["Supreme Court of Pennsylvania.", "supreme", "PA", "Pa."],
+    ["Supreme Court of Pennsylvania, Eastern District.", "supreme", "PA", "Pa."],
+    ["Supreme Court of Pennsylvania, Western District.", "supreme", "PA", "Pa."],
+    ["Superior Court of Pennsylvania.", "intermediate", "PA", "Pa. Super. Ct."],
+    ["Commonwealth Court of Pennsylvania.", "intermediate", "PA", "Pa. Commw. Ct."],
+    ["Supreme Court of Ohio.", "supreme", "OH", "Ohio"],
+    ["Court of Appeals of Ohio.", "intermediate", "OH", "Ohio Ct. App."],
+    ["Court of Appeals of Ohio, Eighth District.", "intermediate", "OH", "Ohio Ct. App."],
+    ["Court of Appeals of Ohio, Eighth District, Cuyahoga County.", "intermediate", "OH", "Ohio Ct. App."],
+    ["Court of Appeals of Ohio, 12th District, Butler County.", "intermediate", "OH", "Ohio Ct. App."],
+    ["Supreme Court of Florida.", "supreme", "FL", "Fla."],
+    ["District Court of Appeal of Florida, Third District.", "intermediate", "FL", "Fla. Dist. Ct. App."],
+    ["District Court of Appeal of Florida, 6th District.", "intermediate", "FL", "Fla. Dist. Ct. App."],
+    ["District Court of Appeal of Florida.", "intermediate", "FL", "Fla. Dist. Ct. App."],
+    ["Court of Appeals of Michigan.", "intermediate", "MI", "Mich. Ct. App."],
+    ["Supreme Court of New Jersey.", "supreme", "NJ", "N.J."],
+    ["Superior Court of New Jersey, Appellate Division.", "intermediate", "NJ", "N.J. Super. Ct. App. Div."],
+    ["Court of Appeals of Georgia.", "intermediate", "GA", "Ga. Ct. App."],
+    ["Court of Appeals of North Carolina.", "intermediate", "NC", "N.C. Ct. App."],
+    ["Appeals Court of Massachusetts.", "intermediate", "MA", "Mass. App. Ct."],
+    ["Court of Appeals of Washington, Division 1.", "intermediate", "WA", "Wash. Ct. App."],
+    ["Court of Appeals of Washington, Division Two.", "intermediate", "WA", "Wash. Ct. App."],
+    ["Court of Appeals of Arizona, Division 1.", "intermediate", "AZ", "Ariz. Ct. App."],
+    ["Court of Appeals of Arizona.", "intermediate", "AZ", "Ariz. Ct. App."],
+    ["Court of Appeals of Colorado.", "intermediate", "CO", "Colo. App."],
+    ["Court of Appeals of Minnesota.", "intermediate", "MN", "Minn. Ct. App."],
+    ["Court of Appeals of Missouri, Eastern District.", "intermediate", "MO", "Mo. Ct. App."],
+    ["Court of Appeals of Indiana.", "intermediate", "IN", "Ind. Ct. App."],
+    ["Court of Appeals of Tennessee.", "intermediate", "TN", "Tenn. Ct. App."],
+    ["Court of Appeals of Tennessee, at Nashville.", "intermediate", "TN", "Tenn. Ct. App."],
+    ["Court of Criminal Appeals of Tennessee, at Knoxville.", "intermediate", "TN", "Tenn. Crim. App."],
+    ["Court of Criminal Appeals of Tennessee.", "intermediate", "TN", "Tenn. Crim. App."],
+    ["Court of Appeal of Louisiana, Fourth Circuit.", "intermediate", "LA", "La. Ct. App."],
+    ["Court of Appeals of Virginia.", "intermediate", "VA", "Va. Ct. App."],
+    ["Court of Appeals of Wisconsin.", "intermediate", "WI", "Wis. Ct. App."],
+    ["Court of Special Appeals of Maryland.", "intermediate", "MD", "Md. Ct. Spec. App."],
+    ["Appellate Court of Maryland.", "intermediate", "MD", "Md. App. Ct."],
+    ["Appellate Court of Connecticut.", "intermediate", "CT", "Conn. App. Ct."]
+  ];
+  positives.forEach(function(row) {
+    it("classifies " + row[0], function() {
+      var r = wlProfClassifyCourt(row[0]);
+      assert.equal(r.system, "state");
+      assert.equal(r.level, row[1]);
+      assert.equal(r.state, row[2]);
+      assert.equal(r.bluebook, row[3]);
+      assert.equal(r.confidence, "table");
+    });
+  });
+
+  var unknownLines = [
+    // historical / unlisted qualifiers must never fall through to a prefix match
+    "Supreme Court of Pennsylvania, Northern District.",
+    "Supreme Court of Pennsylvania, Eastern District, Philadelphia County.",
+    "Superior Court of Pennsylvania, Eastern District.",
+    "Commonwealth Court of Pennsylvania, Harrisburg.",
+    "Court of Common Pleas of Pennsylvania.",
+    "Court of Appeals of Ohio, Thirteenth District.",
+    "Court of Appeals of Ohio, Eighth District, Cuyahoga County, Juvenile Division.",
+    "Court of Appeals of Ohio, Eighth Circuit.",
+    "Court of Appeals of Ohio, Eighth District, Cuyahoga.",
+    "Supreme Court of Ohio, Franklin County Municipal Court.",
+    "District Court of Appeal of Florida, Seventh District.",
+    "District Court of Appeal of Florida, Third District, Miami-Dade County.",
+    "Superior Court of New Jersey, Appellate Division, Somerset County.",
+    "Superior Court of New Jersey, Law Division.",
+    "Superior Court of New Jersey.",
+    "Court of Appeal of Louisiana, Sixth Circuit.",
+    "Court of Appeals of Virginia, Richmond.",
+    "Court of Special Appeals of Maryland, September Term.",
+    "Appellate Court of Connecticut, Judicial District of Hartford.",
+    "Court of Appeals of Tennessee, at Memphis.",
+    "Court of Criminal Appeals of Tennessee, Eastern Section.",
+    "Court of Appeals of Missouri, Northern District.",
+    "Court of Appeals of Washington, Division 4.",
+    "Court of Appeals of Arizona, Division 3.",
+    "Court of Appeals of Washington, Division 1, Seattle."
+  ];
+  unknownLines.forEach(function(line) {
+    it("keeps near-miss unknown: " + line, function() {
+      var r = wlProfClassifyCourt(line);
+      assert.equal(r.system, "unknown");
+      assert.equal(r.bluebook, null);
+      assert.equal(r.confidence, "none");
+    });
+  });
+
+  it("Texas intermediate courts are unchanged (still texas profile)", function() {
+    var r = wlProfClassifyCourt("Court of Appeals of Texas, Beaumont.");
+    assert.equal(r.state, "TX");
+    assert.equal(r.bluebook, "Tex. App.\u2014Beaumont");
+    assert.equal(wlProfSelectProfile(r), "texas");
+  });
+  it("new PA/OH/FL classifications keep the standard profile", function() {
+    ["Superior Court of Pennsylvania.", "Court of Appeals of Ohio, Eighth District, Cuyahoga County.",
+      "District Court of Appeal of Florida, Third District."].forEach(function(line) {
+      assert.equal(wlProfSelectProfile(wlProfClassifyCourt(line)), "standard");
+    });
+  });
+
+  it("omission policy: regional reporter keeps new state court authority", function() {
+    var pa = wlProfClassifyCourt("Commonwealth Court of Pennsylvania.");
+    assert.equal(wlProfCourtForCitation(pa, { reporter: "A.3d" }, null).court, "Pa. Commw. Ct.");
+    var oh = wlProfClassifyCourt("Court of Appeals of Ohio, Eighth District, Cuyahoga County.");
+    var r = wlProfCourtForCitation(oh, { reporter: "N.E.3d" }, null);
+    assert.equal(r.court, "Ohio Ct. App.");
+    assert.equal(r.reviewReasons.length, 0);
+  });
+  it("omission policy: classification fills court when no service court; service disagreement flags conflict", function() {
+    var fl = wlProfClassifyCourt("District Court of Appeal of Florida, Third District.");
+    assert.equal(wlProfCourtForCitation(fl, { reporter: "So. 3d" }, null).court, "Fla. Dist. Ct. App.");
+    var conflict = wlProfCourtForCitation(fl, { reporter: "So. 3d" }, "Fla.");
+    assert.equal(conflict.court, "Fla.");
+    assert.deepEqual(Array.from(conflict.reviewReasons), ["court-conflict"]);
+  });
+  it("Colorado Court of Appeals uses Bluebook T1 Colo. App., not Colo. Ct. App.", function() {
+    var r = wlProfClassifyCourt("Court of Appeals of Colorado.");
+    assert.notEqual(r.bluebook, "Colo. Ct. App.");
+    assert.equal(r.bluebook, "Colo. App.");
+  });
+});

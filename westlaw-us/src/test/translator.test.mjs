@@ -409,6 +409,39 @@ describe("translator - doWeb A 401 → metadata-only", function() {
   });
 });
 
+describe("translator - doWeb envelope echo mismatch", function() {
+  it("wrong echoed parallelCiteRule → review reason, metadata-only item from DOM facts, no throw", async function() {
+    var doc = makeSanchezDoc();
+    var mismatched = {
+      status: 200,
+      body: JSON.stringify({
+        responses: [
+          {
+            request: { styleId: "standard", parallelCiteRule: "TEST-WRONG-RULE" },
+            forms: [
+              { name: "long", text: { "text/plain": "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999)" } }
+            ]
+          }
+        ]
+      }),
+      headers: { "content-type": "application/json" }
+    };
+    var result = await runDoWeb(doc, mismatched);
+
+    var fz = result.fz;
+    assert.equal(fz.items.length, 1, "item still saved");
+    var item = fz.items[0];
+    assert.equal(item._completeCalled, true);
+    assert.equal(item.caseName, "Sanchez v. Liggett & Myers, Inc.", "case name from DOM header");
+    assert.equal(item.reporter, "F.3d", "citation from DOM facts");
+    assert.ok(item.extra.indexOf("echo-mismatch:standard:parallelCiteRule") !== -1, "review reason recorded");
+    assert.equal(item.extra.indexOf("TEST-WRONG-RULE"), -1, "option value never recorded");
+    assert.ok(item.tags.some(function(t) { return t.tag === "Westlaw: needs citation review"; }), "review tag");
+    assert.ok(fz.debugStrings.some(function(d) { return d.indexOf("A=echo-mismatch") !== -1 && d.indexOf("status=metadata-only") !== -1; }),
+      "debug shows bounded category and metadata-only status");
+  });
+});
+
 describe("translator - doWeb GUID change → identity-changed", function() {
   it("handles identity-changed when GUID differs after requests", async function() {
     var doc = makeSanchezDoc({ guid: "I1234567890abcdef1234567890abcdef" });

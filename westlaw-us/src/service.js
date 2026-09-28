@@ -16,6 +16,7 @@ var wlSvcLimits = {
 
 function wlSvcClean(s) {
   if (s == null) return "";
+  if (typeof s !== "string") return "";
   return s
     .replace(wlSvcWatermarkRe, "")
     .replace(wlSvcNbspRe, " ")
@@ -24,22 +25,48 @@ function wlSvcClean(s) {
     .normalize("NFC");
 }
 
+// Fixed format options sent on every request; also the echo-check expectations.
+var wlSvcFixedOptions = {
+  underline: "false",
+  bold: "false",
+  italicize: "false",
+  subStyle: "LegalBriefs"
+};
+
+// One source of truth for a request's format options: the URL query and `expect` both derive from it.
+function wlSvcFormatOptions(history, parallelCiteRule) {
+  return {
+    history: history,
+    parallelCiteRule: parallelCiteRule,
+    subStyle: wlSvcFixedOptions.subStyle,
+    underline: wlSvcFixedOptions.underline,
+    bold: wlSvcFixedOptions.bold,
+    italicize: wlSvcFixedOptions.italicize
+  };
+}
+
+function wlSvcFormatQuery(o) {
+  return "contextData=(sc.Default)&underline=" + o.underline + "&bold=" + o.bold + "&italicize=" + o.italicize +
+    "&subStyle=" + o.subStyle + "&history=" + o.history + "&parallelCiteRule=" + o.parallelCiteRule;
+}
+
 function wlSvcBuildRequests(config, secrets, profile) {
   if (!config || !config.guid || !config.relatedInfoHost) return [];
   if (!secrets || !secrets.pageEventId || !secrets.resourceToken) return [];
   if (!/^I[0-9a-f]{32}$/.test(config.guid)) return [];
 
   var base = "https://1.next.westlaw.com/RelatedInfo/v2/citestyles/" + config.guid;
-  var commonOpts = "contextData=(sc.Default)&underline=false&bold=false&italicize=false&subStyle=LegalBriefs";
+  var optsA = wlSvcFormatOptions("true", wlSvcRecipes.citationFormA);
+  var optsB = wlSvcFormatOptions("false", wlSvcRecipes.citationFormB);
 
   var styleIdsA = profile === "texas" ? ["texas", "standard"] : ["standard"];
 
-  var urlA = base + "?styleIDs=" + styleIdsA[0] + "&" + commonOpts + "&history=true&parallelCiteRule=" + wlSvcRecipes.citationFormA;
+  var urlA = base + "?styleIDs=" + styleIdsA[0] + "&" + wlSvcFormatQuery(optsA);
   if (styleIdsA.length > 1) {
     urlA += "&styleIDs=" + styleIdsA[1];
   }
 
-  var urlB = base + "?styleIDs=standard&styleIDs=westlaw&" + commonOpts + "&history=false&parallelCiteRule=" + wlSvcRecipes.citationFormB;
+  var urlB = base + "?styleIDs=standard&styleIDs=westlaw&" + wlSvcFormatQuery(optsB);
 
   var headers = {
     "X-Requested-With": "XMLHttpRequest",
@@ -50,8 +77,8 @@ function wlSvcBuildRequests(config, secrets, profile) {
   };
 
   return [
-    { label: "A", url: urlA, headers: headers, styleIds: styleIdsA },
-    { label: "B", url: urlB, headers: headers, styleIds: ["standard", "westlaw"] }
+    { label: "A", url: urlA, headers: headers, styleIds: styleIdsA, expect: optsA },
+    { label: "B", url: urlB, headers: headers, styleIds: ["standard", "westlaw"], expect: optsB }
   ];
 }
 
@@ -191,16 +218,60 @@ async function wlSvcFetchAll(requests, deps) {
   return results;
 }
 
-function wlSvcReadEnvelope(json, wantedStyleIds) {
+function wlSvcIsObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function wlSvcNormalizeEcho(v) {
+  return String(v).trim().toLowerCase();
+}
+
+// Returns the first `expect` key whose echoed value is present and differs, or "" if none.
+// Absent (undefined/null) echo keys are not failures: the live envelope may not echo them.
+function wlSvcFindEchoMismatch(echoedRequest, expect) {
+  if (!wlSvcIsObject(expect)) return "";
+  for (var key in expect) {
+    if (!Object.prototype.hasOwnProperty.call(expect, key)) continue;
+    if (!Object.prototype.hasOwnProperty.call(echoedRequest, key)) continue;
+    var echoed = echoedRequest[key];
+    if (echoed === undefined || echoed === null) continue;
+    if (wlSvcNormalizeEcho(echoed) !== wlSvcNormalizeEcho(expect[key])) return key;
+  }
+  return "";
+}
+
+function wlSvcFormText(form) {
+  if (!wlSvcIsObject(form.text)) return "";
+  var plain = form.text["text/plain"];
+  return typeof plain === "string" ? wlSvcClean(plain) : "";
+}
+
+// Reads a citestyles envelope. Never throws.
+// `expect` (optional) is the request's format-option map; echoed options that contradict it make the
+// style unusable: the style is OMITTED from `styles` and `echo-mismatch:<styleId>:<key>` is recorded
+// (key names only, never option values), so consumers see neither a missing-style duplicate nor bad text.
+// A style with neither a long nor an enhanced form is kept (long: null) and flagged `missing-form:<id>:long`.
+function wlSvcReadEnvelope(json, wantedStyleIds, expect) {
   var reviewReasons = [];
   var styles = {};
   var seenStyleIds = {};
+  var rejectedStyleIds = {};
 
-  var responses = json.responses || [];
+  if (!wlSvcIsObject(json) || !Array.isArray(json.responses) || !Array.isArray(wantedStyleIds)) {
+    return { ok: false, styles: styles, reviewReasons: ["malformed-envelope"] };
+  }
+
+  var malformed = false;
+  var responses = json.responses;
   for (var i = 0; i < responses.length; i++) {
     var resp = responses[i];
-    var req = resp.request || {};
-    var styleId = req.styleId || "";
+    if (!wlSvcIsObject(resp)) {
+      malformed = true;
+      continue;
+    }
+    var req = wlSvcIsObject(resp.request) ? resp.request : {};
+    var styleId = typeof req.styleId === "string" ? req.styleId : "";
+    if (styleId === "") continue;
 
     if (seenStyleIds[styleId]) {
       reviewReasons.push("duplicate-style:" + styleId);
@@ -212,25 +283,38 @@ function wlSvcReadEnvelope(json, wantedStyleIds) {
       continue;
     }
 
-    var forms = resp.forms || [];
+    var mismatchKey = wlSvcFindEchoMismatch(req, expect);
+    if (mismatchKey) {
+      reviewReasons.push("echo-mismatch:" + styleId + ":" + mismatchKey);
+      rejectedStyleIds[styleId] = true;
+      continue;
+    }
+
+    var forms = Array.isArray(resp.forms) ? resp.forms : [];
     var longText = null;
     var shorts = [];
     var enhanced = null;
 
     for (var f = 0; f < forms.length; f++) {
       var form = forms[f];
-      var fname = form.name || "unknown";
+      if (!wlSvcIsObject(form)) {
+        malformed = true;
+        continue;
+      }
+      var fname = form.name;
+      var text = wlSvcFormText(form);
 
       if (fname === "long") {
-        var plainText = (form.text && form.text["text/plain"]) || "";
-        longText = wlSvcClean(plainText);
+        if (text) longText = text;
       } else if (fname === "short") {
-        var shortText = (form.text && form.text["text/plain"]) || "";
-        shorts.push(wlSvcClean(shortText));
+        shorts.push(text);
       } else if (fname === "enhanced") {
-        var enhText = (form.text && form.text["text/plain"]) || "";
-        enhanced = wlSvcClean(enhText);
+        if (text) enhanced = text;
       }
+    }
+
+    if (longText === null && enhanced === null) {
+      reviewReasons.push("missing-form:" + styleId + ":long");
     }
 
     styles[styleId] = {
@@ -241,8 +325,12 @@ function wlSvcReadEnvelope(json, wantedStyleIds) {
     };
   }
 
+  if (malformed) {
+    reviewReasons.push("malformed-envelope");
+  }
+
   for (var w = 0; w < wantedStyleIds.length; w++) {
-    if (!styles[wantedStyleIds[w]]) {
+    if (!styles[wantedStyleIds[w]] && !rejectedStyleIds[wantedStyleIds[w]]) {
       reviewReasons.push("missing-style:" + wantedStyleIds[w]);
     }
   }

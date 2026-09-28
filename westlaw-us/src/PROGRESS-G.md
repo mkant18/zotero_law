@@ -38,3 +38,18 @@
 
 ### Test results
 - 71/71 → 101/101 → 114/114 (13 new tests added for P4/P5/P6)
+
+## W3 — state court-table backlog (ledger §5 item 2)
+- Added full-match rows to `wlProfCourtTable` (confidence `table`; qualifier text is never carried into the abbreviation, matching Ill. App. Ct./Cal. Ct. App.):
+  - PA: Supreme Court (optional Eastern/Middle/Western District) → Pa.; Superior Court → Pa. Super. Ct.; Commonwealth Court → Pa. Commw. Ct.
+  - OH: Court of Appeals, optional `<1st–12th|first–twelfth> District[, <X> County]` → Ohio Ct. App.
+  - FL: District Court of Appeal of Florida, optional 1st–6th District → Fla. Dist. Ct. App.
+  - NJ: Superior Court, Appellate Division → N.J. Super. Ct. App. Div.
+  - LA: Court of Appeal of Louisiana, optional 1st–5th Circuit → La. Ct. App.
+  - VA Va. Ct. App.; MD Court of Special Appeals → Md. Ct. Spec. App.; CT Appellate Court → Conn. App. Ct.
+  - TN: Court of Appeals → Tenn. Ct. App.; Court of Criminal Appeals → Tenn. Crim. App. (optional `at Nashville|Knoxville|Jackson`).
+  - MO Eastern/Western/Southern District; WA Division 1–3; AZ Division 1–2 (word or digit).
+- Fixed `wlProfIntermediateAppellateMap.colorado`: `Colo. Ct. App.` → `Colo. App.` (Bluebook T1).
+- Left unknown (not confident of abbreviation/Westlaw line format): Colorado division qualifiers, Wisconsin district qualifiers, Virginia city qualifiers, NJ Law/Chancery Division, Ohio/PA trial courts, Supreme Court of Appeals of West Virginia.
+- Open: district/division/circuit numbers are dropped from the abbreviation (Bluebook 10.4(b) relevance rule not modelled); `Ore.` (table) vs Bluebook `Or.` not changed; existing `Court of Appeals of Maryland` is level `intermediate` (existing test) though it is the pre-2022 high court.
+- Tests: 114 → 182 in `profile.test.mjs` (positives, near-miss unknowns, Texas/profile unchanged, omission policy).

@@ -139,8 +139,9 @@ describe('G3 Brown — first cite', () => {
   it('rendered text contains no Westlaw', () => { assertNoWestlaw(text, 'G3'); });
   it('rendered text contains no No. docket', () => { assertNoDocket(text, 'G3'); });
   it('rendered text contains no WL', () => { assertNoWL(text, 'G3'); });
-  it('status and review reasons are printed', () => {
-    console.log(`G3 status: ${rec.status}, reviewReasons: ${JSON.stringify(rec.reviewReasons)}`);
+  it('status is validated-profile with no review reasons', () => {
+    assert.equal(rec.status, 'validated-profile');
+    assert.deepEqual(rec.reviewReasons, []);
   });
 });
 
@@ -213,8 +214,13 @@ describe('G7 Example — first cite no locator → E11', () => {
     assert.equal(v.ok, true, JSON.stringify(v.problems));
   });
   it('rendered text contains no Westlaw', () => { assertNoWestlaw(text, 'G7'); });
-  it('status and review reasons are printed', () => {
-    console.log(`G7 status: ${rec.status}, reviewReasons: ${JSON.stringify(rec.reviewReasons)}`);
+  it('status is validated-profile with no review reasons (R4 round-trip fixed)', () => {
+    assert.equal(rec.status, 'validated-profile');
+    assert.deepEqual(rec.reviewReasons, []);
+    assert.ok(!rec.reviewReasons.includes('round-trip-mismatch'));
+  });
+  it('rendered first cite has no dangling "at" locator', () => {
+    assert.ok(!text.includes(', at ') && !/ at$/.test(text), `dangling "at" in: ${text}`);
   });
 });
 
@@ -236,5 +242,25 @@ describe('G7 Example — subsequent @*4 after intervening G1 → E12', () => {
       [{ id: 'G7', locator: '*4' }]
     ]);
     assert.ok(eqCite(texts[2], 'Example, 2024 WL 1234567, at *4'));
+  });
+});
+
+describe('G7 Example — Id. with new locator → Id. at *5', () => {
+  const { item } = pipeline(G7, 'G7');
+  it('cite at *4 immediately followed by cite at *5 renders Id. at *5', () => {
+    const texts = renderTexts([item, item], [
+      [{ id: 'G7', locator: '*4' }],
+      [{ id: 'G7', locator: '*5' }]
+    ]);
+    assert.ok(eqCite(texts[0], 'Example v. Sample, No. 24-123, 2024 WL 1234567, at *4 (D. Kan. Mar. 1, 2024)'));
+    assert.ok(eqCite(texts[1], 'Id. at *5'), `got: ${texts[1]}`);
+  });
+  it('no-locator first cite followed by cite at *5 renders Id. at *5', () => {
+    const texts = renderTexts([item, item], [
+      [{ id: 'G7' }],
+      [{ id: 'G7', locator: '*5' }]
+    ]);
+    assert.ok(eqCite(texts[0], 'Example v. Sample, No. 24-123, 2024 WL 1234567 (D. Kan. Mar. 1, 2024)'));
+    assert.ok(eqCite(texts[1], 'Id. at *5'), `got: ${texts[1]}`);
   });
 });
