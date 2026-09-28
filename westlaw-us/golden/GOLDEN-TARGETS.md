@@ -17,6 +17,6 @@ output alone is NOT correctness evidence.
 | G4 | NY App. Div. | `Miele v. Am. Tobacco Co., 770 N.Y.S.2d 386 (App. Div. 2003)`; alternates `2 A.D.3d 799`, `2003 WL 23099090` retained, not printed | [V] recorded standard/westReporterOnly | recorded matrix only | pending |
 | G5 | Texas App. | `Rogers v. R.J. Reynolds Tobacco Co., 761 S.W.2d 788 (Tex. App.—Beaumont 1988, writ denied)` (U+2014) | [V] texas/CAFormat/history=false; [U] texas/westReporterOnly/history=true | recorded matrix only | pending |
 | G6 | State high court | `Sindell v. Abbott Labs., 607 P.2d 924 (Cal. 1980)`; paired official `Sindell v. Abbott Labs., 26 Cal. 3d 588 (1980)` | [P] illustrative | **missing** | not reviewable until real |
-| G7 | WL-only (fictional) | `Example v. Sample, No. 24-123, 2024 WL 1234567, at *4 (D. Kan. Mar. 1, 2024)`; short `Example, 2024 WL 1234567, at *4`; `Id. at *5`; no-locator form omits `, at *4` | [S] synthetic format fixture | **missing** — real unpublished opinion required before M1 sign-off | pending (format only) |
+| G7 | WL-only (fictional) | `Example v. Sample, No. 24-123, 2024 WL 1234567, at *4 (D. Kan. Mar. 1, 2024)`; short `Example, 2024 WL 1234567, at *4`; `Id. at *5`; no-locator form omits `, at *4` | [S] synthetic format fixture | **missing** — real unpublished opinion required before M1 sign-off | [V] offline golden pipeline validated-profile (format only; real fixture still required) |
 
 M0 does not declare G3, G6, or real-WL-only coverage. A published case's alternate WL number is not a WL-only test.

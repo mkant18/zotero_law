@@ -1,44 +1,33 @@
 # Handoff — Westlaw US → Zotero build loop
 
-Last updated: end of orchestrator session 2 (2026-09-28). Branch `main`, pushed to `origin` (private `mkant18/zotero_law`).
+Last updated: end of orchestrator session 3. Branch `main`, pushed to `origin` (private `mkant18/zotero_law`).
 
 ## How the loop runs
-- Orchestrator (Opus) = reviewer + planner only. Builders = `worker` agent with model `openrouter/inclusionai/ling-3.0-flash`.
-- Read first: `westlaw-us/LEDGER.md` (status + findings), `westlaw-us/src/CONTRACT.md` (module conventions, shapes),
-  `westlaw-us/tasks/COMMON.md` (worker hard rules), plan `reports/20-ASTRA-ARCHITECTURE.md`.
-- What works with Ling: one small brief per worker, exact file allow-list, exact defect list with concrete inputs and
-  expected outputs, "never end your turn with a plan", PROGRESS-*.md line per step. Run at most 1–2 in parallel
-  (parallel runs triggered OpenRouter 402 in-flight limits).
-- Ling as *reviewer* does not work (ends with no output). The orchestrator reviews directly using probe scripts
-  (load modules with `westlaw-us/src/test/helpers/load.mjs` via a `file:///M:/…` import URL on Windows).
-- Windows: `node --test "<dir>/*.test.mjs"` (quoted glob); a bare directory argument fails.
+- **Orchestrator** (Opus 5.5) = reviewer + planner only; does not edit source.
+- **Builders** = Sonnet/Haiku via pi subagents (approved by user); supersedes prior Ling 3.0 Flash + OpenRouter setup. Builders create and edit source files.
+- **Workflow:**
+  1. Read first: `westlaw-us/LEDGER.md` (status + findings), `westlaw-us/src/CONTRACT.md` (module conventions, shapes), `westlaw-us/tasks/COMMON.md` (worker hard rules), plan `reports/20-ASTRA-ARCHITECTURE.md`.
+  2. Builders: one task per run, edit files in the allowed list only, follow CONTRACT.md conventions (no imports, ES2020 only, module exports).
+  3. Workers must run all relevant test suites before returning (no "run these tests to verify" handoffs).
+  4. Orchestrator reviews via test results + code inspection; may run additional probe scripts on accepted changes.
+- **Windows notes:** `node --test "<dir>/*.test.mjs"` (quoted glob); bare directory argument fails. Build translator: `node westlaw-us/tools/build-translator.mjs` → `dist/Westlaw Advantage US.js`.
 
-## Verify state
+## Verify state (session 3 end)
 ```
-node --test "westlaw-us/src/test/*.test.mjs"        # 475/475
-node --test "westlaw-us/m0/csl/test/*.test.mjs"     # 28/28
-node --test "westlaw-us/m0/probe/test/*.test.mjs"   # 23/23
-node --test "westlaw-us/tools/test/*.test.mjs"      # 50/50
+node --test "westlaw-us/src/test/*.test.mjs"        # 723/723 pass
+node --test "westlaw-us/m0/csl/test/*.test.mjs"     # 28/28 pass
+node --test "westlaw-us/m0/probe/test/*.test.mjs"   # 23/23 pass
+node --test "westlaw-us/tools/test/*.test.mjs"      # 50/50 pass
 node westlaw-us/tools/check-private-data.mjs        # fail=0 warn=6 (legacy tracked westlaw-samples JSON)
-node westlaw-us/tools/build-translator.mjs          # → westlaw-us/dist/Westlaw Advantage US.js
+node westlaw-us/tools/build-translator.mjs          # → westlaw-us/dist/Westlaw Advantage US.js (stable translatorID 9abca805-707d-4064-958f-e08ac37f0862)
 ```
 
-## BLOCKER at handoff
-OpenRouter key out of credits (402: "can only afford 8572 tokens … adjust the key's monthly limit"). Raise the key
-limit / add credits, or give explicit approval for a different builder model.
+## Top 3 offline items (ready to start)
+1. **Multi-pin citations:** Detect and model forms like `… 486, 490, 495 (5th Cir. 1999)`; currently flagged as round-trip-mismatch. Priority: low (rare in practice).
+2. **Unknown state courts:** Remaining 5–10 states lack intermediate appellate or trial court mappings; currently returned as unknown. List in `westlaw-us/src/PROGRESS-G.md` §5. Safe to add incrementally.
+3. **Bluebook 10.4(b) district/division:** Currently drops district/division numbers from abbreviation (e.g., `5th Cir.` instead of `5th Cir., Fourth Division`). Not modelled. Priority: user decision (CSL variant for multi-level citations?).
 
-## Next task (ready to dispatch verbatim once credits exist)
-Allowed: `westlaw-us/src/cite-parse.js`, `westlaw-us/src/test/cite-parse.test.mjs`, `westlaw-us/src/PROGRESS-A2.md`.
-R4: `wlCiteRoundTrip` for WL forms drops the docket and full date: `Example v. Sample, No. 24-123, 2024 WL 1234567, at *4 (D. Kan. Mar. 1, 2024)`
-recomposes to `Example v. Sample, 2024 WL 1234567, at *4 (D. Kan. 2024)` → false `round-trip-mismatch`. Keep the
-original parenthetical date token (`parsed.dateText`), recompose name + dockets + citations/pin + `(court dateText|year[, suffix])` + history.
-Tests: G7 form; `Sample v. Example, No. 24-456, 2024 WL 7654321 (D. Kan. Sept. 5, 2024)`; pin form `…187 F.3d 486, 490 (5th Cir. 1999)`; Miele parallel form.
-Then: re-run `/tmp`-style golden probe → G7 should be `validated-profile` (or court-only reason); finalize
-`westlaw-us/src/test/golden-pipeline.test.mjs` (G4 is now validated; remove its todo/expectation mismatch).
-
-## After that — needs the user
-- M0-L live spike (`westlaw-us/m0/MANUAL-SPIKE.md`): connector origin/cookie acceptance, fallback/snapshot behavior,
-  installed-Zotero CSL proof. Install `dist/Westlaw Advantage US.js` + `m0/csl/bluebook-law-review-westlaw-us.csl` only
-  in a disposable, unsynced profile.
-- Real fixtures for G3 (SCOTUS), G6 (state high court), G7 (real WL-only opinion).
-- Plan §14 questions (Bluebook context, history printing, parallel cites, snapshot fallback acceptance, sync, ToS).
+## User-gated items
+- **M0-L live spike** (`westlaw-us/m0/MANUAL-SPIKE.md`): connector origin/cookie acceptance, fallback/snapshot behavior, installed-Zotero CSL proof. Install `dist/Westlaw Advantage US.js` + `m0/csl/bluebook-law-review-westlaw-us.csl` in a disposable, unsynced profile.
+- **Real fixtures for G3 (SCOTUS), G6 (state high court), G7 (real WL-only opinion):** Required before M1 sign-off.
+- **Plan §14 questions:** Bluebook context, history printing, parallel cites, snapshot fallback, sync, ToS.

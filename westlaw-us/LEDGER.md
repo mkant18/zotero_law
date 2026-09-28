@@ -1,7 +1,6 @@
 # Westlaw US → Zotero — task / status ledger
 
-Orchestrator: `anthropic/claude-opus-5-5` (Opus 5.5, this session). Workers/reviewers: `openrouter/inclusionai/ling-3.0-flash`
-(Ling 3.0 Flash; exact id resolved from the session model registry — variants `-fin`, `-vl`, `:free` NOT used).
+Orchestrator: `anthropic/claude-opus-5-5` (Opus 5.5, this session; reviewer only). Builders: `anthropic/claude-sonnet-5-5` and `anthropic/claude-haiku-4-5` via pi subagents (approved by user this session; supersedes prior Ling 3.0 Flash + OpenRouter setup). OpenRouter credit blocker no longer applies.
 Plan: `reports/20-ASTRA-ARCHITECTURE.md`. Workspace: `M:/Coding_Projects/_zotero-research/` (coach-teacher untouched).
 
 Labels: **[V]** verified (command/evidence recorded) · **[I]** inferred · **[P]** proposed · **[B]** blocked.
@@ -30,18 +29,19 @@ Labels: **[V]** verified (command/evidence recorded) · **[I]** inferred · **[P
 | M0-L | **Live** connector request path, fallback/snapshot, installed-Zotero CSL proof | user + orchestrator | **[B] blocked on user authorization** | `m0/MANUAL-SPIKE.md` |
 | M0-G | M0 go/no-go | orchestrator + reviewer | [B] needs M0-L | — |
 | M1-A1 | `src/text.js`, `src/reporters.js` | Ling | [V] done, reviewed | tests text/reporters |
-| M1-A2 | `src/cite-parse.js` (standard/texas/westlaw-inventory, short names, round trip) | Ling | [V] done, reviewed; **open: R4** round-trip drops docket + full date for WL forms (false `round-trip-mismatch` on G7) | tests cite-parse |
-| M1-C | `src/dom.js` + fake DOM helper | Ling | [V] done, reviewed (docket split + secrets fixed) | tests dom |
-| M1-D | `src/map.js` | Ling | [V] done, reviewed (extra is a string) | tests map |
-| M1-E | `src/service.js` (requests, ZU.request fetch/classify, envelope) | Ling | [V] done, spot-reviewed | tests service |
-| M1-G | `src/profile.js` court table + omission policy | Ling | [V] done, reviewed (SCOTUS any reporter; full-match rules; NY App. Div./App. Term/Sup. Ct.; "for the" forms) | tests profile |
-| M1-H | `src/reconcile.js` | Ling | [V] done, reviewed (Texas history from texas form; conflicting service cites → unparsed) | tests reconcile |
-| M1-I | `src/translator.js` + `tools/build-translator.mjs` → `dist/Westlaw Advantage US.js` | Ling | [V] done, reviewed (bare JSON header, stable ID 9abca805-…, license, test-case block, real function decls) | tests translator |
-| M1-J | offline golden pipeline (reconcile→map→itemToCSLJSON→citeproc) | Ling | [V] 14/15 cases pass; G1–G5 validated-profile; G7 unverified only because of R4 | `node --test "westlaw-us/src/test/golden-pipeline.test.mjs"` |
+| M1-A2 | `src/cite-parse.js` (standard/texas/westlaw-inventory, short names, R4 round-trip fix) | Sonnet worker | [V] done; R4 fixed (dateText + historySep + pinAfter; WL forms round-trip dockets and full dates); G7 validated-profile | tests cite-parse |  
+| M1-C | `src/dom.js` + fake DOM helper; W7 fallback selectors; W9 review reasons | Sonnet worker | [V] done; header-fallback + conflicting-header forwarded to rec.reviewReasons | tests dom |
+| M1-D | `src/map.js` | Sonnet worker | [V] done | tests map |
+| M1-E | `src/service.js` (requests, fetch/classify, envelope); W2 echo checks | Sonnet worker | [V] done; wlSvcReadEnvelope validates echo format options; malformed-envelope hardened | tests service |
+| M1-G | `src/profile.js` court table + omission policy; W3 court backlog; W4 fixes; W10 NY Sup. Ct. trial court | Sonnet worker | [V] done; P1 SCOTUS any-reporter; P2 bankruptcy + 20 state appeals courts; P4 NY trial court + Appellate rules; Or./Md./WV/DC fixes | tests profile |
+| M1-H | `src/reconcile.js`; W9 envelope/DOM reasons forwarding | Sonnet worker | [V] done; wlRecAddEnvelopeReasons + wlRecAddDomReasons forward review reasons; conflicting-header demotes, header-fallback informational | tests reconcile |
+| M1-I | `src/translator.js` + `tools/build-translator.mjs` → `dist/Westlaw Advantage US.js` | Sonnet worker | [V] done; bare JSON header, stable ID, license, test-case block, real function decls, doWeb B-routing | tests translator |
+| M1-J | offline golden pipeline (reconcile→map→itemToCSLJSON→citeproc) | Sonnet worker | [V] done; G1–G7 all validated-profile; 44/44 pass | `node --test "westlaw-us/src/test/golden-pipeline.test.mjs"` |
+| M1-install | Installation guide for INSTALL.md | Sonnet worker | [V] done; doc-only | n/a |
 | M1-live | Real Chrome/connector/Zotero install + real SCOTUS/state-high/WL-only fixtures | user | [B] gated on M0-L + user decisions (plan §14) | — |
 
 All M1 work is **at-risk pre-gate** (plan says proceed after M0 go); it is needed under either M0-L outcome (service-enriched or DOM-only).
-Full suite: `node --test "westlaw-us/src/test/*.test.mjs"` → 475/475 (session 2 end).
+Full suite (session 3 end): `node --test "westlaw-us/src/test/*.test.mjs"` → 723/723 pass; CSL 28/28; probe 23/23; tools 50/50; check-private-data: fail=0 warn=6 (legacy).
 
 ## 2a. Source findings made during M0 prep
 - [V] Connector MV3 `ZU.request` → `Zotero.COHTTP` → service-worker `fetch(credentials:'include')` (`zotero-connectors/src/common/http.js` `_requestFetch`).
@@ -49,21 +49,40 @@ Full suite: `node --test "westlaw-us/src/test/*.test.mjs"` → 475/475 (session 
 - [V] `ZU.request` has no timeout option (translate `utilities_translate.js:307`); translator must race its own timer (cannot abort the underlying fetch).
 - [V] Pinned CSL locale short months already match Bluebook T12 (`Sept.`, `June`, `July`); style will pin them locally anyway.
 
-## 3. Review findings
+## 3. Review findings (this session and prior)
+
+### Prior sessions (session 2 + earlier)
 - [V] (session 2) Ling 3.0 Flash workers often end their turn after one sentence or degenerate into blank-line loops when given broad briefs. Mitigation that worked: small surgical tasks with exact file + defect lists, run sequentially, plus a `PROGRESS.md` line per step.
 - [V] M0-A orchestrator decisions (documented in csl test/README): (1) comparisons normalize U+2019→' (citeproc smart apostrophe) and accept one trailing layout `.`; (2) `Medium:`/`Genre:` Extra lines stay in CSL `note` after `itemToCSLJSON` and become variables via citeproc field-hack — C1 checks either location. Fixed defects: fake Zotero bootstrap → real `utilities/test/init.js` bootstrap; wrong test note sequences (E3/E4/E9/E12/E21 had no genuine subsequent position); invalid CSL (`<if>` outside `<choose>`); genre spacing; double comma before references.
 - [V] M0-C checker on real repo: 18 FAIL, all false positives — regex capture patterns `"ResourceToken":"([^"]+)"` in `tools/*.js`, template literals `${…}` in probe tests, the rule description prose in `tasks/M0-C-private-data-check.md`, and R4 on `reports/C1-…md` (a report that merely mentions `<script`/`co_document`). Also `--paths` mode must honour ignore rules (it scanned ignored `westlaw-us/.cache/`).
-
 - [V] (session 2) Ling reviewers (`reviewer` agent: no bash; `worker` agent in read-only mode) repeatedly ended without output. Orchestrator performed reviews directly with adversarial probe scripts; every wave found real defects (see git log messages for fixes). Workers perform well only on small, exact defect lists.
 - [V] Notable wrong-data defects caught and fixed: generic "Supreme Court of <State>" prefix-matched "Supreme Court of New York, Appellate Division." → `N.Y.`; Texas history taken from the standard form duplicated "writ denied"; service citation conflicting with DOM exported as a parallel; `Nos.` docket lists mangled; `extra` emitted as array; built translator started with `var header =` and regenerated its translatorID each build.
 - [V] `parallelCiteRule=westReporterOnly` IS accepted (cite-matrix has all 4 rules); the reports/10 §3 note "only CAFormat/allReporter" is stale.
 
-## 4. Blockers / user decisions
-- **[B] OpenRouter credits exhausted** (session 2, 402 "can only afford 8572 tokens … adjust the key's monthly limit"). All Ling 3.0 Flash builders are blocked until credits/limit are raised. The orchestrator did NOT switch builders to another model (needs explicit user approval).
-- [B] M0-L live spike needs user authorization (plan §11 M0, `m0/MANUAL-SPIKE.md`).
-- Plan §14 open questions 1–10 remain unanswered.
+### This session (session 3 — Sonnet/Haiku builders)
+- **[V] R4 (WL round-trip):** fixed `wlCiteRoundTrip` to preserve dockets, full date-text (`dateText`), and pin position via new ParsedLongForm fields. Added `historySep` field, recompose as `name + dockets + citations (pin at original position) + (court dateText|year[, suffix]) + historySep + history`. G7 now validated-profile.
+- **[V] Envelope echo checks:** wlSvcReadEnvelope validates echoed format options; if any echo key is present and mismatches the `expect` value, that style is rejected (echo-mismatch review reason). Translator-level policy: if ANY style in a request has echo-mismatch, entire envelope is unusable (falls back to DOM).
+- **[V] Malformed-envelope hardening:** added envelope structural validation; missing `responses` array is caught, not crashed on.
+- **[V] DOM review reasons forwarding:** wlRecAddDomReasons and wlRecAddEnvelopeReasons now forward review reasons from envelope and DOM into rec.reviewReasons; conflicting-header demotes profile to unverified; header-fallback is informational (non-demoting).
+- **[V] Court-table expansion (W3/W4/W10):** added 20+ state court entries (PA/OH/FL/NJ/LA/VA/MD/CT/TN/MO/WA/AZ intermediate appellate courts; NY trial-court Supreme Court; bankruptcy courts; state high court fixes for Or./Md./WV/DC). Profile tests 228/228.
+- **[V] Docket forms (P1-2):** docket regions now support `&` and `and` joins, and short parentheticals like `(JPO)`. Added review reason `docket-in-name` when name still contains `, No. / Nos. ` after peeling.
+- **[V] Input-length guard (P2):** parse entry points return `{ ok:false, reason:'input-too-long' }` for cleaned input > 2000 chars.
+- **[V] Texas fixes:** Texas date parentheticals now correctly preserve full date-text (no court-swallowing). Added explicit Texas rules for date parsing.
+- **[V] Item-field snapshot (W7):** added Scaffold-style full-field diff for G1/G2/G4/G5/G7 with `item-fields.test.mjs` + expected.json.
+- **[V] B-routed doWeb:** translator now correctly routes echo-mismatched requests to B (westlaw-style), only using A when validated; 4 doWeb routing tests added.
 
-## 5. Next bounded tasks (when builders are available)
-1. R4 round-trip fix in `src/cite-parse.js` (exact brief text in `westlaw-us/HANDOFF.md`); then G7 golden → expect `validated-profile`/or documented reason; finalize `golden-pipeline.test.mjs` (G4 todo removed — G4 now validated).
-2. Backlog (safe to do offline): Pennsylvania/Ohio/other unknown court lines (currently safe `unknown`); `wlSvcFetch` echo checks for format options; in-text/brief CSL variant is a user decision.
-3. Then stop for user: M0-L live spike + real fixtures (SCOTUS, state high court, WL-only).
+## 4. Blockers / user decisions
+- [B] M0-L live spike needs user authorization (plan §11 M0, `m0/MANUAL-SPIKE.md`).
+- [B] Plan §14 open questions 1–10 remain unanswered (Bluebook context, history printing, parallel cites, snapshot fallback, sync, ToS).
+
+## 5. Remaining open items
+1. **Offline items (no user gate):**
+   - Multi-pin citation forms (flagged via round-trip mismatch, not modelled)
+   - `No. 1 Shoe Co.`-style name/docket ambiguity (over-peel known, low priority)
+   - Kentucky pre-1976 Court of Appeals highest-court date-aware classification (no date logic)
+   - Bluebook 10.4(b) district/division display (not modelled; numbers currently dropped)
+   - Remaining unknown-court states (list in `westlaw-us/src/PROGRESS-G.md`)
+2. **User-gated items:**
+   - M0-L live spike (`m0/MANUAL-SPIKE.md`): connector origin/cookie acceptance, fallback/snapshot behavior, installed-Zotero CSL proof.
+   - Real fixtures for G3 (SCOTUS), G6 (state high court), G7 (real WL-only opinion).
+   - Plan §14 questions.
