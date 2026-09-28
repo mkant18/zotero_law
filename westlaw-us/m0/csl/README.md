@@ -56,7 +56,7 @@ Run from the workspace root (`M:/Coding_Projects/_zotero-research`).
 
 ## H2 observations
 
-G2i's `history` field contains `<i>aff'd in part, vacated in part</i>` (HTML typography). citeproc-js outputs this as literal text in the HTML rendering, so the HTML contains `<i>` tags. The plain text (obtained by stripping HTML tags) equals E17's text without the `<i>` tags.
+G2i's `history` field contains `<i>aff'd in part, vacated in part</i>` (HTML typography). citeproc-js passes the `<i>` tags through from the history field into the HTML rendering, so the HTML contains `<i>` tags (`hasIInHtml === true`). The plain text (obtained by stripping HTML tags) equals E17's text without the `<i>` tags.
 
 ## Limitations
 

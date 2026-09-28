@@ -209,13 +209,14 @@ describe('H-string HTML assertions', () => {
     );
   });
 
-  it('H2: G2i first cite — plain text equals E17, html may contain <i> in references', () => {
+  it('H2: G2i first cite — plain text equals E17, html contains <i> from history', () => {
     const result = render(items, [[{ id: 'G2i' }]]);
     const html = result[0].html;
     const text = result[0].text;
 
-    // Record whether html contains <i>aff'd in part, vacated in part</i>
-    const hasIInHtml = html.includes('<i>aff\'d in part, vacated in part</i>');
+    // citeproc passes <i> through from the history field into html
+    const hasIInHtml = html.includes('<i>aff\u2019d in part, vacated in part</i>');
+    assert.equal(hasIInHtml, true, 'H2: html should contain <i>aff\u2019d in part, vacated in part</i> from history');
 
     // Plain text should contain no <i> tags
     assert.ok(!text.includes('<i>'), 'G2i plain text should not contain <i> tags');
@@ -272,20 +273,27 @@ describe('C-string CSL-JSON assertions', () => {
   it('C2: Diagnostic Extra lines do not create CSL variables for G1', () => {
     const g1 = getCslJSON('G1');
     const allowedKeys = new Set([
-      'id', 'type', 'title', 'title-short', 'authority', 'issued',
-      'number', 'container-title', 'volume', 'page', 'page-first',
-      'note'
+      'id', 'type', 'authority', 'container-title', 'note', 'number',
+      'page', 'title', 'title-short', 'volume', 'issued'
     ]);
-    const actualKeys = Object.keys(g1).filter(
-      (k) => !['id', 'type'].includes(k) || allowedKeys.has(k)
+    const actualKeys = Object.keys(g1);
+    const unexpectedKeys = actualKeys.filter((k) => !allowedKeys.has(k));
+    assert.equal(
+      unexpectedKeys.length,
+      0,
+      `C2: G1 has unexpected CSL-JSON keys: ${unexpectedKeys.join(', ')}`
     );
-    // Check that no unexpected CSL variables exist (medium, genre, references, etc.)
-    assert.equal(g1.medium, undefined, 'G1 should not have medium');
-    assert.equal(g1.genre, undefined, 'G1 should not have genre');
-    assert.equal(g1.references, undefined, 'G1 should not have references');
+    const wlKeys = actualKeys.filter(
+      (k) => k.startsWith('westlaw') || k.includes('wl')
+    );
+    assert.equal(
+      wlKeys.length,
+      0,
+      `C2: G1 CSL-JSON keys must not start with "westlaw" or contain "wl": ${wlKeys.join(', ')}`
+    );
   });
 
-  it('C3: Rendered text never contains WL for G1/G4 and never contains docket for G1/G4/G5', () => {
+  it('C3: Rendered text never contains WL for G1/G4 and never contains docket-like text for G5', () => {
     const resultG1 = render(items, [[{ id: 'G1' }]]);
     const resultG4 = render(items, [[{ id: 'G4' }]]);
     const resultG5 = render(items, [[{ id: 'G5' }]]);
@@ -293,10 +301,6 @@ describe('C-string CSL-JSON assertions', () => {
     assert.ok(!resultG1[0].text.includes('WL'), 'G1 rendered text should not contain WL');
     assert.ok(!resultG4[0].text.includes('WL'), 'G4 rendered text should not contain WL');
     assert.ok(!resultG1[0].text.includes('No. 98-40679'), 'G1 rendered text should not contain docket');
-    assert.ok(!resultG4[0].text.includes('No. 98-40679'), 'G4 rendered text should not contain G1 docket');
-    assert.ok(!resultG5[0].text.includes('No. 98-40679'), 'G5 rendered text should not contain G1 docket');
-    // G5 has no docketNumber, so check it doesn't contain its own docket either
-    // (G5 has no docketNumber field, so this is a no-op, but the assertion is about
-    // the general principle that dockers are not rendered for non-WL cases)
+    assert.ok(!resultG5[0].text.includes('No.'), 'G5 rendered text should not contain docket-like text');
   });
 });

@@ -163,6 +163,16 @@ function isPlaceholder(value) {
   return /^(PLACEHOLDER|TEST|FAKE|REDACTED|EXAMPLE)[A-Za-z0-9._-]*$/i.test(value);
 }
 
+function isLiteralSecret(value) {
+  return /^[A-Za-z0-9._~+\/=-]{6,}$/.test(value) && !isPlaceholder(value);
+}
+
+function contentLooksLikeHtml(content) {
+  const stripped = content.replace(/^\uFEFF/, '').trimStart();
+  const lower = stripped.toLowerCase();
+  return lower.startsWith('<!doctype') || lower.startsWith('<html');
+}
+
 function checkR3(filePath, text) {
   const results = [];
 
@@ -172,7 +182,7 @@ function checkR3(filePath, text) {
     let m;
     while ((m = jsonDQ.exec(text)) !== null) {
       const val = m[1];
-      if (!isPlaceholder(val) && val !== '') {
+      if (isLiteralSecret(val)) {
         results.push({ path: filePath, reason: `secret ${key} value-length=${val.length}` });
       }
     }
@@ -181,7 +191,7 @@ function checkR3(filePath, text) {
     const jsSQ = new RegExp(`'${key}'\\s*:\\s*'([^']*)'`, 'g');
     while ((m = jsSQ.exec(text)) !== null) {
       const val = m[1];
-      if (!isPlaceholder(val) && val !== '') {
+      if (isLiteralSecret(val)) {
         results.push({ path: filePath, reason: `secret ${key} value-length=${val.length}` });
       }
     }
@@ -191,7 +201,7 @@ function checkR3(filePath, text) {
       const jsUnq = new RegExp(`\\bx-cobalt-pcid\\s*:\\s*"([^"]*)"`, 'g');
       while ((m = jsUnq.exec(text)) !== null) {
         const val = m[1];
-        if (!isPlaceholder(val) && val !== '') {
+        if (isLiteralSecret(val)) {
           results.push({ path: filePath, reason: `secret ${key} value-length=${val.length}` });
         }
       }
@@ -206,30 +216,32 @@ function checkR3(filePath, text) {
     const lineEnd = text.indexOf('\n', m.index);
     const line = lineEnd === -1 ? text.slice(lineStart) : text.slice(lineStart, lineEnd);
     const afterColon = line.slice(m.index + m[0].length).trim();
-    if (afterColon.length > 0) {
+    if (isLiteralSecret(afterColon)) {
       results.push({ path: filePath, reason: `cookie header value-length=${afterColon.length}` });
     }
   }
 
-  // JSON keys "cookie" and "set-cookie" with non-empty string value
+  // JSON keys "cookie" and "set-cookie" with string value
   const jsonCookie = /"cookie"\s*:\s*"([^"]*)"/g;
   while ((m = jsonCookie.exec(text)) !== null) {
-    if (m[1].length > 0) {
+    if (isLiteralSecret(m[1])) {
       results.push({ path: filePath, reason: `cookie JSON value-length=${m[1].length}` });
     }
   }
 
   const jsonSetCookie = /"set-cookie"\s*:\s*"([^"]*)"/g;
   while ((m = jsonSetCookie.exec(text)) !== null) {
-    if (m[1].length > 0) {
+    if (isLiteralSecret(m[1])) {
       results.push({ path: filePath, reason: `set-cookie JSON value-length=${m[1].length}` });
     }
   }
 
-  // Bearer token header pattern detection
+  // Bearer token header pattern detection (requires 16+ char literal token)
   const bearerRe = /Authorization:\s*Bearer\s+(\S+)/g;
   while ((m = bearerRe.exec(text)) !== null) {
-    results.push({ path: filePath, reason: `bearer token value-length=${m[1].length}` });
+    if (/^[A-Za-z0-9._~+\/=-]{16,}$/.test(m[1]) && !isPlaceholder(m[1])) {
+      results.push({ path: filePath, reason: `bearer token value-length=${m[1].length}` });
+    }
   }
 
   return results;
@@ -248,9 +260,14 @@ function checkR4(filePath, content) {
     }
   }
 
-  // Large text file with both <script and co_document
-  if (content.length > 20000 && content.includes('<script') && content.includes('co_document')) {
-    results.push({ path: norm, reason: 'large file with <script and co_document (likely saved Westlaw page)' });
+  // Large text file with both <script and co_document (R4 scope: only HTML-like extensions or content, never .md/.js/.mjs/.json)
+  const ext = '.' + norm.split('.').pop().toLowerCase();
+  const htmlLikeExts = new Set(['.html', '.htm', '.mhtml', '.txt']);
+  const neverExts = new Set(['.md', '.js', '.mjs', '.json']);
+  if (!neverExts.has(ext) && content.length > 20000 && content.includes('<script') && content.includes('co_document')) {
+    if (htmlLikeExts.has(ext) || contentLooksLikeHtml(content)) {
+      results.push({ path: norm, reason: 'large file with <script and co_document (likely saved Westlaw page)' });
+    }
   }
 
   return results;
@@ -290,23 +307,12 @@ function main() {
         console.error(`check-private-data: path not found: ${p}`);
         process.exit(2);
       }
-      const st = statSync(full);
-      if (st.isFile()) {
-        found.push(p);
-      } else if (st.isDirectory()) {
-        function walk(dir) {
-          const entries = readdirSync(dir);
-          for (const e of entries) {
-            const fp = join(dir, e);
-            const fs2 = statSync(fp);
-            if (fs2.isFile()) {
-              found.push(normalizePath(relative(root, fp)));
-            } else if (fs2.isDirectory()) {
-              walk(fp);
-            }
-          }
-        }
-        walk(full);
+      const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '--', p], {
+        cwd: root,
+        encoding: 'utf-8',
+      });
+      for (const f of out.split('\n').filter(Boolean)) {
+        found.push(normalizePath(f));
       }
     }
     candidates = found;

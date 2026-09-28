@@ -333,16 +333,16 @@ describe('R3 secret-like values', () => {
     assert(r.stdout.includes('FAIL R3'), r.stdout);
   });
 
-  test('FAIL: Authorization Bearer token', () => {
+  test('FAIL: Authorization Bearer token (20+ char)', () => {
     const colon = String.fromCharCode(58);
     const space = ' ';
-    const bearerLine = 'Authorization' + colon + space + 'Bearer' + space + 'myBearerToken';
+    const bearerLine = 'Authorization' + colon + space + 'Bearer' + space + 'abcdefghijklmnopqrst';
     writeFile('config.txt', bearerLine);
     const r = runChecker('--root', tmpDir);
     assert(r.status === 1, `expected exit 1 got ${r.status}`);
     assert(r.stdout.includes('FAIL R3'), r.stdout);
     assert(r.stdout.includes('bearer token'), r.stdout);
-    assert(!r.stdout.includes('myBearerToken'), 'bearer value must not appear in output');
+    assert(!r.stdout.includes('abcdefghijklmnopqrst'), 'bearer value must not appear in output');
   });
 
   test('FAIL: x-cobalt-rtid JS single-quoted form', () => {
@@ -362,6 +362,44 @@ describe('R3 secret-like values', () => {
     assert(r.status === 1, `expected exit 1 got ${r.status}`);
     assert(r.stdout.includes('FAIL R3'), r.stdout);
     assert(!r.stdout.includes('secretPcid'), 'secret value must not appear in output');
+  });
+
+  // R3 literal-secret regex tests
+  test('PASS: regex-pattern value not flagged', () => {
+    const key = String.fromCodePoint(0x22) + 'ResourceToken' + String.fromCodePoint(0x22);
+    const val = String.fromCodePoint(0x22) + '([^\"]+)' + String.fromCodePoint(0x22);
+    writeFile('config.json', `{${key}: ${val}}`);
+    const r = runChecker('--root', tmpDir);
+    assert(r.status === 0, `expected exit 0 got ${r.status}: ${r.stdout}`);
+    assert(!r.stdout.includes('FAIL R3'), r.stdout);
+  });
+
+  test('PASS: template-literal value not flagged', () => {
+    const key = String.fromCodePoint(0x22) + 'ResourceToken' + String.fromCodePoint(0x22);
+    const val = String.fromCodePoint(0x22) + '${x}' + String.fromCodePoint(0x22);
+    writeFile('config.json', `{${key}: ${val}}`);
+    const r = runChecker('--root', tmpDir);
+    assert(r.status === 0, `expected exit 0 got ${r.status}: ${r.stdout}`);
+    assert(!r.stdout.includes('FAIL R3'), r.stdout);
+  });
+
+  test('PASS: <literal> doc prose not flagged', () => {
+    const key = String.fromCodePoint(0x22) + 'ResourceToken' + String.fromCodePoint(0x22);
+    const val = String.fromCodePoint(0x22) + '<literal>' + String.fromCodePoint(0x22);
+    writeFile('config.json', `{${key}: ${val}}`);
+    const r = runChecker('--root', tmpDir);
+    assert(r.status === 0, `expected exit 0 got ${r.status}: ${r.stdout}`);
+    assert(!r.stdout.includes('FAIL R3'), r.stdout);
+  });
+
+  test('FAIL: 24-char token literal still flagged', () => {
+    const key = String.fromCodePoint(0x22) + 'ResourceToken' + String.fromCodePoint(0x22);
+    const val = String.fromCodePoint(0x22) + 'abcdefghijklmnopqrstuvwx' + String.fromCodePoint(0x22);
+    writeFile('config.json', `{${key}: ${val}}`);
+    const r = runChecker('--root', tmpDir);
+    assert(r.status === 1, `expected exit 1 got ${r.status}`);
+    assert(r.stdout.includes('FAIL R3'), r.stdout);
+    assert(r.stdout.includes('value-length=24'), r.stdout);
   });
 });
 
@@ -388,6 +426,14 @@ describe('R4 raw capture heuristics', () => {
     const r = runChecker('--root', tmpDir);
     assert(r.status === 1, `expected exit 1 got ${r.status}`);
     assert(r.stdout.includes('FAIL R4'), r.stdout);
+  });
+
+  test('PASS: .md mentioning <script and co_document not flagged', () => {
+    const bigContent = '<script>var x=1;</script>' + 'co_document' + 'x'.repeat(20000);
+    writeFile('westlaw-us/page.md', bigContent);
+    const r = runChecker('--root', tmpDir);
+    assert(r.status === 0, `expected exit 0 got ${r.status}: ${r.stdout}`);
+    assert(!r.stdout.includes('FAIL R4'), r.stdout);
   });
 });
 
@@ -445,6 +491,15 @@ describe('mode flags', () => {
     const r = runChecker('--root', tmpDir);
     // ignored.txt should not be scanned, so no FAIL
     assert(!r.stdout.includes('ignored.txt'), `ignored.txt should not appear: ${r.stdout}`);
+  });
+
+  test('--paths skips an ignored file', () => {
+    writeFile('.gitignore', 'ignored-secret.txt\n');
+    gitAdd('.gitignore');
+    writeFile('ignored-secret.txt', 'mySecretToken123');
+    const r = runChecker('--root', tmpDir, '--paths', 'ignored-secret.txt');
+    assert(r.status === 0, `expected exit 0 got ${r.status}: ${r.stdout}`);
+    assert(!r.stdout.includes('ignored-secret.txt'), `ignored-secret.txt should not appear: ${r.stdout}`);
   });
 
   test('exit code 2 on unknown flag', () => {
