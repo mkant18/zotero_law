@@ -47,6 +47,16 @@ Check the translator's build timestamp in its header:
 2. Look for `"lastUpdated": "YYYY-MM-DD HH:MM:SS"` in the JSON header or code comments.
 3. Compare against the dist file's timestamp to confirm the right build was loaded.
 
+## Offline prototype
+
+From the workspace root:
+
+```bash
+node westlaw-us/tools/prototype.mjs
+```
+
+It renders synthetic golden cases and does not contact Westlaw.
+
 ## Updates
 
 1. Edit translator source in `westlaw-us/src/`.
