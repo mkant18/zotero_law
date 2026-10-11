@@ -1066,3 +1066,103 @@ describe("wlDomReadPageContext — P2-7 ambiguous DocumentGuid", function() {
     assert.equal(r.config.guid, GUID);
   });
 });
+
+describe("wlDomReadFacts — opinion author", function() {
+  function authorDoc(line) {
+    return fallbackDoc([el("div", { class: "x_leadAuthorLine" }, line)]);
+  }
+
+  it("reads Associate Chief Justice Lee as the author", function() {
+    var authors = wlDomReadFacts(authorDoc("Associate Chief Justice Lee, opinion of the Court:")).authors;
+    assert.equal(authors.length, 1);
+    assert.equal(authors[0].lastName, "Lee");
+    assert.equal(authors[0].firstName, "");
+    assert.equal(authors[0].creatorType, "author");
+  });
+
+  it("title-cases an all-caps byline", function() {
+    var authors = wlDomReadFacts(authorDoc("BROOKSHIRE, Justice.")).authors;
+    assert.equal(authors[0].lastName, "Brookshire");
+    assert.equal(authors[0].firstName, "");
+  });
+
+  it("splits a full name and keeps a generational suffix on the last name", function() {
+    var authors = wlDomReadFacts(authorDoc("KIM MCLANE WARDLAW, Circuit Judge.")).authors;
+    assert.equal(authors[0].firstName, "Kim McLane");
+    assert.equal(authors[0].lastName, "Wardlaw");
+    var suffixed = wlDomReadFacts(authorDoc("JOSEPH TYREE SNEED III, Circuit Judge.")).authors;
+    assert.equal(suffixed[0].firstName, "Joseph Tyree");
+    assert.equal(suffixed[0].lastName, "Sneed III");
+  });
+
+  it("stores Per Curiam as a single-field author", function() {
+    var authors = wlDomReadFacts(authorDoc("PER CURIAM:")).authors;
+    assert.equal(authors[0].lastName, "Per Curiam");
+    assert.equal(authors[0].fieldMode, 1);
+  });
+
+  it("reads Alito, J. after the delivery clause", function() {
+    var authors = wlDomReadFacts(authorDoc("ALITO, J., delivered the opinion of the Court.")).authors;
+    assert.equal(authors[0].lastName, "Alito");
+    assert.equal(authors[0].firstName, "");
+  });
+
+  it("fills the given name from the signature when the byline has only a surname", function() {
+    var doc = fallbackDoc([
+      el("div", { class: "x_leadAuthorLine" }, "Associate Chief Justice Lee, opinion of the Court:"),
+      el("div", { class: "co_panelBlock" }, "Associate Chief Justice Lee authored the opinion of the Court, in which Justice Himonas joined."),
+      el("div", { class: "co_paragraph" }, "Thomas R. Lee, Associate Chief Justice")
+    ]);
+    var authors = wlDomReadFacts(doc).authors;
+    assert.equal(authors.length, 1);
+    assert.equal(authors[0].firstName, "Thomas R.");
+    assert.equal(authors[0].lastName, "Lee");
+  });
+
+  it("fills the given name from the byline link title", function() {
+    var doc = fallbackDoc([
+      el("div", { class: "x_leadAuthorLine" },
+        "Associate Chief Justice ",
+        el("a", { title: "Thomas R. Lee" }, "Lee"),
+        ", opinion of the Court:")
+    ]);
+    var authors = wlDomReadFacts(doc).authors;
+    assert.equal(authors[0].firstName, "Thomas R.");
+    assert.equal(authors[0].lastName, "Lee");
+  });
+
+  it("does not take a different judge's signature", function() {
+    var doc = fallbackDoc([
+      el("div", { class: "x_leadAuthorLine" }, "Associate Chief Justice Lee, opinion of the Court:"),
+      el("div", { class: "co_paragraph" }, "Deno G. Himonas, Justice")
+    ]);
+    var authors = wlDomReadFacts(doc).authors;
+    assert.equal(authors[0].firstName, "");
+    assert.equal(authors[0].lastName, "Lee");
+  });
+
+  it("reads a surname-first signature and keeps Jr with the last name", function() {
+    var doc = fallbackDoc([
+      el("div", { class: "x_leadAuthorLine" }, "ALITO, J., delivered the opinion of the Court."),
+      el("div", { class: "co_paragraph" }, "Samuel A. Alito, Jr.")
+    ]);
+    var authors = wlDomReadFacts(doc).authors;
+    assert.equal(authors[0].firstName, "Samuel A.");
+    assert.equal(authors[0].lastName, "Alito Jr.");
+  });
+
+  it("stays empty when the lead-author line is absent", function() {
+    assert.equal(wlDomReadFacts(fallbackDoc([])).authors.length, 0);
+  });
+
+  it("keeps one author when the sticky header repeats the line", function() {
+    var doc = fallbackDoc([
+      el("div", { class: "x_leadAuthorLine" }, "Justice Sonia Sotomayor delivered the opinion of the Court."),
+      el("div", { class: "x_leadAuthorLine" }, "Justice Sonia Sotomayor delivered the opinion of the Court.")
+    ]);
+    var authors = wlDomReadFacts(doc).authors;
+    assert.equal(authors.length, 1);
+    assert.equal(authors[0].firstName, "Sonia");
+    assert.equal(authors[0].lastName, "Sotomayor");
+  });
+});

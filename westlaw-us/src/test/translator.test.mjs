@@ -160,12 +160,15 @@ function makeSanchezDoc(opts) {
     el("li", {}, citation),
     el("li", {}, "(Approx. 12 pages)"));
   var docketBlock = el("div", { class: "co_docketBlock" }, docket + ".");
+  var bodyKids = [header, citationList, docketBlock, el("script", {}, "")].concat(scripts);
+  if (opts.authorLine) bodyKids.push(el("div", { class: "x_leadAuthorLine" }, opts.authorLine));
+  if (opts.authorSignature) bodyKids.push(el("div", { class: "co_paragraph" }, opts.authorSignature));
 
   return makeDoc({
     title: title,
     href: href,
     hostname: hostname,
-    body: el("body", {}, header, citationList, docketBlock, el("script", {}, ""), ...scripts)
+    body: el.apply(null, ["body", {}].concat(bodyKids))
   });
 }
 
@@ -566,8 +569,8 @@ describe("translator - doWeb GUID change → identity-changed", function() {
   });
 });
 
-describe("translator - doWeb no attachments/notes/creators", function() {
-  it("never creates attachments, notes, or creators", async function() {
+describe("translator - doWeb author and no attachments", function() {
+  it("leaves the author empty when the page has no lead-author line", async function() {
     var doc = makeSanchezDoc();
     var result = await runDoWeb(doc,
       makeEnvelopeResponse("standard",
@@ -581,6 +584,41 @@ describe("translator - doWeb no attachments/notes/creators", function() {
     assert.equal(item.creators.length, 0, "no creators");
     assert.equal(item.attachments.length, 0, "no attachments");
     assert.equal(item.notes.length, 0, "no notes");
+  });
+
+  it("saves the opinion author from the lead-author line", async function() {
+    var doc = makeSanchezDoc({ authorLine: "Associate Chief Justice Lee, opinion of the Court:" });
+    var result = await runDoWeb(doc,
+      makeEnvelopeResponse("standard",
+        "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999)",
+        ["Sanchez, 187 F.3d 486", "187 F.3d 486"]),
+      makeEnvelopeResponse("westlaw",
+        null, null,
+        "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999), No. 98-40679, 1999 WL 652310"));
+    var item = result.fz.items[0];
+    assert.equal(item.creators.length, 1);
+    assert.equal(item.creators[0].creatorType, "author");
+    assert.equal(item.creators[0].firstName, "");
+    assert.equal(item.creators[0].lastName, "Lee");
+    assert.equal(item.caseName, "Sanchez v. Liggett & Myers, Inc.");
+  });
+
+  it("saves the given name from the signature line", async function() {
+    var doc = makeSanchezDoc({
+      authorLine: "Associate Chief Justice Lee, opinion of the Court:",
+      authorSignature: "Thomas R. Lee, Associate Chief Justice"
+    });
+    var result = await runDoWeb(doc,
+      makeEnvelopeResponse("standard",
+        "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999)",
+        ["Sanchez, 187 F.3d 486", "187 F.3d 486"]),
+      makeEnvelopeResponse("westlaw",
+        null, null,
+        "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999), No. 98-40679, 1999 WL 652310"));
+    var item = result.fz.items[0];
+    assert.equal(item.creators.length, 1);
+    assert.equal(item.creators[0].firstName, "Thomas R.");
+    assert.equal(item.creators[0].lastName, "Lee");
   });
 });
 

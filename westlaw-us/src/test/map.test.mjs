@@ -39,6 +39,16 @@ test("wlMapToZoteroFields - G1 Sanchez (reported, WL alternate, en-dash docket)"
   assert.equal(fields.shortTitle, "Sanchez v. Liggett");
   assert.equal(fields.url, "https://1.next.westlaw.com/Document/I00000000000000000000000000000000/View/FullText.html");
   assert.equal(fields.creators.length, 0);
+  rec.authors = [{ firstName: "", lastName: "Lee", creatorType: "author" }];
+  var withAuthor = wlMapToZoteroFields(rec);
+  assert.equal(withAuthor.creators.length, 1);
+  assert.equal(withAuthor.creators[0].lastName, "Lee");
+  assert.equal(wlMapValidateOutgoing(withAuthor).ok, true);
+  var applied = { creators: [], tags: [] };
+  wlMapApply(withAuthor, applied);
+  assert.equal(applied.creators[0].lastName, "Lee");
+  rec.authors = [{ firstName: "", lastName: "Lee, Circuit Judge.", creatorType: "author" }];
+  assert.equal(wlMapToZoteroFields(rec).creators.length, 0);
   assert.equal(fields.attachments.length, 0);
   assert.equal(fields.notes.length, 0);
   assert.equal(fields.tags.length, 0);

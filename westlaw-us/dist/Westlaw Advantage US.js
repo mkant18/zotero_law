@@ -9,7 +9,7 @@
 	"inRepository": false,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
-	"lastUpdated": "2026-10-11 03:27:27"
+	"lastUpdated": "2026-10-11 04:34:11"
 }
 
 /*
@@ -2129,6 +2129,162 @@ function wlDomClean(s) {
     .normalize("NFC");
 }
 
+// Judicial titles, longest first so "Chief Justice" wins over "Justice".
+var wlDomAuthorTitleRe = "associate chief justice|chief justice|senior circuit judge|circuit judge|senior judge|presiding judge|magistrate judge|associate justice|justice|judge";
+var wlDomAuthorTitleFirstRe = new RegExp("^(" + wlDomAuthorTitleRe + ")\\s+(.+)$", "i");
+var wlDomAuthorNameFirstRe = new RegExp("^(.+?),\\s+(" + wlDomAuthorTitleRe + "|j|c\\.?\\s?j)\\.?$", "i");
+var wlDomAuthorSuffixRe = /^(Jr|Sr|II|III|IV|V)\.?$/i;
+
+function wlDomAuthorCaseWord(word) {
+  if (!word) return word;
+  var dotted = word.charAt(word.length - 1) === ".";
+  var bare = dotted ? word.slice(0, -1) : word;
+  if (/^(II|III|IV|V)$/i.test(bare)) return bare.toUpperCase() + (dotted ? "." : "");
+  if (/[a-z]/.test(word)) return word;
+  var lower = word.toLowerCase();
+  var cased = lower.replace(/(^|['’\-])([a-z])/g, function(_, sep, ch) { return sep + ch.toUpperCase(); });
+  return cased.replace(/\bMc([a-z])/g, function(_, ch) { return "Mc" + ch.toUpperCase(); });
+}
+
+function wlDomSplitAuthorName(name) {
+  var cased = wlDomClean(name).split(/\s+/).map(wlDomAuthorCaseWord).filter(Boolean);
+  if (!cased.length) return null;
+  if (/^the$/i.test(cased[0]) && cased.length === 2 && /^court$/i.test(cased[1])) return null;
+  var last = cased[cased.length - 1];
+  var rest = cased.slice(0, -1);
+  if (rest.length && wlDomAuthorSuffixRe.test(last)) {
+    last = rest.pop() + " " + last;
+  }
+  return {
+    firstName: rest.join(" "),
+    lastName: last,
+    creatorType: "author"
+  };
+}
+
+// The lead-author line is the opinion's author, not the panel sentence.
+// "Associate Chief Justice Lee, opinion of the Court:" → Lee
+// "BROOKSHIRE, Justice." → Brookshire
+// "PER CURIAM:" → Per Curiam
+function wlDomParseLeadAuthor(text) {
+  var cleaned = wlDomClean(text).replace(/[:\s]+$/, "");
+  if (!cleaned) return null;
+  if (/^per curiam\b/i.test(cleaned)) {
+    return { firstName: "", lastName: "Per Curiam", creatorType: "author", fieldMode: 1 };
+  }
+  cleaned = cleaned.replace(/,?\s+(?:delivered|authored|announced)\b.*$/i, "");
+  cleaned = cleaned.replace(/,?\s+opinion of the court\.?$/i, "");
+  cleaned = wlDomClean(cleaned).replace(/[,\s]+$/, "");
+  var titled = cleaned.match(wlDomAuthorTitleFirstRe);
+  if (titled) return wlDomSplitAuthorName(titled[2]);
+  var named = cleaned.match(wlDomAuthorNameFirstRe);
+  if (named) return wlDomSplitAuthorName(named[1]);
+  return null;
+}
+
+function wlDomAuthorLastKey(last) {
+  return String(last || "").replace(/\s+(Jr|Sr|II|III|IV|V)\.?$/i, "").toLowerCase();
+}
+
+function wlDomAuthorFirstOk(first) {
+  var words = String(first || "").split(/\s+/).filter(Boolean);
+  var titleRe = /^(associate|chief|senior|circuit|presiding|magistrate|justice|judge|j|cj)$/i;
+  for (var i = 0; i < words.length; i++) {
+    if (!titleRe.test(words[i].replace(/\./g, ""))) return true;
+  }
+  return false;
+}
+
+function wlDomAuthorJoinSuffix(text) {
+  return wlDomClean(text).replace(/,\s+(Jr|Sr|II|III|IV|V)\b/ig, " $1");
+}
+
+// A byline often gives only the surname. The given name is on a short signature
+// ("Thomas R. Lee, Associate Chief Justice") or on the byline link's title.
+function wlDomParseFullerAuthor(text, lastKey) {
+  var cleaned = wlDomAuthorJoinSuffix(text).replace(/[:\s]+$/, "");
+  if (!cleaned || cleaned.length > 90 || /\d/.test(cleaned)) return null;
+  if (/\b(authored|delivered|announced|opinion|which|joined|writing|concurr|dissent|panel|versus|\bv\.)\b/i.test(cleaned)) return null;
+  var titled = new RegExp("\\b(" + wlDomAuthorTitleRe + ")\\b", "i").test(cleaned);
+  cleaned = cleaned.replace(new RegExp("(?:,\\s+|\\s+)(" + wlDomAuthorTitleRe + ")\\.?$", "i"), "");
+  cleaned = wlDomClean(cleaned).replace(/\s+$/, "");
+  if (!/\b(Jr|Sr)\.$/i.test(cleaned)) cleaned = cleaned.replace(/\.$/, "");
+  var parsed = null;
+  var swapped = cleaned.match(/^([A-Za-z][A-Za-z.'’\-]*),\s+(.+)$/);
+  if (swapped && swapped[1].toLowerCase() === lastKey) {
+    parsed = wlDomSplitAuthorName(swapped[2] + " " + swapped[1]);
+  } else if (!/[,:]/.test(cleaned)) {
+    parsed = wlDomSplitAuthorName(cleaned);
+  }
+  if (!parsed || wlDomAuthorLastKey(parsed.lastName) !== lastKey || !wlDomAuthorFirstOk(parsed.firstName)) return null;
+  parsed.score = parsed.firstName.replace(/[^A-Za-z]/g, "").length + (titled ? 20 : 0);
+  return parsed;
+}
+
+function wlDomAuthorInSkippedBlock(el) {
+  var node = el;
+  var depth = 0;
+  while (node && depth < 12) {
+    var cls = typeof node.className === "string" ? node.className : "";
+    if (/(^|\s)(co_panelBlock|co_attorneyBlock|co_partyLine|co_docketBlock|co_title|x_dissentAuthorLine)(\s|$)/.test(cls)) return true;
+    node = node.parentElement || node._parent || null;
+    depth++;
+  }
+  return false;
+}
+
+function wlDomAuthorConsider(best, text, lastKey) {
+  var parsed = wlDomParseFullerAuthor(text, lastKey);
+  if (!parsed) return best;
+  if (!best || parsed.score > best.score) return parsed;
+  return best;
+}
+
+function wlDomAuthorComplete(doc, partial) {
+  if (!partial || partial.fieldMode === 1 || partial.firstName) return partial;
+  var lastKey = wlDomAuthorLastKey(partial.lastName);
+  if (!lastKey) return partial;
+  var best = null;
+  var line = doc.querySelector(".x_leadAuthorLine");
+  if (line) {
+    best = wlDomAuthorConsider(best, line.getAttribute("title"), lastKey);
+    best = wlDomAuthorConsider(best, line.getAttribute("aria-label"), lastKey);
+    var anchors = line.querySelectorAll("a");
+    for (var i = 0; i < anchors.length; i++) {
+      best = wlDomAuthorConsider(best, anchors[i].getAttribute("title"), lastKey);
+      best = wlDomAuthorConsider(best, anchors[i].getAttribute("aria-label"), lastKey);
+      best = wlDomAuthorConsider(best, anchors[i].textContent, lastKey);
+    }
+  }
+  var nodes = doc.querySelectorAll("p, div, span, a, h2, h3, h4");
+  for (var n = 0; n < nodes.length; n++) {
+    if (wlDomAuthorInSkippedBlock(nodes[n])) continue;
+    var text = nodes[n].textContent;
+    if (!text || text.length > 120) continue;
+    best = wlDomAuthorConsider(best, text, lastKey);
+  }
+  if (!best) return partial;
+  return {
+    firstName: best.firstName,
+    lastName: best.lastName,
+    creatorType: "author"
+  };
+}
+
+function wlDomReadLeadAuthor(doc) {
+  var nodes = doc.querySelectorAll(".x_leadAuthorLine");
+  var seen = {};
+  for (var i = 0; i < nodes.length; i++) {
+    var parsed = wlDomParseLeadAuthor(nodes[i].textContent);
+    if (!parsed || !parsed.lastName) continue;
+    var key = (parsed.firstName + "\n" + parsed.lastName).toLowerCase();
+    if (seen[key]) continue;
+    seen[key] = true;
+    return wlDomAuthorComplete(doc, parsed);
+  }
+  return null;
+}
+
 function wlDomValidateGUID(v) {
   return wlDomGuidRe.test(v);
 }
@@ -2562,6 +2718,8 @@ function wlDomReadFacts(doc) {
 
   if (usedHeaderFallback) reviewReasons.push("header-fallback");
 
+  var leadAuthor = wlDomReadLeadAuthor(doc);
+
   return {
     ok: true,
     guid: guid,
@@ -2573,6 +2731,7 @@ function wlDomReadFacts(doc) {
     citations: citations,
     dockets: dockets,
     pageCountText: pageCountText,
+    authors: leadAuthor ? [leadAuthor] : [],
     reviewReasons: reviewReasons
   };
 }
@@ -2741,6 +2900,19 @@ function wlMapToZoteroFields(rec, opts) {
     tags.push({ tag: "Westlaw: needs citation review" });
   }
 
+  var creators = [];
+  var authors = Array.isArray(rec.authors) ? rec.authors : [];
+  for (var ai = 0; ai < authors.length && creators.length < 1; ai++) {
+    if (!wlMapAuthorOk(authors[ai])) continue;
+    var creator = {
+      firstName: authors[ai].firstName || "",
+      lastName: authors[ai].lastName,
+      creatorType: "author"
+    };
+    if (authors[ai].fieldMode === 1) creator.fieldMode = 1;
+    creators.push(creator);
+  }
+
   var result = {
     itemType: "case",
     caseName: caseName,
@@ -2753,7 +2925,7 @@ function wlMapToZoteroFields(rec, opts) {
     history: history,
     extra: extra,
     tags: tags,
-    creators: [],
+    creators: creators,
     attachments: [],
     notes: []
   };
@@ -2829,8 +3001,14 @@ function wlMapValidateOutgoing(fields) {
     });
   }
 
-  if (fields.creators && fields.creators.length > 0) {
-    problems.push("non-empty-creators");
+  if (!Array.isArray(fields.creators)) {
+    problems.push("bad-creators");
+  } else if (fields.creators.length > 1) {
+    problems.push("too-many-creators");
+  } else {
+    for (var ci = 0; ci < fields.creators.length; ci++) {
+      if (!wlMapAuthorOk(fields.creators[ci])) problems.push("bad-creator");
+    }
   }
   if (fields.attachments && fields.attachments.length > 0) {
     problems.push("non-empty-attachments");
@@ -2911,7 +3089,25 @@ function wlMapApply(fields, item) {
     });
   }
 
+  if (Array.isArray(fields.creators) && Array.isArray(item.creators)) {
+    fields.creators.forEach(function(creator) {
+      item.creators.push(creator);
+    });
+  }
+
   return item;
+}
+
+function wlMapAuthorOk(creator) {
+  if (!creator || creator.creatorType !== "author") return false;
+  var first = typeof creator.firstName === "string" ? creator.firstName : "";
+  var last = typeof creator.lastName === "string" ? creator.lastName : "";
+  if (!last || last.length > 80 || first.length > 80) return false;
+  var nameRe = /^[A-Za-z][A-Za-z.'’\- ]*$/;
+  if (!nameRe.test(last)) return false;
+  if (first && !nameRe.test(first)) return false;
+  if (wlMapWatermarkRe.test(first + last) || wlMapHtmlRe.test(first + last)) return false;
+  return true;
 }
 
 /* ---- reconcile.js ---- */
@@ -3023,6 +3219,7 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
     guid: dom.guid || null,
     url: context.url || "",
     caseName: wlRecClean(dom.headerName || ""),
+    authors: Array.isArray(dom.authors) ? dom.authors.slice(0, 1) : [],
     shortName: null,
     court: courtResult.court || "",
     rawCourt: dom.rawCourt || "",
@@ -3453,6 +3650,7 @@ function wlRecReconcile(input) {
       guid: guid,
       url: url,
       caseName: caseName,
+      authors: Array.isArray(dom.authors) ? dom.authors.slice(0, 1) : [],
       shortName: shortName,
       court: court,
       rawCourt: dom.rawCourt || "",
@@ -3473,6 +3671,7 @@ function wlRecReconcile(input) {
       guid: guid,
       url: url,
       caseName: "",
+      authors: [],
       shortName: null,
       court: "",
       rawCourt: "",

@@ -214,7 +214,7 @@ During development only, compare standard against that state's available style a
 | `history` | Subsequent procedural history only, mapped to CSL `references`. Keep parallels and WL alternatives out of it. Sanitized service tail; no leading separator if CSL supplies it |
 | `shortTitle` | Name-only service short form. If unavailable, leave unset and let CSL fall back to the full name; never guess which party is distinctive |
 | `url` | `https://1.next.westlaw.com/Document/<validated-GUID>/View/FullText.html`; no query, fragment, search terms, session or account parameters. GUID identifies the document, not the account |
-| `creators` | Empty. Judges are not case authors for this citation workflow; do not add parties as authors or scrape counsel. Optional judge metadata can be considered later, outside citation fields |
+| `creators` | One opinion author. The byline supplies the surname, and a short signature or the byline link's title supplies the given name. Per Curiam is a single field. Empty when the lead-author line is absent. Not the panel, not counsel, and not the parties. The local Bluebook style does not print this creator |
 | `attachments`, `notes` | Empty by default; no opinion text, page image, PDF, or service-response dump |
 
 ### Court-parenthetical rules
@@ -265,7 +265,7 @@ This is a **synthetic format test**, not an asserted real case or observed servi
 - Putting all parallels in `history`: confuses citation alternatives with procedural history and makes sensible rendering impossible.
 - Putting a complete parenthetical into `court`, or a complete citation into `reporter`: breaks year, locator, and short-form rendering.
 - Dropping exact dates just to accommodate a deficient style: loses bibliographic data.
-- Judges as authors: unnecessary, potentially distorts other citation styles, and collects more data than needed.
+- Parties or counsel as authors. The opinion author from the lead-author line is stored so the Zotero Author field is filled. The local Bluebook style does not print that creator.
 
 ## 6. Decision 4 — Use a local CSL derivative
 
@@ -343,7 +343,7 @@ All functions ship in one translator `.js`; “module” here means responsibili
 | `parseWestlawInventory` | Restricted docket/date/WL/parallel extraction; never supplies Bluebook abbreviations blindly |
 | `parseReporterCitation` / `parseShortName` | Typed citation recognition and name-only short form extraction |
 | `reconcileCaseRecord` | Provenance, conflicts, duplicate history/citation checks, round-trip comparison |
-| `mapCaseToZotero` | Native field and Extra contract; no attachments/creators/full-text storage |
+| `mapCaseToZotero` | Native field and Extra contract; one opinion author when the lead-author line is present; no attachments or full-text storage |
 | `validateOutgoingItem` | Allowed fields, no watermark/token/config leakage, coherent identity, review status |
 | `debugEvent` | Version/profile/status/reason codes only; never raw HTML, headers, tokens, or response payloads |
 
@@ -365,7 +365,7 @@ Proposed test layers:
 - Pure parser tests over normalized matrix strings and synthetic adversarial strings.
 - DOM tests over private inert HTML plus minimized DOM fragments.
 - Request-envelope tests with mocked HTTP: echo mismatch, missing forms, duplicate `short`, JSON/HTML errors, timeouts, and response-size limits.
-- Mapping tests: entire Zotero item compared with expected fields; explicit absence assertions for tokens, zero-width watermark, opinion text, snapshots, and creators.
+- Mapping tests: entire Zotero item compared with expected fields; explicit absence assertions for tokens, zero-width watermark, opinion text, and snapshots. Creators stay empty unless the fixture has a lead-author line.
 - Actual Zotero/citeproc rendering tests with the installed local CSL; verify typography as well as plaintext.
 - Manual Chrome/Connector end-to-end checks, because Scaffold cannot establish MV3 origin/cookie behavior.
 

@@ -73,12 +73,14 @@ or { ok:false, reason: "no-citation-anchor"|"unbalanced-parens"|"no-parenthetica
 ```
 { ok:true, guid: "I…"|null, contentType: "Cases"|null, headerName: "…", rawCourt: "United States Court of Appeals, Fifth Circuit.",
   dateText: "August 25, 1999", date: "1999-08-25"|null, citations: [Citation...], dockets: ["No. 98-40679"],
-  pageCountText: "(Approx. 12 pages)"|null, reviewReasons: [] }
+  pageCountText: "(Approx. 12 pages)"|null, authors: [{ firstName, lastName, creatorType:"author", fieldMode?:1 }], reviewReasons: [] }
 ```
+
+`authors` is the opinion author from `.x_leadAuthorLine` (one person, or Per Curiam). A surname-only byline is filled from a short signature line for that surname, or from the byline link's title. It is empty when the lead-author line is absent. It is not the panel and not counsel.
 
 `CaseRecord` (reconcileCaseRecord output → mapCaseToZotero input):
 ```
-{ guid, url, caseName, shortName|null, court (Bluebook authority or ""), rawCourt, date (ISO, full or "YYYY"),
+{ guid, url, caseName, authors, shortName|null, court (Bluebook authority or ""), rawCourt, date (ISO, full or "YYYY"),
   dockets: [], primary: Citation, alternates: [Citation...], history: "", parentheticalSuffix: "",
   wlPrimary: boolean, profile: "standard"|"texas"|"dom-only", status: "validated-profile"|"unverified-profile"|"metadata-only",
   reviewReasons: [], provenance: { field: "service"|"dom"|"both" } }

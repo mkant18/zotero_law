@@ -161,6 +161,19 @@ function wlMapToZoteroFields(rec, opts) {
     tags.push({ tag: "Westlaw: needs citation review" });
   }
 
+  var creators = [];
+  var authors = Array.isArray(rec.authors) ? rec.authors : [];
+  for (var ai = 0; ai < authors.length && creators.length < 1; ai++) {
+    if (!wlMapAuthorOk(authors[ai])) continue;
+    var creator = {
+      firstName: authors[ai].firstName || "",
+      lastName: authors[ai].lastName,
+      creatorType: "author"
+    };
+    if (authors[ai].fieldMode === 1) creator.fieldMode = 1;
+    creators.push(creator);
+  }
+
   var result = {
     itemType: "case",
     caseName: caseName,
@@ -173,7 +186,7 @@ function wlMapToZoteroFields(rec, opts) {
     history: history,
     extra: extra,
     tags: tags,
-    creators: [],
+    creators: creators,
     attachments: [],
     notes: []
   };
@@ -249,8 +262,14 @@ function wlMapValidateOutgoing(fields) {
     });
   }
 
-  if (fields.creators && fields.creators.length > 0) {
-    problems.push("non-empty-creators");
+  if (!Array.isArray(fields.creators)) {
+    problems.push("bad-creators");
+  } else if (fields.creators.length > 1) {
+    problems.push("too-many-creators");
+  } else {
+    for (var ci = 0; ci < fields.creators.length; ci++) {
+      if (!wlMapAuthorOk(fields.creators[ci])) problems.push("bad-creator");
+    }
   }
   if (fields.attachments && fields.attachments.length > 0) {
     problems.push("non-empty-attachments");
@@ -331,7 +350,25 @@ function wlMapApply(fields, item) {
     });
   }
 
+  if (Array.isArray(fields.creators) && Array.isArray(item.creators)) {
+    fields.creators.forEach(function(creator) {
+      item.creators.push(creator);
+    });
+  }
+
   return item;
+}
+
+function wlMapAuthorOk(creator) {
+  if (!creator || creator.creatorType !== "author") return false;
+  var first = typeof creator.firstName === "string" ? creator.firstName : "";
+  var last = typeof creator.lastName === "string" ? creator.lastName : "";
+  if (!last || last.length > 80 || first.length > 80) return false;
+  var nameRe = /^[A-Za-z][A-Za-z.'’\- ]*$/;
+  if (!nameRe.test(last)) return false;
+  if (first && !nameRe.test(first)) return false;
+  if (wlMapWatermarkRe.test(first + last) || wlMapHtmlRe.test(first + last)) return false;
+  return true;
 }
 
 if (typeof module !== "undefined" && module.exports) {
