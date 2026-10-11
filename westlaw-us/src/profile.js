@@ -629,6 +629,7 @@ function wlProfIsOfficialHighCourtReporter(reporter) {
 
 function wlProfCourtForCitation(classification, primary, serviceCourt) {
   var reviewReasons = [];
+  if (classification && classification.bluebook && serviceCourt && wlTextCompareKey(serviceCourt) !== wlTextCompareKey(classification.bluebook)) reviewReasons.push("court-conflict");
 
   if (classification && classification.system === "federal" && classification.level === "supreme") {
     return { court: "", reviewReasons: reviewReasons };
@@ -638,7 +639,7 @@ function wlProfCourtForCitation(classification, primary, serviceCourt) {
     return { court: classification ? classification.bluebook || "" : "", reviewReasons: reviewReasons };
   }
 
-  if (primary && wlProfIsOfficialHighCourtReporter(primary.reporter)) {
+  if (primary && wlProfIsOfficialHighCourtReporter(primary.reporter) && classification && classification.level === "supreme" && ((classification.state === "CA" && /^Cal\./.test(primary.reporter)) || (classification.state === "NY" && /^N\.Y\./.test(primary.reporter)))) {
     return { court: "", reviewReasons: reviewReasons };
   }
 
@@ -648,8 +649,7 @@ function wlProfCourtForCitation(classification, primary, serviceCourt) {
     if (serviceKey === bluebookKey) {
       return { court: serviceCourt, reviewReasons: reviewReasons };
     } else if (classification && classification.bluebook) {
-      reviewReasons.push("court-conflict");
-      return { court: serviceCourt, reviewReasons: reviewReasons };
+      return { court: classification.bluebook, reviewReasons: reviewReasons };
     } else if (classification && classification.confidence === "none") {
       reviewReasons.push("court-unclassified");
       return { court: serviceCourt, reviewReasons: reviewReasons };

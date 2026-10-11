@@ -1,4 +1,4 @@
-var wlTrVersion = "0.1.0";
+var wlTrVersion = "0.2.0";
 
 function wlTrDetectWeb(doc, url) {
   var readiness = wlDomInspectCaseReadiness(doc, url);
@@ -124,27 +124,29 @@ async function wlTrDoWeb(doc, url) {
   // 6. Map to Zotero fields
   var fields = wlMapToZoteroFields(rec, { version: wlTrVersion });
 
-  // 7. Validate outgoing — drop offending optional fields rather than aborting
+  // 7. Reject unsafe values before they reach Zotero; retain bounded reason codes.
   var validation = wlMapValidateOutgoing(fields);
   if (!validation.ok) {
     for (var i = 0; i < validation.problems.length; i++) {
       var problem = validation.problems[i];
-      var code = problem.split(":")[0];
-      // Drop optional fields that caused validation problems
-      if (problem.indexOf("history") !== -1 && fields.history) {
-        fields.history = "";
-      }
-      if (problem.indexOf("shortTitle") !== -1 && fields.shortTitle) {
-        delete fields.shortTitle;
-      }
-      if (problem.indexOf("url") !== -1 && fields.url) {
-        delete fields.url;
-      }
-      // Add review line for validation issues
-      var extraLines = fields.extra.split("\n");
-      extraLines.push("Westlaw review: validation-" + code);
-      fields.extra = extraLines.join("\n");
+      var key = problem.split(":")[1];
+      if (key === "caseName" || key === "itemType") throw new Error("Westlaw: invalid required metadata");
+      if (key && key.indexOf("extra[") === 0) {
+        var lines = fields.extra.split("\n");
+        lines[Number(key.match(/\[(\d+)\]/)[1])] = "";
+        fields.extra = lines.join("\n");
+      } else if (key && key.indexOf("creators[") === 0) fields.creators = [];
+      else if (key && key.indexOf("tags[") === 0) fields.tags = [];
+      else if (key) fields[key] = "";
+      else if (problem.indexOf("firstPage-") === 0) fields.firstPage = "";
+      else if (problem.indexOf("shortTitle-") === 0) delete fields.shortTitle;
+      else if (problem.indexOf("url-") === 0) delete fields.url;
+      fields.extra += "\nWestlaw review: validation-" + problem;
     }
+    fields.extra = fields.extra.replace("Westlaw status: validated-profile", "Westlaw status: unverified-profile");
+    rec.status = "unverified-profile";
+    if (!fields.tags.some(function(t) { return t.tag === "Westlaw: needs citation review"; })) fields.tags.push({ tag: "Westlaw: needs citation review" });
+    if (!wlMapValidateOutgoing(fields).ok) throw new Error("Westlaw: invalid outgoing metadata");
   }
 
   // 8. Debug log (bounded codes only — no URLs, tokens, names, text)

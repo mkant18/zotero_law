@@ -9,7 +9,7 @@
 	"inRepository": false,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
-	"lastUpdated": "2026-10-11 03:13:33"
+	"lastUpdated": "2026-10-11 18:18:28"
 }
 
 /*
@@ -1576,6 +1576,7 @@ function wlProfIsOfficialHighCourtReporter(reporter) {
 
 function wlProfCourtForCitation(classification, primary, serviceCourt) {
   var reviewReasons = [];
+  if (classification && classification.bluebook && serviceCourt && wlTextCompareKey(serviceCourt) !== wlTextCompareKey(classification.bluebook)) reviewReasons.push("court-conflict");
 
   if (classification && classification.system === "federal" && classification.level === "supreme") {
     return { court: "", reviewReasons: reviewReasons };
@@ -1585,7 +1586,7 @@ function wlProfCourtForCitation(classification, primary, serviceCourt) {
     return { court: classification ? classification.bluebook || "" : "", reviewReasons: reviewReasons };
   }
 
-  if (primary && wlProfIsOfficialHighCourtReporter(primary.reporter)) {
+  if (primary && wlProfIsOfficialHighCourtReporter(primary.reporter) && classification && classification.level === "supreme" && ((classification.state === "CA" && /^Cal\./.test(primary.reporter)) || (classification.state === "NY" && /^N\.Y\./.test(primary.reporter)))) {
     return { court: "", reviewReasons: reviewReasons };
   }
 
@@ -1595,8 +1596,7 @@ function wlProfCourtForCitation(classification, primary, serviceCourt) {
     if (serviceKey === bluebookKey) {
       return { court: serviceCourt, reviewReasons: reviewReasons };
     } else if (classification && classification.bluebook) {
-      reviewReasons.push("court-conflict");
-      return { court: serviceCourt, reviewReasons: reviewReasons };
+      return { court: classification.bluebook, reviewReasons: reviewReasons };
     } else if (classification && classification.confidence === "none") {
       reviewReasons.push("court-unclassified");
       return { court: serviceCourt, reviewReasons: reviewReasons };
@@ -2230,6 +2230,27 @@ function wlDomHeaderListCourtLine(listEl) {
   return courtLine;
 }
 
+function wlDomReadAuthor(doc, reviewReasons) {
+  var lines = doc.querySelectorAll(".x_leadAuthorLine");
+  var names = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = wlDomClean(lines[i].textContent);
+    var name = "";
+    if (/^per curiam[:.]?$/i.test(line)) name = "Per Curiam";
+    else {
+      var match = line.match(/^(.+?),\s*(?:(?:Senior|Chief|Associate|United States|U\.?S\.?|District|Circuit|Magistrate|Bankruptcy)\s+)*(?:Judge|Justice|J\.|C\.?J\.?)[:.]?$/i);
+      if (match) name = match[1];
+    }
+    if (!name || name.length > 200 || !/^[\p{L}\p{M} .'’-]+$/u.test(name)) {
+      if (reviewReasons.indexOf("author-unparsed") === -1) reviewReasons.push("author-unparsed");
+      continue;
+    }
+    if (!names.some(function(n) { return n.toLowerCase() === name.toLowerCase(); })) names.push(name);
+  }
+  if (names.length > 1) reviewReasons.push("author-conflict");
+  return names.length === 1 && reviewReasons.indexOf("author-unparsed") === -1 ? names[0] : null;
+}
+
 function wlDomReadFacts(doc) {
   var reviewReasons = [];
   var citations = [];
@@ -2409,6 +2430,7 @@ function wlDomReadFacts(doc) {
     guid: guid,
     contentType: (ctx.config && ctx.config.contentType) || null,
     headerName: headerName,
+    author: wlDomReadAuthor(doc, reviewReasons),
     rawCourt: rawCourt,
     dateText: dateText,
     date: date,
@@ -2432,7 +2454,7 @@ var wlMapDashRe = /[\u2013\u2014]/g;
 var wlMapDocketCleanRe = /^[0-9a-zA-Z\u2013\u2014-]+$/;
 
 function wlMapStripWatermark(str) {
-  return str.replace(wlMapWatermarkRe, "");
+  return str.replace(/[\u200B-\u200F\u2060-\u2064\uFEFF]/g, "").replace(/\s+/g, " ").trim().normalize("NFC");
 }
 
 function wlMapNormalizeDocketSingle(docket) {
@@ -2573,7 +2595,7 @@ function wlMapToZoteroFields(rec, opts) {
     history: history,
     extra: extra,
     tags: tags,
-    creators: [],
+    creators: rec.author ? [{ creatorType: "author", lastName: wlMapStripWatermark(rec.author), fieldMode: 1 }] : [],
     attachments: [],
     notes: []
   };
@@ -2589,12 +2611,14 @@ function wlMapToZoteroFields(rec, opts) {
 
 function wlMapValidateOutgoing(fields) {
   var problems = [];
+  if (!fields || typeof fields !== "object") return { ok: false, problems: ["bad-fields"] };
   var scalarKeys = [
     "itemType", "caseName", "court", "dateDecided", "docketNumber",
     "reporter", "reporterVolume", "firstPage", "history", "shortTitle", "url"
   ];
   scalarKeys.forEach(function(key) {
     var val = fields[key];
+    if (val !== undefined && typeof val !== "string") problems.push("invalid-type:" + key);
     if (typeof val !== "string") {
       return;
     }
@@ -2610,6 +2634,15 @@ function wlMapValidateOutgoing(fields) {
     if (wlMapTokenRe.test(val)) {
       problems.push("token-leak:" + key);
     }
+  });
+
+  if (fields.dateDecided && /^\d{4}-\d{2}-\d{2}$/.test(fields.dateDecided)) {
+    var parts = fields.dateDecided.split("-");
+    var date = new Date(fields.dateDecided + "T00:00:00Z");
+    if (!isFinite(date.getTime()) || date.getUTCFullYear() !== Number(parts[0]) || date.getUTCMonth() + 1 !== Number(parts[1]) || date.getUTCDate() !== Number(parts[2])) problems.push("invalid-date:dateDecided");
+  } else if (fields.dateDecided && !/^\d{4}$/.test(fields.dateDecided)) problems.push("invalid-date:dateDecided");
+  ["reporterVolume", "firstPage"].forEach(function(key) {
+    if (fields[key] && !/^\d+$/.test(fields[key])) problems.push("invalid-number:" + key);
   });
 
   if (typeof fields.extra === "string") {
@@ -2649,9 +2682,11 @@ function wlMapValidateOutgoing(fields) {
     });
   }
 
-  if (fields.creators && fields.creators.length > 0) {
-    problems.push("non-empty-creators");
-  }
+  if (Array.isArray(fields.creators)) fields.creators.forEach(function(c, i) {
+    if (!c || c.creatorType !== "author" || c.fieldMode !== 1 || typeof c.lastName !== "string" || !c.lastName.trim() || c.lastName.length > 200 || wlMapWatermarkRe.test(c.lastName) || wlMapHtmlRe.test(c.lastName) || wlMapTokenRe.test(c.lastName)) {
+      problems.push("invalid-creator:creators[" + i + "]");
+    }
+  });
   if (fields.attachments && fields.attachments.length > 0) {
     problems.push("non-empty-attachments");
   }
@@ -2659,7 +2694,7 @@ function wlMapValidateOutgoing(fields) {
     problems.push("non-empty-notes");
   }
 
-  if (fields.firstPage) {
+  if (typeof fields.firstPage === "string" && fields.firstPage) {
     if (fields.firstPage.indexOf("*") !== -1) {
       problems.push("firstPage-has-star");
     }
@@ -2678,7 +2713,7 @@ function wlMapValidateOutgoing(fields) {
     }
   });
 
-  if (fields.shortTitle) {
+  if (typeof fields.shortTitle === "string" && fields.shortTitle) {
     if (fields.shortTitle === "Id.") {
       problems.push("shortTitle-is-Id");
     }
@@ -2687,7 +2722,7 @@ function wlMapValidateOutgoing(fields) {
     }
   }
 
-  if (fields.url) {
+  if (typeof fields.url === "string" && fields.url) {
     if (fields.url.indexOf("?") !== -1) {
       problems.push("url-has-query");
     }
@@ -2722,6 +2757,10 @@ function wlMapApply(fields, item) {
     fields.tags.forEach(function(t) {
       item.tags.push(t);
     });
+  }
+
+  if (Array.isArray(fields.creators) && Array.isArray(item.creators)) {
+    fields.creators.forEach(function(c) { item.creators.push(c); });
   }
 
   return item;
@@ -2789,11 +2828,13 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
   provenance.date = date ? "dom" : "service";
   provenance.dockets = "dom";
   provenance.court = "dom";
+  if (dom.author) provenance.author = "dom";
 
   return {
     guid: dom.guid || null,
     url: context.url || "",
     caseName: wlRecClean(dom.headerName || ""),
+    author: dom.author || null,
     shortName: null,
     court: courtResult.court || "",
     rawCourt: dom.rawCourt || "",
@@ -2803,7 +2844,7 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
     alternates: [],
     history: "",
     parentheticalSuffix: "",
-    wlPrimary: false,
+    wlPrimary: !!primary && primary.kind === "wl",
     profile: "dom-only",
     status: "metadata-only",
     reviewReasons: reviewReasons,
@@ -2924,6 +2965,10 @@ function wlRecReconcile(input) {
       reviewReasons.push("name-from-dom");
       provenance.caseName = "dom";
     }
+    if (!caseName) reviewReasons.push("name-missing");
+    // Different abbreviations may trigger review; never silently certify a different header name.
+    if (dom.headerName && parsedA && parsedA.ok && wlTextCompareKey(dom.headerName) !== wlTextCompareKey(parsedA.name)) reviewReasons.push("header-name-conflict");
+    if (profile === "standard" && parsedA && parsedA.ok && parsedBstd && parsedBstd.ok && wlTextCompareKey(parsedA.name) !== wlTextCompareKey(parsedBstd.name)) reviewReasons.push("name-conflict");
 
     // 6. primary citation
     var primary = null;
@@ -3080,9 +3125,15 @@ function wlRecReconcile(input) {
       date = parsedBinv.date;
       provenance.date = "service";
     } else if (parsedA && parsedA.ok && parsedA.year) {
-      date = parsedA.year;
+      date = parsedA.date || parsedA.year;
       provenance.date = "service";
     }
+
+    var fullDates = [dom.date, parsedA && parsedA.date, parsedBinv && parsedBinv.date].filter(function(d) {
+      return typeof d === "string" && d.length === 10;
+    });
+    if (fullDates.some(function(d) { return d !== fullDates[0]; })) reviewReasons.push("date-conflict");
+    if (!date) reviewReasons.push("date-missing");
 
     // Year conflict check
     if (date && parsedA && parsedA.ok && parsedA.year) {
@@ -3108,6 +3159,16 @@ function wlRecReconcile(input) {
     }
 
     // WL-primary requires at least one docket
+    var serviceDockets = parsedBinv && parsedBinv.dockets && parsedBinv.dockets.length ? parsedBinv.dockets : parsedA && parsedA.dockets;
+    if (!dockets.length && serviceDockets && serviceDockets.length) {
+      dockets = serviceDockets.slice();
+      provenance.dockets = "service";
+    } else if (dom.dockets && dom.dockets.length && serviceDockets && serviceDockets.length) {
+      var docketKey = function(ds) {
+        return wlMapFormatDocketNumber(ds).replace(/^Nos?\.\s*/, "").toLowerCase().split(/,\s*/).sort().join("|");
+      };
+      if (docketKey(dom.dockets) !== docketKey(serviceDockets)) reviewReasons.push("docket-conflict");
+    }
     if (wlPrimary && dockets.length === 0) {
       reviewReasons.push("wl-missing-docket");
     }
@@ -3125,7 +3186,7 @@ function wlRecReconcile(input) {
     provenance.court = "service";
 
     // WL-primary requires full date
-    if (wlPrimary && date && date.length === 4) {
+    if (wlPrimary && (!date || date.length === 4)) {
       reviewReasons.push("wl-missing-date");
     }
 
@@ -3182,10 +3243,12 @@ function wlRecReconcile(input) {
     }
 
     // 15. Build and return CaseRecord
+    if (dom.author) provenance.author = "dom";
     return {
       guid: guid,
       url: url,
       caseName: caseName,
+      author: dom.author || null,
       shortName: shortName,
       court: court,
       rawCourt: dom.rawCourt || "",
@@ -3225,7 +3288,7 @@ function wlRecReconcile(input) {
 }
 
 /* ---- translator.js ---- */
-var wlTrVersion = "0.1.0";
+var wlTrVersion = "0.2.0";
 
 function wlTrDetectWeb(doc, url) {
   var readiness = wlDomInspectCaseReadiness(doc, url);
@@ -3351,27 +3414,29 @@ async function wlTrDoWeb(doc, url) {
   // 6. Map to Zotero fields
   var fields = wlMapToZoteroFields(rec, { version: wlTrVersion });
 
-  // 7. Validate outgoing — drop offending optional fields rather than aborting
+  // 7. Reject unsafe values before they reach Zotero; retain bounded reason codes.
   var validation = wlMapValidateOutgoing(fields);
   if (!validation.ok) {
     for (var i = 0; i < validation.problems.length; i++) {
       var problem = validation.problems[i];
-      var code = problem.split(":")[0];
-      // Drop optional fields that caused validation problems
-      if (problem.indexOf("history") !== -1 && fields.history) {
-        fields.history = "";
-      }
-      if (problem.indexOf("shortTitle") !== -1 && fields.shortTitle) {
-        delete fields.shortTitle;
-      }
-      if (problem.indexOf("url") !== -1 && fields.url) {
-        delete fields.url;
-      }
-      // Add review line for validation issues
-      var extraLines = fields.extra.split("\n");
-      extraLines.push("Westlaw review: validation-" + code);
-      fields.extra = extraLines.join("\n");
+      var key = problem.split(":")[1];
+      if (key === "caseName" || key === "itemType") throw new Error("Westlaw: invalid required metadata");
+      if (key && key.indexOf("extra[") === 0) {
+        var lines = fields.extra.split("\n");
+        lines[Number(key.match(/\[(\d+)\]/)[1])] = "";
+        fields.extra = lines.join("\n");
+      } else if (key && key.indexOf("creators[") === 0) fields.creators = [];
+      else if (key && key.indexOf("tags[") === 0) fields.tags = [];
+      else if (key) fields[key] = "";
+      else if (problem.indexOf("firstPage-") === 0) fields.firstPage = "";
+      else if (problem.indexOf("shortTitle-") === 0) delete fields.shortTitle;
+      else if (problem.indexOf("url-") === 0) delete fields.url;
+      fields.extra += "\nWestlaw review: validation-" + problem;
     }
+    fields.extra = fields.extra.replace("Westlaw status: validated-profile", "Westlaw status: unverified-profile");
+    rec.status = "unverified-profile";
+    if (!fields.tags.some(function(t) { return t.tag === "Westlaw: needs citation review"; })) fields.tags.push({ tag: "Westlaw: needs citation review" });
+    if (!wlMapValidateOutgoing(fields).ok) throw new Error("Westlaw: invalid outgoing metadata");
   }
 
   // 8. Debug log (bounded codes only — no URLs, tokens, names, text)

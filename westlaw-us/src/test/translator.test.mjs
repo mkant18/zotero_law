@@ -443,6 +443,33 @@ describe("translator - doWeb envelope echo mismatch", function() {
 });
 
 // ---- Non-echo envelope review reasons reach the saved item (W5) ----
+describe("built translator - explicit opinion author", function() {
+  it("saves lead author, excludes dissent, and preserves citation fields", async function() {
+    var doc = makeDoc({
+      title: "Example v. Sample | Cases | Westlaw Advantage",
+      hostname: "1.next.westlaw.com",
+      body: el("body", {},
+        el("div", { id: "co_docHeaderTitleLine" }, "Example v. Sample"),
+        el("ul", { id: "co_docHeaderCitation" },
+          el("li", {}, "United States Court of Appeals, Fifth Circuit."),
+          el("li", {}, "August 25, 1999"),
+          el("li", {}, "187 F.3d 486")),
+        el("div", { class: "x_leadAuthorLine" }, "BROOKSHIRE, Justice."),
+        el("div", { class: "x_dissentAuthorLine" }, "OTHER, Justice."))
+    });
+    var result = await runDoWebRouted(doc);
+    var item = result.fz.items[0];
+    assert.equal(result.fz.items.length, 1);
+    assert.equal(item.creators.length, 1);
+    assert.equal(item.creators[0].lastName, "BROOKSHIRE");
+    assert.equal(item.creators[0].creatorType, "author");
+    assert.equal(item.creators[0].fieldMode, 1);
+    assert.equal(item.court, "5th Cir.");
+    assert.equal(item.dateDecided, "1999-08-25");
+    assert.equal(item.firstPage, "486");
+  });
+});
+
 // B is registered first so its URL (which also contains styleIDs=standard) is routed to the B mock.
 async function runDoWebRouted(doc, mockA, mockB) {
   var fz = makeFakeZotero();

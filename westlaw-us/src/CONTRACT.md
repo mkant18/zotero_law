@@ -72,13 +72,13 @@ or { ok:false, reason: "no-citation-anchor"|"unbalanced-parens"|"no-parenthetica
 `DomFacts` (readDOMFacts):
 ```
 { ok:true, guid: "I…"|null, contentType: "Cases"|null, headerName: "…", rawCourt: "United States Court of Appeals, Fifth Circuit.",
-  dateText: "August 25, 1999", date: "1999-08-25"|null, citations: [Citation...], dockets: ["No. 98-40679"],
+  author: "BROOKSHIRE"|null, dateText: "August 25, 1999", date: "1999-08-25"|null, citations: [Citation...], dockets: ["No. 98-40679"],
   pageCountText: "(Approx. 12 pages)"|null, reviewReasons: [] }
 ```
 
 `CaseRecord` (reconcileCaseRecord output → mapCaseToZotero input):
 ```
-{ guid, url, caseName, shortName|null, court (Bluebook authority or ""), rawCourt, date (ISO, full or "YYYY"),
+{ guid, url, caseName, author|null, shortName|null, court (Bluebook authority or ""), rawCourt, date (ISO, full or "YYYY"),
   dockets: [], primary: Citation, alternates: [Citation...], history: "", parentheticalSuffix: "",
   wlPrimary: boolean, profile: "standard"|"texas"|"dom-only", status: "validated-profile"|"unverified-profile"|"metadata-only",
   reviewReasons: [], provenance: { field: "service"|"dom"|"both" } }
@@ -122,3 +122,26 @@ wlSvcReadEnvelope(json, wantedStyleIds, expect?)
   U+2014, apostrophes, accents.
 - `shortTitle` is name-only (never `Id.` or a citation).
 - No tokens, raw HTML, or opinion text in any output.
+
+## Field accuracy (0.2.0)
+
+The user requested author capture on 2026-10-11; this supersedes the original plan's empty-creators policy.
+Only `.x_leadAuthorLine` supplies an author. Strip recognized judicial titles; preserve the source name as
+a Zotero single-field author (`fieldMode: 1`) rather than guessing first/last names or expanding surnames.
+Per curiam is a literal author. Panel, counsel, and dissent lines never supply authors. Duplicate identical
+lines are harmless; conflicting or unparsed lead lines leave authors empty and add review reasons.
+Absent lead lines leave authors empty; absence is not evidence of a named author.
+
+Compare full decision dates even within one year, normalize and compare docket sets, and flag disagreement
+between header and service names and between standard citation names. Abbreviation differences may
+require review. Use full service dates/dockets when header facts are absent. Court
+disagreement retains the classified header authority and requires review, including regional reporters.
+Official-reporter omission requires the matching state high court.
+
+Validate calendar dates, numeric reporter volumes/pages, scalar types, and author safety before saving.
+Remove unsafe optional fields and Extra lines, mark the item for review, then validate again. Unsafe
+required name/type or remaining validation errors abort completion. Review codes contain no source values.
+
+Offline tests prove these rules against synthetic inputs. Live Westlaw markup and installed Zotero still
+need verification; unsupported markup or ambiguous facts require human review. No parser guarantees
+every source field is present or correct.

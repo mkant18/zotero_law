@@ -269,6 +269,27 @@ function wlDomHeaderListCourtLine(listEl) {
   return courtLine;
 }
 
+function wlDomReadAuthor(doc, reviewReasons) {
+  var lines = doc.querySelectorAll(".x_leadAuthorLine");
+  var names = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = wlDomClean(lines[i].textContent);
+    var name = "";
+    if (/^per curiam[:.]?$/i.test(line)) name = "Per Curiam";
+    else {
+      var match = line.match(/^(.+?),\s*(?:(?:Senior|Chief|Associate|United States|U\.?S\.?|District|Circuit|Magistrate|Bankruptcy)\s+)*(?:Judge|Justice|J\.|C\.?J\.?)[:.]?$/i);
+      if (match) name = match[1];
+    }
+    if (!name || name.length > 200 || !/^[\p{L}\p{M} .'’-]+$/u.test(name)) {
+      if (reviewReasons.indexOf("author-unparsed") === -1) reviewReasons.push("author-unparsed");
+      continue;
+    }
+    if (!names.some(function(n) { return n.toLowerCase() === name.toLowerCase(); })) names.push(name);
+  }
+  if (names.length > 1) reviewReasons.push("author-conflict");
+  return names.length === 1 && reviewReasons.indexOf("author-unparsed") === -1 ? names[0] : null;
+}
+
 function wlDomReadFacts(doc) {
   var reviewReasons = [];
   var citations = [];
@@ -448,6 +469,7 @@ function wlDomReadFacts(doc) {
     guid: guid,
     contentType: (ctx.config && ctx.config.contentType) || null,
     headerName: headerName,
+    author: wlDomReadAuthor(doc, reviewReasons),
     rawCourt: rawCourt,
     dateText: dateText,
     date: date,

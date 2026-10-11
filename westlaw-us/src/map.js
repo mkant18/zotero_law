@@ -10,7 +10,7 @@ var wlMapDashRe = /[\u2013\u2014]/g;
 var wlMapDocketCleanRe = /^[0-9a-zA-Z\u2013\u2014-]+$/;
 
 function wlMapStripWatermark(str) {
-  return str.replace(wlMapWatermarkRe, "");
+  return str.replace(/[\u200B-\u200F\u2060-\u2064\uFEFF]/g, "").replace(/\s+/g, " ").trim().normalize("NFC");
 }
 
 function wlMapNormalizeDocketSingle(docket) {
@@ -151,7 +151,7 @@ function wlMapToZoteroFields(rec, opts) {
     history: history,
     extra: extra,
     tags: tags,
-    creators: [],
+    creators: rec.author ? [{ creatorType: "author", lastName: wlMapStripWatermark(rec.author), fieldMode: 1 }] : [],
     attachments: [],
     notes: []
   };
@@ -167,12 +167,14 @@ function wlMapToZoteroFields(rec, opts) {
 
 function wlMapValidateOutgoing(fields) {
   var problems = [];
+  if (!fields || typeof fields !== "object") return { ok: false, problems: ["bad-fields"] };
   var scalarKeys = [
     "itemType", "caseName", "court", "dateDecided", "docketNumber",
     "reporter", "reporterVolume", "firstPage", "history", "shortTitle", "url"
   ];
   scalarKeys.forEach(function(key) {
     var val = fields[key];
+    if (val !== undefined && typeof val !== "string") problems.push("invalid-type:" + key);
     if (typeof val !== "string") {
       return;
     }
@@ -188,6 +190,15 @@ function wlMapValidateOutgoing(fields) {
     if (wlMapTokenRe.test(val)) {
       problems.push("token-leak:" + key);
     }
+  });
+
+  if (fields.dateDecided && /^\d{4}-\d{2}-\d{2}$/.test(fields.dateDecided)) {
+    var parts = fields.dateDecided.split("-");
+    var date = new Date(fields.dateDecided + "T00:00:00Z");
+    if (!isFinite(date.getTime()) || date.getUTCFullYear() !== Number(parts[0]) || date.getUTCMonth() + 1 !== Number(parts[1]) || date.getUTCDate() !== Number(parts[2])) problems.push("invalid-date:dateDecided");
+  } else if (fields.dateDecided && !/^\d{4}$/.test(fields.dateDecided)) problems.push("invalid-date:dateDecided");
+  ["reporterVolume", "firstPage"].forEach(function(key) {
+    if (fields[key] && !/^\d+$/.test(fields[key])) problems.push("invalid-number:" + key);
   });
 
   if (typeof fields.extra === "string") {
@@ -227,9 +238,11 @@ function wlMapValidateOutgoing(fields) {
     });
   }
 
-  if (fields.creators && fields.creators.length > 0) {
-    problems.push("non-empty-creators");
-  }
+  if (Array.isArray(fields.creators)) fields.creators.forEach(function(c, i) {
+    if (!c || c.creatorType !== "author" || c.fieldMode !== 1 || typeof c.lastName !== "string" || !c.lastName.trim() || c.lastName.length > 200 || wlMapWatermarkRe.test(c.lastName) || wlMapHtmlRe.test(c.lastName) || wlMapTokenRe.test(c.lastName)) {
+      problems.push("invalid-creator:creators[" + i + "]");
+    }
+  });
   if (fields.attachments && fields.attachments.length > 0) {
     problems.push("non-empty-attachments");
   }
@@ -237,7 +250,7 @@ function wlMapValidateOutgoing(fields) {
     problems.push("non-empty-notes");
   }
 
-  if (fields.firstPage) {
+  if (typeof fields.firstPage === "string" && fields.firstPage) {
     if (fields.firstPage.indexOf("*") !== -1) {
       problems.push("firstPage-has-star");
     }
@@ -256,7 +269,7 @@ function wlMapValidateOutgoing(fields) {
     }
   });
 
-  if (fields.shortTitle) {
+  if (typeof fields.shortTitle === "string" && fields.shortTitle) {
     if (fields.shortTitle === "Id.") {
       problems.push("shortTitle-is-Id");
     }
@@ -265,7 +278,7 @@ function wlMapValidateOutgoing(fields) {
     }
   }
 
-  if (fields.url) {
+  if (typeof fields.url === "string" && fields.url) {
     if (fields.url.indexOf("?") !== -1) {
       problems.push("url-has-query");
     }
@@ -300,6 +313,10 @@ function wlMapApply(fields, item) {
     fields.tags.forEach(function(t) {
       item.tags.push(t);
     });
+  }
+
+  if (Array.isArray(fields.creators) && Array.isArray(item.creators)) {
+    fields.creators.forEach(function(c) { item.creators.push(c); });
   }
 
   return item;

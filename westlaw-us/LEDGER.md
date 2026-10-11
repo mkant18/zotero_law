@@ -1,5 +1,21 @@
 # Westlaw US → Zotero — task / status ledger
 
+## Field accuracy update (2026-10-11)
+
+- Prior working-tree build timestamp committed as `e1648d1` before implementation.
+- Translator 0.2.0 captures explicit lead-opinion authors, preserves literal names, excludes dissent/panel/counsel,
+  and flags ambiguous author lines. This user-requested behavior supersedes the original empty-creators policy.
+- Full-date, normalized docket, header/service name, and court disagreements require review. Header court
+  classification wins conflicts; official reporter omission requires the matching state high court.
+- Outgoing validation rejects impossible dates, unsafe authors, and malformed citation numbers. Unsafe optional
+  values are removed and flagged; invalid required metadata or failed revalidation prevents completion.
+- DOM-only WL records now retain Medium: Westlaw. Built-translator author test and real itemToCSLJSON/citeproc
+  regression confirm author metadata survives without changing Bluebook case citation output.
+- Offline verification command: `node --test "westlaw-us/src/test/*.test.mjs" "westlaw-us/m0/csl/test/*.test.mjs" "westlaw-us/m0/probe/test/*.test.mjs" "westlaw-us/tools/test/*.test.mjs"`.
+  803 tests passed across the final source run and supporting CSL/probe/tool suites. Privacy scan: 0 failures,
+  0 warnings on modified code/test directories. Live Westlaw/installed Zotero verification remains pending;
+  absent lead lines remain blank.
+
 Orchestrator: `anthropic/claude-opus-5-5` (Opus 5.5, this session). Workers/reviewers: `openrouter/inclusionai/ling-3.0-flash`
 (Ling 3.0 Flash; exact id resolved from the session model registry — variants `-fin`, `-vl`, `:free` NOT used).
 Plan: `reports/20-ASTRA-ARCHITECTURE.md`. Workspace: `M:/Coding_Projects/_zotero-research/` (coach-teacher untouched).

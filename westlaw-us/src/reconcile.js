@@ -59,11 +59,13 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
   provenance.date = date ? "dom" : "service";
   provenance.dockets = "dom";
   provenance.court = "dom";
+  if (dom.author) provenance.author = "dom";
 
   return {
     guid: dom.guid || null,
     url: context.url || "",
     caseName: wlRecClean(dom.headerName || ""),
+    author: dom.author || null,
     shortName: null,
     court: courtResult.court || "",
     rawCourt: dom.rawCourt || "",
@@ -73,7 +75,7 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
     alternates: [],
     history: "",
     parentheticalSuffix: "",
-    wlPrimary: false,
+    wlPrimary: !!primary && primary.kind === "wl",
     profile: "dom-only",
     status: "metadata-only",
     reviewReasons: reviewReasons,
@@ -194,6 +196,10 @@ function wlRecReconcile(input) {
       reviewReasons.push("name-from-dom");
       provenance.caseName = "dom";
     }
+    if (!caseName) reviewReasons.push("name-missing");
+    // Different abbreviations may trigger review; never silently certify a different header name.
+    if (dom.headerName && parsedA && parsedA.ok && wlTextCompareKey(dom.headerName) !== wlTextCompareKey(parsedA.name)) reviewReasons.push("header-name-conflict");
+    if (profile === "standard" && parsedA && parsedA.ok && parsedBstd && parsedBstd.ok && wlTextCompareKey(parsedA.name) !== wlTextCompareKey(parsedBstd.name)) reviewReasons.push("name-conflict");
 
     // 6. primary citation
     var primary = null;
@@ -350,9 +356,15 @@ function wlRecReconcile(input) {
       date = parsedBinv.date;
       provenance.date = "service";
     } else if (parsedA && parsedA.ok && parsedA.year) {
-      date = parsedA.year;
+      date = parsedA.date || parsedA.year;
       provenance.date = "service";
     }
+
+    var fullDates = [dom.date, parsedA && parsedA.date, parsedBinv && parsedBinv.date].filter(function(d) {
+      return typeof d === "string" && d.length === 10;
+    });
+    if (fullDates.some(function(d) { return d !== fullDates[0]; })) reviewReasons.push("date-conflict");
+    if (!date) reviewReasons.push("date-missing");
 
     // Year conflict check
     if (date && parsedA && parsedA.ok && parsedA.year) {
@@ -378,6 +390,16 @@ function wlRecReconcile(input) {
     }
 
     // WL-primary requires at least one docket
+    var serviceDockets = parsedBinv && parsedBinv.dockets && parsedBinv.dockets.length ? parsedBinv.dockets : parsedA && parsedA.dockets;
+    if (!dockets.length && serviceDockets && serviceDockets.length) {
+      dockets = serviceDockets.slice();
+      provenance.dockets = "service";
+    } else if (dom.dockets && dom.dockets.length && serviceDockets && serviceDockets.length) {
+      var docketKey = function(ds) {
+        return wlMapFormatDocketNumber(ds).replace(/^Nos?\.\s*/, "").toLowerCase().split(/,\s*/).sort().join("|");
+      };
+      if (docketKey(dom.dockets) !== docketKey(serviceDockets)) reviewReasons.push("docket-conflict");
+    }
     if (wlPrimary && dockets.length === 0) {
       reviewReasons.push("wl-missing-docket");
     }
@@ -395,7 +417,7 @@ function wlRecReconcile(input) {
     provenance.court = "service";
 
     // WL-primary requires full date
-    if (wlPrimary && date && date.length === 4) {
+    if (wlPrimary && (!date || date.length === 4)) {
       reviewReasons.push("wl-missing-date");
     }
 
@@ -452,10 +474,12 @@ function wlRecReconcile(input) {
     }
 
     // 15. Build and return CaseRecord
+    if (dom.author) provenance.author = "dom";
     return {
       guid: guid,
       url: url,
       caseName: caseName,
+      author: dom.author || null,
       shortName: shortName,
       court: court,
       rawCourt: dom.rawCourt || "",

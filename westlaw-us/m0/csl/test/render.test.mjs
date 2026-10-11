@@ -10,6 +10,17 @@ const expected = JSON.parse(
   readFileSync(new URL('../fixtures/expected.json', import.meta.url), 'utf-8')
 );
 
+it('lead opinion author stays in CSL metadata without changing Bluebook case citation', () => {
+  const item = structuredClone(items.find(item => item.uri === 'G1'));
+  assert.ok(item);
+  const baseline = render([item], [[{ id: 'G1' }]])[0];
+  item.creators = [{ creatorType: 'author', lastName: 'BROOKSHIRE', fieldMode: 1 }];
+  const withAuthor = render([item], [[{ id: 'G1' }]])[0];
+  assert.equal(withAuthor.text, baseline.text);
+  assert.equal(withAuthor.html, baseline.html);
+  assert.equal(withAuthor.cslJSON[0].author[0].literal, 'BROOKSHIRE');
+});
+
 // Helper: compare actual cite text against expected, normalizing U+2019→'
 // and accepting an optional trailing period added by the style's layout suffix.
 function eqCite(actual, expected) {

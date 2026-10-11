@@ -304,10 +304,10 @@ describe("wlProfCourtForCitation omission rules", function() {
     assert.equal(result.reviewReasons.length, 0);
   });
 
-  it("service court conflicts with bluebook keeps service value + court-conflict", function() {
+  it("service court conflicts with bluebook keeps header authority + court-conflict", function() {
     var c = wlProfClassifyCourt("United States Court of Appeals, Fifth Circuit.");
     var result = wlProfCourtForCitation(c, { reporter: "F.3d" }, "D.C. Cir.");
-    assert.equal(result.court, "D.C. Cir.");
+    assert.equal(result.court, "5th Cir.");
     assert.equal(result.reviewReasons.length, 1);
     assert.equal(result.reviewReasons[0], "court-conflict");
   });
@@ -750,7 +750,7 @@ describe("W3 - state court-table backlog", function() {
     var fl = wlProfClassifyCourt("District Court of Appeal of Florida, Third District.");
     assert.equal(wlProfCourtForCitation(fl, { reporter: "So. 3d" }, null).court, "Fla. Dist. Ct. App.");
     var conflict = wlProfCourtForCitation(fl, { reporter: "So. 3d" }, "Fla.");
-    assert.equal(conflict.court, "Fla.");
+    assert.equal(conflict.court, "Fla. Dist. Ct. App.");
     assert.deepEqual(Array.from(conflict.reviewReasons), ["court-conflict"]);
   });
   it("Colorado Court of Appeals uses Bluebook T1 Colo. App., not Colo. Ct. App.", function() {
