@@ -108,6 +108,7 @@ describe('golden-inputs.mjs placeholder GUIDs', () => {
     it(`${label} input GUID is I + 32 lowercase hex`, () => {
       assert.match(input.context.guid, GUID_RE);
       assert.match(input.dom.guid, GUID_RE);
+      assert.equal(input.context.url, `https://1.next.westlaw.com/Document/${input.context.guid}/View/FullText.html`);
     });
   }
 });

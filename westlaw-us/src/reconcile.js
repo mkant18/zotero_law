@@ -173,6 +173,8 @@ function wlRecReconcile(input) {
   var provenance = {};
 
   try {
+    wlRecAddDomReasons(reviewReasons, dom);
+
     // 1. Service A failure → metadata-only from DOM
     if (svcA.category !== "ok") {
       reviewReasons.push("service-" + (svcA.category || "unknown"));

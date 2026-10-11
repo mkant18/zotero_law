@@ -917,6 +917,21 @@ describe("wlDomReadFacts — plan §12 selector fallbacks", function() {
     assert.equal(result.reviewReasons.indexOf("header-fallback"), -1);
   });
 
+  it("does not mark header-fallback when the header list exists", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "100 F.3d 200"));
+    var courtBlock = el("div", { class: "co_courtBlock" }, "Other Court");
+    var result = wlDomReadFacts(fallbackDoc([list, courtBlock]));
+    assert.equal(result.reviewReasons.indexOf("header-fallback"), -1);
+  });
+
+  it("flags conflicting-header when two header lists name different courts", function() {
+    var first = el("div", { id: "co_docHeaderCitation" }, el("li", {}, "United States Court of Appeals, Fifth Circuit."));
+    var second = el("div", { id: "co_docHeaderCitation" }, el("li", {}, "United States District Court, District of Kansas."));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.equal(result.reviewReasons.indexOf("conflicting-header") !== -1, true);
+  });
+
   it("prefers header li values over .co_courtBlock/.co_cites when the header is present", function() {
     var list = el("div", { id: "co_docHeaderCitation" },
       el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));

@@ -996,6 +996,13 @@ describe("wlRecReconcile - DOM review reasons", function() {
     assert.equal(result.status, "validated-profile");
     assert.equal(JSON.stringify(result.reviewReasons), "[]");
   });
+
+  it("metadata-only auth failure still includes header-fallback", function() {
+    var result = reconcileDom(domWith(["header-fallback"]), makeSvc("auth", null));
+    assert.equal(result.status, "metadata-only");
+    assert.ok(result.reviewReasons.indexOf("service-auth") !== -1);
+    assert.ok(result.reviewReasons.indexOf("header-fallback") !== -1);
+  });
 });
 
 // ---- Review-final fixes (P1-2, P1-3, P2-9, P1-6) ----

@@ -94,20 +94,20 @@ wlSvcReadEnvelope(json, wantedStyleIds, expect?)
 **Parameters:**
 - `json` (object): parsed response body from `/RelatedInfo/v2/citestyles` endpoint.
 - `wantedStyleIds` (array of strings): expected style IDs, e.g., `["standard", "texas"]`; used to validate echo and detect missing styles.
-- `expect` (object, optional): flat per-request format-option map, e.g., `{ history: true, parallelCiteRule: "westReporterOnly", subStyle: "LegalBriefs", underline: "false", bold: "false", italicize: "false" }`; built by wlSvcBuildRequests and attached to each request; responses must echo matching options (when present) to confirm the response matches the request.
+- `expect` (object, optional): one flat format-option map for the whole request, the object `wlSvcBuildRequests` attaches as `expect`. It is not keyed by style. Example: `{ history: "true", parallelCiteRule: "westReporterOnly", subStyle: "LegalBriefs", underline: "false", bold: "false", italicize: "false" }`.
 
 **Validation logic:**
 1. Verify envelope structure (presence of `responses` array).
 2. For each style in `wantedStyleIds`, check that exactly one response echoes that style ID (no duplicates).
-3. Validate that echoed format options in the response match the `expect` map (if supplied). If an echoed key is present and mismatches the expected value, omit that style's response from output and add a review reason `echo-mismatch:<styleId>:<key>`. Absent echo keys (keys not in the response) are not failures.
-4. Check that requested forms exist in the response: `long`, `short`, and `enhanced`. If neither `long` nor `enhanced` form exists, add review reason `missing-form:<styleId>:long` and keep the style with long: null.
+3. If `expect` is supplied, compare only echoed keys that are present and non-null. A present value that differs omits that style from output and adds `echo-mismatch:<styleId>:<key>`. A missing echo key is not a mismatch.
+4. A style with neither a `long` nor an `enhanced` form is kept (`long: null`) and flagged `missing-form:<styleId>:long`. `short` and `Id.` are not required.
 
 **Review reasons (returned in `reviewReasons` array):**
 - `malformed-envelope`: top-level structure invalid (no `responses` array or wrong type).
 - `missing-style:<id>`: a requested style ID is not present in responses.
 - `duplicate-style:<id>`: a style ID appears more than once in responses.
-- `missing-form:<id>:long`: requested style `<id>` lacks both `long` and `enhanced` citation forms.
-- `echo-mismatch:<id>:<key>`: echoed request option `<key>` for style `<id>` is present and does not match the `expect` value; that style's response is omitted from output.
+- `missing-form:<id>:long`: requested style `<id>` has neither a `long` nor an `enhanced` form.
+- `echo-mismatch:<id>:<key>`: a present echoed option `<key>` for style `<id>` does not match `expect`; that style's response is omitted from output.
 
 **Translator-level policy (translator.js):**
 The wlTrReadService function checks if ANY style in a single request has `echo-mismatch`. If any echo-mismatch reasons are found, the entire envelope for that request is treated as unusable (category: "echo-mismatch", envelope: null). The translator then falls back to DOM-only citation capture. Echo-mismatch review reasons are forwarded into rec.reviewReasons and the record is classified as "metadata-only".
@@ -116,7 +116,7 @@ The wlTrReadService function checks if ANY style in a single request has `echo-m
 Envelope review reasons (malformed-envelope, missing-style, duplicate-style, missing-form, echo-mismatch-*) are forwarded from the envelope into rec.reviewReasons by reconcile.js via wlRecAddEnvelopeReasons. DOM review reasons (conflicting-header, header-fallback) are also forwarded by wlRecAddDomReasons. The distinction: conflicting-header demotes a validated profile to unverified; header-fallback is informational and does not demote.
 
 **Key points:**
-- Absent echo keys in the response are not failures; only present keys that mismatch the `expect` value are flagged.
+- Absent echo keys (the response omits an option the service does not echo) are not failures; only a present, non-null key whose value differs is flagged.
 - Echo-mismatched styles are omitted from the returned `styles` object; their review reasons are preserved for visibility.
 - Malformed envelopes, missing styles, and missing forms generate review reasons but do not throw exceptions.
 

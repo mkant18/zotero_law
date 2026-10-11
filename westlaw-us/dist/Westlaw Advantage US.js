@@ -9,7 +9,7 @@
 	"inRepository": false,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
-	"lastUpdated": "2026-09-28 20:52:47"
+	"lastUpdated": "2026-10-11 03:27:27"
 }
 
 /*
@@ -1531,7 +1531,7 @@ var wlProfCourtTable = [
     res: { system: "state", level: "intermediate", state: "IL", circuit: null, district: null, bluebook: "Ill. App. Ct.", confidence: "table" }
   },
   {
-    re: /^court of appeals of (georgia|michigan|ohio|arizona|colorado|iowa|kansas|kentucky|minnesota|north carolina|new mexico|oregon|south carolina|tennessee|utah|washington|wisconsin|missouri|indiana|nebraska)(?:,\s*\d+(?:st|nd|rd|th)?\s+district)?$/,
+    re: /^court of appeals of (georgia|michigan|colorado|iowa|kansas|kentucky|minnesota|north carolina|new mexico|oregon|south carolina|utah|wisconsin|indiana|nebraska)(?:,\s*\d+(?:st|nd|rd|th)?\s+district)?$/,
     res: function(m) {
       var stateName = m[1].toLowerCase();
       var bluebook = wlProfIntermediateAppellateMap[stateName] || null;
@@ -1591,15 +1591,15 @@ var wlProfCourtTable = [
     res: { system: "state", level: "intermediate", state: "TN", circuit: null, district: null, bluebook: "Tenn. Crim. App.", confidence: "table" }
   },
   {
-    re: /^court of appeals of missouri,\s*(?:eastern|western|southern)\s+district$/,
+    re: /^court of appeals of missouri(?:,\s*(?:eastern|western|southern)\s+district)?$/,
     res: { system: "state", level: "intermediate", state: "MO", circuit: null, district: null, bluebook: "Mo. Ct. App.", confidence: "table" }
   },
   {
-    re: /^court of appeals of washington,\s*division\s+(?:1|2|3|one|two|three)$/,
+    re: /^court of appeals of washington(?:,\s*division\s+(?:1|2|3|one|two|three))?$/,
     res: { system: "state", level: "intermediate", state: "WA", circuit: null, district: null, bluebook: "Wash. Ct. App.", confidence: "table" }
   },
   {
-    re: /^court of appeals of arizona,\s*division\s+(?:1|2|one|two)$/,
+    re: /^court of appeals of arizona(?:,\s*division\s+(?:1|2|one|two))?$/,
     res: { system: "state", level: "intermediate", state: "AZ", circuit: null, district: null, bluebook: "Ariz. Ct. App.", confidence: "table" }
   },
   {
@@ -3090,6 +3090,8 @@ function wlRecReconcile(input) {
   var provenance = {};
 
   try {
+    wlRecAddDomReasons(reviewReasons, dom);
+
     // 1. Service A failure → metadata-only from DOM
     if (svcA.category !== "ok") {
       reviewReasons.push("service-" + (svcA.category || "unknown"));
