@@ -2,75 +2,93 @@
 
 # Westlaw → Zotero
 
-### From the case page to your next citation.
+**From the case page to your next citation.**
 
-Save **Westlaw Advantage US** cases in Zotero, with structured metadata and a bundled Bluebook Law Review citation style.
+Save Westlaw Advantage US cases to Zotero with structured metadata.<br>
+Cite with the bundled Bluebook Law Review style.
 
-[![Beta v.1](https://img.shields.io/badge/release-Beta_v.1-6D5EF5?style=for-the-badge)](https://github.com/mkant18/zotero_law/releases/tag/v0.1.1beta1)
-[![Zotero](https://img.shields.io/badge/Zotero-7–10-CC2936?style=for-the-badge)](https://github.com/mkant18/zotero_law/blob/main/westlaw-us/INSTALL.md)
-[![Metadata only](https://img.shields.io/badge/metadata-only-167D7F?style=for-the-badge)](#privacy)
+[![Release: Beta v.1](https://img.shields.io/badge/release-Beta_v.1-6D5EF5?style=flat-square)](https://github.com/mkant18/zotero_law/releases/tag/v0.1.1beta1)
+[![Declared compatibility: Zotero 7–10](https://img.shields.io/badge/Zotero-7%E2%80%9310-CC2936?style=flat-square)](#compatibility-and-beta-limits)
+[![Capture: metadata only](https://img.shields.io/badge/capture-metadata_only-167D7F?style=flat-square)](#privacy)
 
-**[Download Beta v.1](https://github.com/mkant18/zotero_law/releases/download/v0.1.1beta1/westlaw-advantage-us-0.1.1beta1.xpi)** · **[Installation guide](westlaw-us/INSTALL.md)** · **[Release notes](plugin/RELEASE-NOTES.md)** · **[Report an issue](https://github.com/mkant18/zotero_law/issues)**
+**[Download Beta v.1](https://github.com/mkant18/zotero_law/releases/download/v0.1.1beta1/westlaw-advantage-us-0.1.1beta1.xpi)** · **[Installation guide](westlaw-us/INSTALL.md)** · **[Report an issue](https://github.com/mkant18/zotero_law/issues)**
+
+[Features](#features) · [Quick start](#quick-start) · [What’s new](#whats-new) · [Compatibility](#compatibility-and-beta-limits) · [Development](#development)
 
 </div>
 
 ---
 
-## A better starting point for case citations
+One Zotero plugin bundles a Westlaw case translator and a local Bluebook CSL style. Save a case through Zotero Connector, review its metadata, and cite from your library.
 
-One Zotero plugin bundles the Westlaw translator and a local Bluebook CSL style. Save from a US case page using Zotero Connector, then cite from your library.
+> **Westlaw case page → Zotero Connector → Zotero library → Citation**
 
-| Capture | Cite | Review |
-| :--- | :--- | :--- |
-| Case name, court, decision date, dockets, reporter citations, and identifiable majority author. | Full, pinpoint, short, and *Id.* forms through **Bluebook Law Review (Westlaw US local)**. | Visible review flags when source metadata is missing, conflicting, or uncertain. |
+## Features
 
-The translator handles federal and supported state case formats, including Texas and Westlaw-only citations. It preserves useful DOM metadata when citation-service requests fail.
+| Feature | What you get |
+| :--- | :--- |
+| **Structured case metadata** | Case name, court, decision date, dockets, reporter citations, and identifiable majority author. |
+| **Citation forms** | Full, pinpoint, short, and *Id.* forms through **Bluebook Law Review (Westlaw US local)**. |
+| **Review flags** | Visible flags when source metadata is missing, conflicting, or uncertain. |
+| **Fallback capture** | Useful DOM metadata is preserved when citation-service requests fail. |
+| **US case support** | Federal and supported state case formats, including Texas and Westlaw-only citations. |
 
-## Install in a minute
+## Quick start
 
-You need **Zotero desktop**, **Zotero Connector** in your browser, and an active **Westlaw subscription**.
+**You’ll need:** Zotero desktop, Zotero Connector in your browser, and an active Westlaw subscription.
 
-1. **[Download the Beta v.1 XPI](https://github.com/mkant18/zotero_law/releases/download/v0.1.1beta1/westlaw-advantage-us-0.1.1beta1.xpi)**.
-2. In Zotero, open **Tools → Plugins → gear → Install Plugin From File** and select the `.xpi`.
-3. Keep Zotero desktop running. Refresh your Westlaw case page and save with **Zotero Connector**.
+1. **[Download the Beta v.1 plugin](https://github.com/mkant18/zotero_law/releases/download/v0.1.1beta1/westlaw-advantage-us-0.1.1beta1.xpi)** (`.xpi`).
+2. In Zotero, open **Tools → Plugins → gear → Install Plugin From File** and select the downloaded file.
+3. Keep Zotero desktop running, refresh a Westlaw US case page, and save it with **Zotero Connector**.
 4. Select **Bluebook Law Review (Westlaw US local)** when citing.
-5. Review the saved fields and any **Westlaw: needs citation review** tag before using a citation.
+5. Review the saved fields, citation output, and any **Westlaw: needs citation review** tag.
 
 > **Private beta:** this repository and its downloads require access. If Zotero cannot authenticate for automatic updates, download and install the next XPI manually.
 
 The plugin backs up replaced translator/style files. Disabling or removing it restores those backups when the installed copies have not been edited. Existing library items are never migrated. See the [installation and rollback guide](westlaw-us/INSTALL.md).
 
-## What is in Beta v.1?
+## What’s new
 
-- Merged main, release, and offline-prototype histories, including the latest reviewed repairs.
-- Structured majority-author metadata, verified linked-profile enrichment, and acceptance of unambiguous surname-only bylines.
-- Improved official-reporter selection, docket retention, court conflict checks, and full decision dates for Texas WL citations.
-- Required-metadata validation and useful fallback metadata on failed citation-service requests.
-- Staged packaging with checksums and rollback of partial output replacement.
+**Beta v.1** · Package `0.1.1beta1` · Translator `0.3.5`
 
-**Package version:** `0.1.1beta1`; **translator:** `0.3.5` with a source-derived build identifier. The package version advances beyond the earlier `0.1.0beta4` repair build. Earlier published releases remain available.
+- **Better author metadata:** structured majority authors, verified linked-profile enrichment, and unambiguous surname-only bylines.
+- **More precise case fields:** improved official-reporter selection, docket retention, court conflict checks, and full decision dates for Texas WL citations.
+- **Stronger validation:** required-metadata checks and useful fallback metadata when citation-service requests fail.
+- **Safer packaging:** staged builds, checksums, and rollback of partial output replacement.
 
-## Beta boundaries
+This release combines the main, release, and offline-prototype histories with the latest reviewed repairs. The translator carries a source-derived build identifier; the package advances beyond `0.1.0beta4`. Earlier published releases remain available.
 
-The plugin declares Zotero **7–10** compatibility. Earlier native acceptance used **Zotero 10.0.6**, Chrome Connector, and a Word save/reopen/refresh journey. That evidence predates this merged package. This release has bounded offline merge, built-translator, metadata, and packaging checks; it has **not** had a fresh native Westlaw/Connector/Word acceptance run. LibreOffice remains unverified.
+[Read the release notes →](plugin/RELEASE-NOTES.md)
 
-Coverage is incomplete, and no claim of complete Bluebook compliance is made. Changed Westlaw pages may require updates. Judge names are stored as metadata; the bundled case-citation style does not print them. Previously saved items need manual review or re-saving after fixes.
+## Compatibility and beta limits
+
+**Zotero 7–10 compatibility is declared. This merged package has not had a fresh native Westlaw → Connector → Zotero → Word acceptance run.**
+
+Earlier native acceptance used Zotero **10.0.6**, Chrome Connector, and a Word save/reopen/refresh journey. That evidence predates this package. Fresh checks cover bounded offline merge, built-translator, metadata, and packaging behavior. **LibreOffice remains unverified.** See the [release verification record](reports/beta-v1/VERIFICATION.md).
+
+- Coverage is incomplete; complete Bluebook compliance is not claimed.
+- Changes to Westlaw pages may require translator updates.
+- Judge names are stored as metadata; the bundled case-citation style does not print them.
+- Previously saved items need manual review or re-saving after fixes.
 
 ## Privacy
 
 The translator saves **case metadata**, without opinion text, PDFs, snapshots, or attachments. User-triggered requests use the current Westlaw session to retrieve citation metadata and, when needed, a bounded number of linked judge profiles. Credentials are not bundled, persisted, or logged by the translator. Review and redact diagnostic logs before sharing them.
 
-Private page captures, upstream clones, and generated release archives stay outside tracked source. The plugin is independent of Zotero, Thomson Reuters, Westlaw, and The Bluebook.
+Private page captures, upstream clones, and generated release archives stay outside tracked source.
 
-## Build and contribute
+## Development
 
-Requires Python 3 and Node.js; no package installation is needed for the XPI build.
+Build requirements: **Python 3** and **Node.js**. No package installation is needed for the XPI build. Run from the repository root:
 
 ```bash
 python scripts/build-plugin.py
 ```
 
-Outputs: `dist/westlaw-advantage-us-0.1.1beta1.xpi`, `dist/updates.json`, and `dist/SHA256SUMS.txt`.
+Build outputs in `dist/`: `westlaw-advantage-us-0.1.1beta1.xpi`, `updates.json`, and `SHA256SUMS.txt`.
+
+<details>
+<summary><strong>Offline verification and prerequisites</strong></summary>
 
 The complete offline verification entry point is:
 
@@ -82,18 +100,24 @@ It runs translator, citation/schema, privacy, probe, plugin lifecycle, packaging
 
 For this release, the previously recorded restriction against rerunning the full suite remains in force. See [release verification](reports/beta-v1/VERIFICATION.md) for the bounded checks actually performed.
 
-<details>
-<summary><strong>Find your way around the repository</strong></summary>
+</details>
 
-- [`plugin/`](plugin/) — Zotero bootstrap, manifest, licensing, and release notes.
-- [`westlaw-us/src/`](westlaw-us/src/) — translator modules and tests.
-- [`westlaw-us/m0/csl/`](westlaw-us/m0/csl/) — citation style and rendering harness.
-- [`scripts/`](scripts/) — build and verification entry points.
-- [`reports/00-SYNTHESIS.md`](reports/00-SYNTHESIS.md) — research background.
-- [`tools/`](tools/) — developer inspection helpers.
+<details>
+<summary><strong>Repository guide</strong></summary>
+
+| Path | Contents |
+| :--- | :--- |
+| [`plugin/`](plugin/) | Zotero bootstrap, manifest, licensing, and release notes. |
+| [`westlaw-us/src/`](westlaw-us/src/) | Translator modules and tests. |
+| [`westlaw-us/m0/csl/`](westlaw-us/m0/csl/) | Citation style and rendering harness. |
+| [`scripts/`](scripts/) | Build and verification entry points. |
+| [`reports/00-SYNTHESIS.md`](reports/00-SYNTHESIS.md) | Research background. |
+| [`tools/`](tools/) | Developer inspection helpers. |
 
 </details>
 
 ## License
 
 Translator and plugin code: **AGPL-3.0-or-later**. Bundled CSL derivative: **CC BY-SA 3.0**, with upstream attribution retained in the style. See [license notices](plugin/LICENSE.txt).
+
+Independent of Zotero, Thomson Reuters, Westlaw, and The Bluebook.
