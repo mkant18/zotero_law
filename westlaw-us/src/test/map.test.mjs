@@ -39,6 +39,16 @@ test("wlMapToZoteroFields - G1 Sanchez (reported, WL alternate, en-dash docket)"
   assert.equal(fields.shortTitle, "Sanchez v. Liggett");
   assert.equal(fields.url, "https://1.next.westlaw.com/Document/I00000000000000000000000000000000/View/FullText.html");
   assert.equal(fields.creators.length, 0);
+  rec.authors = [{ firstName: "", lastName: "Lee", creatorType: "author" }];
+  var withAuthor = wlMapToZoteroFields(rec);
+  assert.equal(withAuthor.creators.length, 1);
+  assert.equal(withAuthor.creators[0].lastName, "Lee");
+  assert.equal(wlMapValidateOutgoing(withAuthor).ok, true);
+  var applied = { creators: [], tags: [] };
+  wlMapApply(withAuthor, applied);
+  assert.equal(applied.creators[0].lastName, "Lee");
+  rec.authors = [{ firstName: "", lastName: "Lee, Circuit Judge.", creatorType: "author" }];
+  assert.equal(wlMapToZoteroFields(rec).creators.length, 0);
   assert.equal(fields.attachments.length, 0);
   assert.equal(fields.notes.length, 0);
   assert.equal(fields.tags.length, 0);
@@ -458,4 +468,90 @@ test("wlMapToZoteroFields - G4 Miele (parallel + WL alternate, not wlPrimary)", 
   assert.equal(extra.indexOf("Medium: Westlaw"), -1, "G4 should not have Medium line");
   assert.ok(extra.indexOf("Westlaw parallel citation: 2 A.D.3d 799") !== -1, "G4 should have parallel citation");
   assert.ok(extra.indexOf("Westlaw alternate WL citation: 2015 WL 123456") !== -1, "G4 should have WL alternate citation");
+});
+
+function baseValidatedRec(overrides) {
+  var rec = {
+    caseName: "Doe v. Roe",
+    shortName: null,
+    court: "5th Cir.",
+    date: "1999-08-25",
+    dockets: [],
+    primary: { kind: "reporter", volume: "187", reporter: "F.3d", page: "486", raw: "187 F.3d 486" },
+    alternates: [],
+    history: "",
+    parentheticalSuffix: "",
+    wlPrimary: false,
+    profile: "standard",
+    status: "validated-profile",
+    reviewReasons: [],
+    provenance: {},
+    guid: "I00000000000000000000000000000000",
+    rawCourt: "United States Court of Appeals, Fifth Circuit."
+  };
+  Object.keys(overrides || {}).forEach(function(k) { rec[k] = overrides[k]; });
+  return rec;
+}
+
+test("wlMapToZoteroFields - informational header-fallback keeps the Extra line but adds no review tag", function() {
+  var fields = wlMapToZoteroFields(baseValidatedRec({ reviewReasons: ["header-fallback"] }));
+  assert.ok(fields.extra.indexOf("Westlaw review: header-fallback") !== -1, "Extra line stays");
+  assert.equal(fields.tags.length, 0, "no tag for informational reason on a validated record");
+});
+
+test("wlMapToZoteroFields - header-fallback plus a demoting reason still tags", function() {
+  var fields = wlMapToZoteroFields(baseValidatedRec({ reviewReasons: ["header-fallback", "conflicting-header"] }));
+  assert.equal(fields.tags.length, 1);
+  assert.equal(fields.tags[0].tag, "Westlaw: needs citation review");
+});
+
+test("wlMapToZoteroFields - informational reason on a non-validated record still tags (status rule)", function() {
+  var fields = wlMapToZoteroFields(baseValidatedRec({ status: "unverified-profile", reviewReasons: ["header-fallback"] }));
+  assert.equal(fields.tags.length, 1);
+});
+
+test("wlMapHasDemotingReason - only header-fallback is informational", function() {
+  assert.equal(mod.wlMapHasDemotingReason([]), false);
+  assert.equal(mod.wlMapHasDemotingReason(["header-fallback"]), false);
+  assert.equal(mod.wlMapHasDemotingReason(["header-fallback", "service-none"]), true);
+  assert.equal(mod.wlMapHasDemotingReason(["validation-html"]), true);
+});
+
+test("wlMapToZoteroFields - unparsed citation reads raw, falls back to text, never emits an empty payload", function() {
+  var fields = wlMapToZoteroFields(baseValidatedRec({ alternates: [
+    { kind: "unparsed", raw: "RAW-PAYLOAD", text: "TEXT-PAYLOAD" },
+    { kind: "unparsed", text: "Rehearing Denied" },
+    { kind: "unparsed", raw: "   " },
+    { kind: "unparsed" }
+  ] }));
+  var lines = fields.extra.split("\n").filter(function(l) { return l.indexOf("Westlaw unparsed citation:") === 0; });
+  assert.deepEqual(Array.from(lines), [
+    "Westlaw unparsed citation: RAW-PAYLOAD",
+    "Westlaw unparsed citation: Rehearing Denied"
+  ]);
+});
+
+test("wlMapToZoteroFields - unparsed citation payload capped at 200 chars with an ellipsis", function() {
+  var long = "x".repeat(500);
+  var fields = wlMapToZoteroFields(baseValidatedRec({ alternates: [{ kind: "unparsed", raw: long }] }));
+  var line = fields.extra.split("\n").filter(function(l) { return l.indexOf("Westlaw unparsed citation:") === 0; })[0];
+  var payload = line.slice("Westlaw unparsed citation: ".length);
+  assert.equal(payload.length, 201);
+  assert.equal(payload, "x".repeat(200) + "\u2026");
+  var exact = wlMapToZoteroFields(baseValidatedRec({ alternates: [{ kind: "unparsed", raw: "y".repeat(200) }] }));
+  assert.ok(exact.extra.indexOf("y".repeat(200) + "\n") !== -1 && exact.extra.indexOf("\u2026") === -1, "200 chars not truncated");
+});
+
+test("wlMapValidateOutgoing - caseName ending in a reporter citation is flagged", function() {
+  var f = wlMapToZoteroFields(baseValidatedRec({ caseName: "Doe v. Roe, 400 Mass. 100" }));
+  assert.ok(wlMapValidateOutgoing(f).problems.indexOf("caseName-has-cite") !== -1);
+  var g = wlMapToZoteroFields(baseValidatedRec({ caseName: "Doe v. Roe, 187 F.3d 486" }));
+  assert.ok(wlMapValidateOutgoing(g).problems.indexOf("caseName-has-cite") !== -1);
+});
+
+test("wlMapValidateOutgoing - ordinary case names are not flagged as citations", function() {
+  ["Sanchez v. Liggett & Myers, Inc.", "In re 3M Co.", "United States v. 12 Acres of Land", "Doe v. Roe, Inc.", "Matter of Smith, Jr."].forEach(function(name) {
+    var f = wlMapToZoteroFields(baseValidatedRec({ caseName: name }));
+    assert.equal(wlMapValidateOutgoing(f).problems.indexOf("caseName-has-cite"), -1, name);
+  });
 });

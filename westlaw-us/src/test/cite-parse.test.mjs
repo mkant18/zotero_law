@@ -540,3 +540,218 @@ describe('enhanced inventory appended dockets', function () {
     assert.deepEqual(Array.from(parsed.dockets), ['No. 98-40679']);
   });
 });
+
+describe("W8: cite-parse defects from independent review", function() {
+  function assertField(r, name, expected) {
+    assert.equal(JSON.stringify(r[name]), JSON.stringify(expected), name);
+  }
+  var parsers = ["wlCiteParseStandardForm", "wlCiteParseTexasForm"];
+
+  describe("P1-1: Texas parenthetical with a full date", function() {
+    var withSuffix = "Smith v. Jones, No. 21-1, 2023 WL 123456 (Tex. App.—Houston [1st Dist.] Sept. 5, 2023, no pet.)";
+    var noSuffix = "Smith v. Jones, No. 21-1, 2023 WL 123456 (Tex. App.—Austin June 1, 2023)";
+
+    parsers.forEach(function(fn) {
+      it(fn + ": full date + suffix keeps the court clean", function() {
+        var r = ctx[fn](withSuffix);
+        assert.equal(r.ok, true);
+        assert.equal(r.court, "Tex. App.—Houston [1st Dist.]");
+        assert.equal(r.date, "2023-09-05");
+        assert.equal(r.dateText, "Sept. 5, 2023");
+        assert.equal(r.year, "2023");
+        assert.equal(r.parentheticalSuffix, "no pet.");
+        assertField(r, "dockets", ["No. 21-1"]);
+        var rt = ctx.wlCiteRoundTrip(r, withSuffix);
+        assert.equal(rt.ok, true, rt.residual);
+      });
+
+      it(fn + ": full date without suffix", function() {
+        var r = ctx[fn](noSuffix);
+        assert.equal(r.ok, true);
+        assert.equal(r.court, "Tex. App.—Austin");
+        assert.equal(r.date, "2023-06-01");
+        assert.equal(r.dateText, "June 1, 2023");
+        assert.equal(r.year, "2023");
+        assert.equal(r.parentheticalSuffix, "");
+        var rt = ctx.wlCiteRoundTrip(r, noSuffix);
+        assert.equal(rt.ok, true, rt.residual);
+      });
+    });
+
+    it("G5 Rogers year-comma-writ form is unchanged", function() {
+      var r = ctx.wlCiteParseTexasForm(fixtures.G5.long);
+      assert.equal(r.court, "Tex. App.—Beaumont");
+      assert.equal(r.year, "1988");
+      assert.equal(r.date, null);
+      assert.equal(r.dateText, null);
+      assert.equal(r.parentheticalSuffix, "writ denied");
+    });
+  });
+
+  describe("P1-2: dockets the old docket regex missed", function() {
+    var cases = [
+      ["parenthetical judge initials", "Smith v. Jones, No. 1:21-cv-123 (JPO), 2023 WL 123456 (S.D.N.Y. Sept. 5, 2023)", ["No. 1:21-cv-123 (JPO)"]],
+      ["consolidated (L) lead marker", "Smith v. Jones, No. 21-1 (L), 21-2, 2023 WL 123456 (S.D.N.Y. Sept. 5, 2023)", ["No. 21-1 (L)", "21-2"]],
+      ["ampersand list", "Smith v. Jones, Nos. 22-1 & 22-2, 2023 WL 123456 (S.D.N.Y. Sept. 5, 2023)", ["Nos. 22-1 & 22-2"]],
+      ["comma + and list", "Smith v. Jones, Nos. 22-1, 22-2 and 22-3, 2023 WL 123456 (S.D.N.Y. Sept. 5, 2023)", ["Nos. 22-1", "22-2 and 22-3"]]
+    ];
+    cases.forEach(function(c) {
+      parsers.forEach(function(fn) {
+        it(fn + ": " + c[0], function() {
+          var r = ctx[fn](c[1]);
+          assert.equal(r.ok, true);
+          assert.equal(r.name, "Smith v. Jones");
+          assertField(r, "dockets", c[2]);
+          assert.equal(r.reviewReasons.indexOf("docket-in-name"), -1);
+          assert.equal(r.court, "S.D.N.Y.");
+          assert.equal(r.dateText, "Sept. 5, 2023");
+          var rt = ctx.wlCiteRoundTrip(r, c[1]);
+          assert.equal(rt.ok, true, rt.residual);
+        });
+      });
+    });
+
+    [
+      "Local 1199 v. Roe",
+      "Doe No. 2 v. Roe",
+      "In re Grand Jury Subpoena No. 7",
+      "United States v. $124,700 in U.S. Currency",
+      "No. 5 Corp."
+    ].forEach(function(caseName) {
+      it("name-safety: stays in the name, no docket, no flag: " + caseName, function() {
+        var text = caseName + ", 1 F.3d 2 (5th Cir. 1999)";
+        parsers.forEach(function(fn) {
+          var r = ctx[fn](text);
+          assert.equal(r.ok, true);
+          assert.equal(r.name, caseName);
+          assertField(r, "dockets", []);
+          assertField(r, "reviewReasons", []);
+          assert.equal(ctx.wlCiteRoundTrip(r, text).ok, true);
+        });
+      });
+    });
+
+    it("name-safety: Co., No. 5, Inc. stays in the name and is flagged docket-in-name", function() {
+      var text = "Co., No. 5, Inc., 1 F.3d 2 (5th Cir. 1999)";
+      parsers.forEach(function(fn) {
+        var r = ctx[fn](text);
+        assert.equal(r.ok, true);
+        assert.equal(r.name, "Co., No. 5, Inc.");
+        assertField(r, "dockets", []);
+        assert.ok(r.reviewReasons.indexOf("docket-in-name") !== -1);
+        assert.equal(ctx.wlCiteRoundTrip(r, text).ok, true);
+      });
+    });
+
+    it("an unrecognized docket form is never silent: docket-in-name", function() {
+      var text = "Smith v. Jones, No. 21-1 [sealed], 2023 WL 123456 (S.D.N.Y. Sept. 5, 2023)";
+      parsers.forEach(function(fn) {
+        var r = ctx[fn](text);
+        assert.equal(r.ok, true);
+        assert.equal(r.name, "Smith v. Jones, No. 21-1 [sealed]");
+        assertField(r, "dockets", []);
+        assert.ok(r.reviewReasons.indexOf("docket-in-name") !== -1);
+      });
+    });
+  });
+
+  describe("P2: Texas pin, history separator, court-less date", function() {
+    it("Texas parser: pin after the last citation (shared logic with standard)", function() {
+      var text = "Smith v. Jones, No. 24-123, 123 S.W.3d 456, 460 (Tex. App.—Austin 2003, pet. denied)";
+      var r = ctx.wlCiteParseTexasForm(text);
+      assert.equal(r.ok, true);
+      assert.equal(r.pin, "460");
+      assert.equal(r.pinAfter, 0);
+      assert.equal(r.pinAt, false);
+      assert.equal(r.citations.length, 1);
+      assert.equal(r.court, "Tex. App.—Austin");
+      assert.equal(r.parentheticalSuffix, "pet. denied");
+      var rt = ctx.wlCiteRoundTrip(r, text);
+      assert.equal(rt.ok, true, rt.residual);
+      var s = ctx.wlCiteParseStandardForm(text);
+      assert.equal(s.pin, "460");
+      assert.equal(s.pinAfter, 0);
+    });
+
+    parsers.forEach(function(fn) {
+      it(fn + ": history parenthetical with no leading comma round-trips", function() {
+        var text = "Smith v. Jones, 123 F.3d 456 (2d Cir. Sept. 5, 2023) (unpublished table decision)";
+        var r = ctx[fn](text);
+        assert.equal(r.ok, true);
+        assert.equal(r.court, "2d Cir.");
+        assert.equal(r.dateText, "Sept. 5, 2023");
+        assert.equal(r.history, "(unpublished table decision)");
+        assert.equal(r.historySep, " ");
+        var rt = ctx.wlCiteRoundTrip(r, text);
+        assert.equal(rt.ok, true, rt.residual);
+      });
+
+      it(fn + ": comma-separated history keeps the ', ' separator", function() {
+        var text = fixtures.G2.long;
+        var r = ctx[fn](text);
+        assert.equal(r.historySep, ", ");
+        assert.equal(r.history, fixtures.G2.expected.history);
+        assert.equal(ctx.wlCiteRoundTrip(r, text).ok, true);
+      });
+
+      it(fn + ": court-less date parenthetical", function() {
+        var text = "Smith v. Jones, 123 F.3d 456 (Sept. 5, 2023)";
+        var r = ctx[fn](text);
+        assert.equal(r.ok, true);
+        assert.equal(r.court, "");
+        assert.equal(r.dateText, "Sept. 5, 2023");
+        assert.equal(r.date, "2023-09-05");
+        assert.equal(r.year, "2023");
+        var rt = ctx.wlCiteRoundTrip(r, text);
+        assert.equal(rt.ok, true, rt.residual);
+      });
+    });
+
+    it("round trip stays an exact equality check for history separators", function() {
+      var text = "Smith v. Jones, 123 F.3d 456 (2d Cir. Sept. 5, 2023) (unpublished table decision)";
+      var r = ctx.wlCiteParseStandardForm(text);
+      r.historySep = ", ";
+      assert.equal(ctx.wlCiteRoundTrip(r, text).ok, false);
+    });
+  });
+
+  describe("P2: input-length guard", function() {
+    var base = " v. B, 1 F.3d 2 (5th Cir. 1999)";
+    function textOfLength(n) { return "A".repeat(n - base.length) + base; }
+
+    it("cleaned input longer than 2000 chars is rejected by every parse entry point", function() {
+      var text = textOfLength(2001);
+      assert.equal(text.length, 2001);
+      var fns = ["wlCiteParseStandardForm", "wlCiteParseTexasForm", "wlCiteParseWestlawInventory"];
+      fns.forEach(function(fn) {
+        var r = ctx[fn](text);
+        assert.equal(r.ok, false, fn);
+        assert.equal(r.reason, "input-too-long", fn);
+      });
+    });
+
+    it("input of exactly 2000 chars still parses", function() {
+      var text = textOfLength(2000);
+      assert.equal(text.length, 2000);
+      var r = ctx.wlCiteParseStandardForm(text);
+      assert.equal(r.ok, true);
+      assert.equal(r.citations[0].raw, "1 F.3d 2");
+    });
+
+    it("long reporter-less input returns fast (no superlinear anchor scan)", function() {
+      var text = "word ".repeat(8000);
+      var t0 = Date.now();
+      var r = ctx.wlCiteParseStandardForm(text);
+      var anchors = ctx.wlCiteFindAnchorsInText(text);
+      assert.equal(r.ok, false);
+      assert.equal(r.reason, "input-too-long");
+      assert.equal(anchors.length, 0);
+      assert.ok(Date.now() - t0 < 200);
+    });
+
+    it("short-name parser returns null for oversized input", function() {
+      var primary = { kind: "reporter", volume: "1", reporter: "F.3d", page: "2", raw: "1 F.3d 2" };
+      assert.equal(ctx.wlCiteParseShortName("A".repeat(2001) + ", 1 F.3d 2", primary), null);
+    });
+  });
+});

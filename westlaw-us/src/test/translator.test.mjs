@@ -163,13 +163,16 @@ function makeSanchezDoc(opts) {
     el("li", {}, citation),
     el("li", {}, "(Approx. 12 pages)"));
   var docketBlock = el("div", { class: "co_docketBlock" }, docket + ".");
+  var bodyKids = [header, citationList, docketBlock, el("script", {}, "")].concat(scripts);
+  if (opts.author) bodyKids.push(el("div", { class: "x_leadAuthorLine" }, opts.author));
+  if (opts.authorLine) bodyKids.push(el("div", { class: "x_leadAuthorLine" }, opts.authorLine));
+  if (opts.authorSignature) bodyKids.push(el("div", { class: "co_paragraph" }, opts.authorSignature));
 
   return makeDoc({
     title: title,
     href: href,
     hostname: hostname,
-    body: el("body", {}, header, citationList, docketBlock, el("script", {}, ""), ...scripts,
-      opts.author ? el("div", {class: "x_leadAuthorLine"}, opts.author) : null)
+    body: el.apply(null, ["body", {}].concat(bodyKids))
   });
 }
 
@@ -209,8 +212,10 @@ async function runDoWeb(doc, mockA, mockB) {
   var fzu = makeFakeZU();
   var ctx = loadBuiltFile(fz, fzu);
 
-  if (mockA) fzu.setMockResponse("standard", mockA);
-  if (mockB) fzu.setMockResponse("westlaw", mockB);
+  // Route by the styleID query parameter. B's URL (styleIDs=westlaw) also contains "standard", so B is
+  // registered first: the mock matcher returns the first registered key found in the URL.
+  if (mockB) fzu.setMockResponse("styleIDs=westlaw", mockB);
+  if (mockA) fzu.setMockResponse("styleIDs=standard", mockA);
 
   await ctx.doWeb(doc, doc.location.href);
 
@@ -752,7 +757,7 @@ function w5HasReviewTag(item) {
 
 describe("translator - doWeb envelope review reasons (non-echo)", function() {
   it("A responses not an array -> classified unexpected-envelope by the fetch layer, DOM item, needs-review tag, no throw", async function() {
-    var result = await runDoWebRouted(makeSanchezDoc(),
+    var result = await runDoWeb(makeSanchezDoc(),
       jsonResponse({ responses: "TEST-NOT-AN-ARRAY" }),
       jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
 
@@ -768,7 +773,7 @@ describe("translator - doWeb envelope review reasons (non-echo)", function() {
   });
 
   it("A responses holds only a non-object entry -> malformed-envelope + missing-style:standard, DOM item, unverified, review tag", async function() {
-    var result = await runDoWebRouted(makeSanchezDoc(),
+    var result = await runDoWeb(makeSanchezDoc(),
       jsonResponse({ responses: ["TEST-JUNK-ENTRY"] }),
       jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
 
@@ -787,7 +792,7 @@ describe("translator - doWeb envelope review reasons (non-echo)", function() {
   });
 
   it("B missing westlaw style -> missing-style:westlaw, primary data from A still used", async function() {
-    var result = await runDoWebRouted(makeSanchezDoc(),
+    var result = await runDoWeb(makeSanchezDoc(),
       jsonResponse({ responses: [w5StandardResponse()] }),
       jsonResponse({ responses: [w5StandardResponse()] }));
 
@@ -802,7 +807,7 @@ describe("translator - doWeb envelope review reasons (non-echo)", function() {
   });
 
   it("duplicate style in an envelope -> duplicate-style reason recorded exactly once", async function() {
-    var result = await runDoWebRouted(makeSanchezDoc(),
+    var result = await runDoWeb(makeSanchezDoc(),
       jsonResponse({ responses: [w5StandardResponse(), w5StandardResponse(), w5StandardResponse()] }),
       jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
 
@@ -814,7 +819,7 @@ describe("translator - doWeb envelope review reasons (non-echo)", function() {
   });
 
   it("clean envelopes add no review reasons (regression)", async function() {
-    var result = await runDoWebRouted(makeSanchezDoc(),
+    var result = await runDoWeb(makeSanchezDoc(),
       jsonResponse({ responses: [w5StandardResponse()] }),
       jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
 
@@ -855,8 +860,8 @@ describe("translator - doWeb GUID change → identity-changed", function() {
   });
 });
 
-describe("translator - doWeb no attachments/notes/creators", function() {
-  it("never creates attachments, notes, or creators", async function() {
+describe("translator - doWeb author and no attachments", function() {
+  it("leaves the author empty when the page has no lead-author line", async function() {
     var doc = makeSanchezDoc();
     var result = await runDoWeb(doc,
       makeEnvelopeResponse("standard",
@@ -870,6 +875,41 @@ describe("translator - doWeb no attachments/notes/creators", function() {
     assert.equal(item.creators.length, 0, "no creators");
     assert.equal(item.attachments.length, 0, "no attachments");
     assert.equal(item.notes.length, 0, "no notes");
+  });
+
+  it("saves the opinion author from the lead-author line", async function() {
+    var doc = makeSanchezDoc({ authorLine: "Associate Chief Justice Lee, opinion of the Court:" });
+    var result = await runDoWeb(doc,
+      makeEnvelopeResponse("standard",
+        "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999)",
+        ["Sanchez, 187 F.3d 486", "187 F.3d 486"]),
+      makeEnvelopeResponse("westlaw",
+        null, null,
+        "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999), No. 98-40679, 1999 WL 652310"));
+    var item = result.fz.items[0];
+    assert.equal(item.creators.length, 1);
+    assert.equal(item.creators[0].creatorType, "author");
+    assert.equal(item.creators[0].firstName, "");
+    assert.equal(item.creators[0].lastName, "Lee");
+    assert.equal(item.caseName, "Sanchez v. Liggett & Myers, Inc.");
+  });
+
+  it("retains the byline surname without guessing from an unrelated signature", async function() {
+    var doc = makeSanchezDoc({
+      authorLine: "Associate Chief Justice Lee, opinion of the Court:",
+      authorSignature: "Thomas R. Lee, Associate Chief Justice"
+    });
+    var result = await runDoWeb(doc,
+      makeEnvelopeResponse("standard",
+        "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999)",
+        ["Sanchez, 187 F.3d 486", "187 F.3d 486"]),
+      makeEnvelopeResponse("westlaw",
+        null, null,
+        "Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999), No. 98-40679, 1999 WL 652310"));
+    var item = result.fz.items[0];
+    assert.equal(item.creators.length, 1);
+    assert.equal(item.creators[0].firstName, "");
+    assert.equal(item.creators[0].lastName, "Lee");
   });
 });
 
@@ -1001,5 +1041,238 @@ describe("translator - build script", function() {
     assert.equal(header.priority, 100);
     assert.equal(header.translatorType, 4);
     assert.equal(header.translatorID, "9abca805-707d-4064-958f-e08ac37f0862");
+  });
+});
+
+// ---- DOM review reasons reach the saved item (W9) ----
+function w9Responses() {
+  return {
+    a: jsonResponse({ responses: [w5StandardResponse()] }),
+    b: jsonResponse({ responses: [
+      { request: { styleId: "standard" }, forms: [{ name: "long", text: { "text/plain": W5_LONG } }] },
+      w5WestlawResponse()
+    ] })
+  };
+}
+
+// The fake DOM has no appendChild; a second header list is added by pushing onto the body's child array.
+function w9AppendToBody(doc, node) {
+  doc.querySelector("body")._children.push(node);
+}
+
+describe("translator - doWeb DOM review reasons and request routing (W9)", function() {
+  it("routes request B to the westlaw-style mock, not A's response", async function() {
+    var r = w9Responses();
+    var result = await runDoWeb(makeSanchezDoc(), r.a, r.b);
+    var urls = result.fzu.getCalls().map(function(c) { return c.url; });
+    assert.equal(urls.length, 2, "two service requests");
+    assert.ok(urls.some(function(u) { return u.indexOf("styleIDs=westlaw") !== -1; }), "B request issued");
+    var item = result.fz.items[0];
+    assert.ok(item.extra.indexOf("1999 WL 652310") !== -1, "B's own inventory (WL cite) reached the item");
+    assert.ok(item.extra.indexOf("Westlaw status: validated-profile") !== -1);
+    assert.deepEqual(w5ReviewLines(item), []);
+  });
+
+  it("duplicate headers with different citations: conflicting-header is saved and status is not validated", async function() {
+    var r = w9Responses();
+    var doc = makeSanchezDoc();
+    var sticky = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "United States Court of Appeals, Fifth Circuit."),
+      el("li", {}, "August 25, 1999"),
+      el("li", {}, "188 F.3d 100"));
+    w9AppendToBody(doc, sticky);
+    var result = await runDoWeb(doc, r.a, r.b);
+    var item = result.fz.items[0];
+    assert.ok(w5ReviewLines(item).indexOf("Westlaw review: conflicting-header") !== -1, item.extra);
+    assert.equal(item.extra.indexOf("Westlaw status: validated-profile"), -1);
+    assert.ok(w5HasReviewTag(item));
+  });
+
+  it("duplicate headers with different court lines: conflicting-header is saved", async function() {
+    var r = w9Responses();
+    var doc = makeSanchezDoc();
+    var sticky = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Another Placeholder Circuit"),
+      el("li", {}, "August 25, 1999"),
+      el("li", {}, "187 F.3d 486"));
+    w9AppendToBody(doc, sticky);
+    var result = await runDoWeb(doc, r.a, r.b);
+    var item = result.fz.items[0];
+    assert.ok(w5ReviewLines(item).indexOf("Westlaw review: conflicting-header") !== -1, item.extra);
+    assert.equal(item.extra.indexOf("Westlaw status: validated-profile"), -1);
+  });
+
+  it("no header list (court/cites fallbacks): header-fallback is recorded without demoting a service-validated record", async function() {
+    var r = w9Responses();
+    var doc = makeDoc({
+      title: "Sanchez v. Liggett & Myers, Inc. | Cases | Fifth Circuit | Westlaw Advantage",
+      href: "https://1.next.westlaw.com/Document/I1234567890abcdef1234567890abcdef/View/FullText.html",
+      hostname: "1.next.westlaw.com",
+      body: el("body", {},
+        el("div", { id: "co_docHeaderTitleLine" }, "Sanchez v. Liggett & Myers, Inc."),
+        el("div", { class: "co_courtBlock" }, "United States Court of Appeals, Fifth Circuit."),
+        el("div", { class: "co_cites" }, "187 F.3d 486"),
+        el("div", { class: "co_docketBlock" }, "No. 98-40679."),
+        el("script", {},
+          'var config = {"DocumentGuid":"I1234567890abcdef1234567890abcdef","ContentType":"Cases","PageEventIdentifier":"TEST-PEI-0001","ResourceToken":"TEST-RT-0001","RelatedInfo":"relatedinfo.next.westlaw.com"};'))
+    });
+    var result = await runDoWeb(doc, r.a, r.b);
+    var item = result.fz.items[0];
+    assert.deepEqual(w5ReviewLines(item), ["Westlaw review: header-fallback"]);
+    assert.ok(item.extra.indexOf("Westlaw status: validated-profile") !== -1, item.extra);
+  });
+});
+
+// ---- Review fixes (lane C): leak scrub, outgoing-validation demotion, page-context reasons, informational tag ----
+function lcRun(longA, opts) {
+  opts = opts || {};
+  var enhanced = longA.replace(/ \(5th Cir\. 1999\)/, "") + " (5th Cir. 1999), No. 98-40679, 1999 WL 652310";
+  var shorts = opts.shorts || ["Doe, 187 F.3d 486", "187 F.3d 486"];
+  var a = jsonResponse({ responses: [{
+    request: { styleId: "standard" },
+    forms: [{ name: "long", text: { "text/plain": longA } }].concat(shorts.map(function(t) {
+      return { name: "short", text: { "text/plain": t } };
+    }))
+  }] });
+  var b = jsonResponse({ responses: [
+    { request: { styleId: "standard" }, forms: [{ name: "long", text: { "text/plain": longA } }] },
+    { request: { styleId: "westlaw" }, forms: [{ name: "enhanced", text: { "text/plain": enhanced } }] }
+  ] });
+  return runDoWeb(makeSanchezDoc({ headerName: "Doe v. Roe" }), a, b);
+}
+
+function lcStatus(item) {
+  var m = item.extra.match(/^Westlaw status: (.*)$/m);
+  return m ? m[1] : null;
+}
+
+describe("translator - service response text never reaches Extra (P1-3)", function() {
+  it("duplicate unwanted styleId with token-like text: no reason, no leak, status unchanged", async function() {
+    var junk = "Bearer TEST-SECRETVALUE some opinion text";
+    var a = jsonResponse({ responses: [
+      w5StandardResponse(),
+      { request: { styleId: junk }, forms: [] },
+      { request: { styleId: junk }, forms: [] }
+    ] });
+    var result = await runDoWeb(makeSanchezDoc(), a,
+      jsonResponse({ responses: [w5StandardResponse(), w5WestlawResponse()] }));
+    var item = result.fz.items[0];
+    assert.equal(item.extra.indexOf("TEST-SECRETVALUE"), -1);
+    assert.equal(item.extra.indexOf("opinion text"), -1);
+    assert.deepEqual(w5ReviewLines(item), []);
+    assert.equal(lcStatus(item), "validated-profile");
+  });
+
+  it("unparsed service segment carrying a token is dropped from Extra and validation-token-leak is kept", async function() {
+    var result = await lcRun("Doe v. Roe, 187 F.3d 486, Bearer TEST-XYZ some words (5th Cir. 1999)");
+    var item = result.fz.items[0];
+    assert.equal(item.extra.indexOf("TEST-XYZ"), -1, item.extra);
+    assert.equal(item.extra.indexOf("Bearer"), -1);
+    assert.ok(item.extra.indexOf("Westlaw review: validation-token-leak") !== -1, item.extra);
+    assert.notEqual(lcStatus(item), "validated-profile");
+    assert.ok(w5HasReviewTag(item));
+  });
+});
+
+describe("translator - outgoing validation problems demote and tag (P1-4)", function() {
+  it("HTML in caseName aborts invalid required metadata", async function() {
+    await assert.rejects(lcRun('Doe <i>v.</i> Roe, 187 F.3d 486 (5th Cir. 1999)'), /invalid (required|outgoing) metadata/);
+  });
+
+  it("(year) in caseName aborts invalid required metadata", async function() {
+    await assert.rejects(lcRun('Doe v. Roe (1998), 187 F.3d 486 (5th Cir. 1999)'), /invalid (required|outgoing) metadata/);
+  });
+
+  it("shortTitle that looks like a citation is dropped, flagged, unverified and tagged", async function() {
+    var result = await lcRun("Doe v. Roe, 187 F.3d 486 (5th Cir. 1999)", { shorts: ["Doe v. 7 Eleven 3, 187 F.3d 486", "187 F.3d 486"] });
+    var item = result.fz.items[0];
+    assert.equal(item.shortTitle, undefined, "shortTitle dropped");
+    assert.ok(item.extra.indexOf("Westlaw review: validation-shortTitle-has-cite") !== -1, item.extra);
+    assert.equal(lcStatus(item), "unverified-profile");
+    assert.ok(w5HasReviewTag(item));
+  });
+
+  it("caseName ending in an unknown-reporter citation aborts invalid required metadata", async function() {
+    await assert.rejects(lcRun('Doe v. Roe, 400 Mass. 100, 100 N.E.2d 200 (5th Cir. 1999)'), /invalid (required|outgoing) metadata/);
+  });
+
+  it("a clean record produces no validation reasons (regression)", async function() {
+    var result = await lcRun("Doe v. Roe, 187 F.3d 486 (5th Cir. 1999)");
+    var item = result.fz.items[0];
+    assert.equal(item.extra.indexOf("validation-"), -1);
+    assert.equal(lcStatus(item), "validated-profile");
+    assert.equal(w5HasReviewTag(item), false);
+  });
+});
+
+describe("translator - unparsed citation Extra payload is bounded (P2-12)", function() {
+  it("no Extra line exceeds the 200-char payload cap", async function() {
+    var result = await lcRun("Doe v. Roe, 187 F.3d 486, " + "lorem ".repeat(80) + "(5th Cir. 1999)");
+    var item = result.fz.items[0];
+    item.extra.split("\n").forEach(function(line) {
+      if (line.indexOf("Westlaw unparsed citation: ") === 0) {
+        assert.ok(line.length <= "Westlaw unparsed citation: ".length + 201, "capped");
+      }
+    });
+  });
+});
+
+describe("translator - page-context review reasons reach the record (P2-7)", function() {
+  function docWithConfigScripts(scriptTexts) {
+    var doc = makeSanchezDoc({ withConfig: false });
+    scriptTexts.forEach(function(t) { w9AppendToBody(doc, el("script", {}, t)); });
+    return doc;
+  }
+  var cfg = function(pei, rt) {
+    return 'var config = {"DocumentGuid":"I1234567890abcdef1234567890abcdef","ContentType":"Cases","PageEventIdentifier":"' + pei +
+      '","ResourceToken":"' + rt + '","RelatedInfo":"relatedinfo.next.westlaw.com"};';
+  };
+
+  it("two distinct PageEventIdentifier values -> service-none AND ambiguous-config, no calls", async function() {
+    var doc = docWithConfigScripts([cfg("TEST-PEI-0001", "TEST-RT-0001"), cfg("TEST-PEI-0002", "TEST-RT-0001")]);
+    var result = await runDoWeb(doc, null, null);
+    var item = result.fz.items[0];
+    var lines = w5ReviewLines(item);
+    assert.ok(lines.indexOf("Westlaw review: service-none") !== -1, item.extra);
+    assert.ok(lines.indexOf("Westlaw review: ambiguous-config") !== -1, item.extra);
+    assert.equal(result.fzu.getCalls().length, 0);
+    assert.equal(item.extra.indexOf("TEST-PEI"), -1);
+    assert.ok(w5HasReviewTag(item));
+  });
+
+  it("no config script at all -> missing-config is recorded", async function() {
+    var result = await runDoWeb(makeSanchezDoc({ withConfig: false }), null, null);
+    var item = result.fz.items[0];
+    assert.ok(w5ReviewLines(item).indexOf("Westlaw review: missing-config") !== -1, item.extra);
+    assert.ok(w5ReviewLines(item).indexOf("Westlaw review: service-none") !== -1, item.extra);
+  });
+
+  it("clean config adds no page-context reasons (regression)", async function() {
+    var r = w9Responses();
+    var result = await runDoWeb(makeSanchezDoc(), r.a, r.b);
+    assert.equal(result.fz.items[0].extra.indexOf("config"), -1);
+  });
+});
+
+describe("translator - informational header-fallback does not tag (P2-8)", function() {
+  it("service-validated record with only header-fallback: Extra line kept, no tag", async function() {
+    var r = w9Responses();
+    var doc = makeDoc({
+      title: "Sanchez v. Liggett & Myers, Inc. | Cases | Fifth Circuit | Westlaw Advantage",
+      href: "https://1.next.westlaw.com/Document/I1234567890abcdef1234567890abcdef/View/FullText.html",
+      hostname: "1.next.westlaw.com",
+      body: el("body", {},
+        el("div", { id: "co_docHeaderTitleLine" }, "Sanchez v. Liggett & Myers, Inc."),
+        el("div", { class: "co_courtBlock" }, "United States Court of Appeals, Fifth Circuit."),
+        el("div", { class: "co_cites" }, "187 F.3d 486"),
+        el("div", { class: "co_docketBlock" }, "No. 98-40679."),
+        el("script", {},
+          'var config = {"DocumentGuid":"I1234567890abcdef1234567890abcdef","ContentType":"Cases","PageEventIdentifier":"TEST-PEI-0001","ResourceToken":"TEST-RT-0001","RelatedInfo":"relatedinfo.next.westlaw.com"};'))
+    });
+    var result = await runDoWeb(doc, r.a, r.b);
+    var item = result.fz.items[0];
+    assert.deepEqual(w5ReviewLines(item), ["Westlaw review: header-fallback"]);
+    assert.equal(lcStatus(item), "validated-profile");
+    assert.equal(w5HasReviewTag(item), false, "validated + informational only -> no tag");
   });
 });

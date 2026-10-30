@@ -172,7 +172,7 @@ describe("wlProfClassifyCourt", function() {
       assert.equal(r.system, "state");
       assert.equal(r.level, "intermediate");
       assert.equal(r.state, "NY");
-      assert.equal(r.bluebook, "App. Div.");
+      assert.equal(r.bluebook, "N.Y. App. Div.");
     });
   });
 
@@ -509,27 +509,27 @@ describe("P3 - court-unclassified for unknown classification with service court"
 });
 
 describe("P4 - NY specific rules and generic Supreme Court fix", function() {
-  it("Supreme Court of New York, Appellate Division → App. Div.", function() {
+  it("Supreme Court of New York, Appellate Division → N.Y. App. Div.", function() {
     var r = wlProfClassifyCourt("Supreme Court of New York, Appellate Division.");
     assert.equal(r.system, "state");
     assert.equal(r.level, "intermediate");
     assert.equal(r.state, "NY");
-    assert.equal(r.bluebook, "App. Div.");
+    assert.equal(r.bluebook, "N.Y. App. Div.");
     assert.notEqual(r.bluebook, "N.Y.");
   });
-  it("Supreme Court of New York, Appellate Division, Second Department → App. Div.", function() {
+  it("Supreme Court of New York, Appellate Division, Second Department → N.Y. App. Div.", function() {
     var r = wlProfClassifyCourt("Supreme Court of New York, Appellate Division, Second Department.");
     assert.equal(r.system, "state");
     assert.equal(r.level, "intermediate");
     assert.equal(r.state, "NY");
-    assert.equal(r.bluebook, "App. Div.");
+    assert.equal(r.bluebook, "N.Y. App. Div.");
   });
-  it("Supreme Court, Appellate Division, Second Department, New York → App. Div.", function() {
+  it("Supreme Court, Appellate Division, Second Department, New York → N.Y. App. Div.", function() {
     var r = wlProfClassifyCourt("Supreme Court, Appellate Division, Second Department, New York.");
     assert.equal(r.system, "state");
     assert.equal(r.level, "intermediate");
     assert.equal(r.state, "NY");
-    assert.equal(r.bluebook, "App. Div.");
+    assert.equal(r.bluebook, "N.Y. App. Div.");
   });
   it("Supreme Court, Appellate Term, Third Judicial Department, New York → N.Y. App. Term", function() {
     var r = wlProfClassifyCourt("Supreme Court, Appellate Term, Third Judicial Department, New York.");
@@ -552,6 +552,20 @@ describe("P4 - NY specific rules and generic Supreme Court fix", function() {
     assert.equal(r.state, "NY");
     assert.equal(r.bluebook, "N.Y. Sup. Ct.");
   });
+  it("Supreme Court of New York (bare, no qualifier) → N.Y. Sup. Ct. trial level", function() {
+    var r = wlProfClassifyCourt("Supreme Court of New York.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "trial");
+    assert.equal(r.state, "NY");
+    assert.equal(r.bluebook, "N.Y. Sup. Ct.");
+  });
+  it("Supreme Court, New York (comma variant) → N.Y. Sup. Ct. trial level", function() {
+    var r = wlProfClassifyCourt("Supreme Court, New York.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "trial");
+    assert.equal(r.state, "NY");
+    assert.equal(r.bluebook, "N.Y. Sup. Ct.");
+  });
   it("generic Supreme Court of <State> does not match lines with Appellate Division", function() {
     var r = wlProfClassifyCourt("Supreme Court of New York, Appellate Division.");
     assert.notEqual(r.level, "supreme");
@@ -563,6 +577,43 @@ describe("P4 - NY specific rules and generic Supreme Court fix", function() {
   it("generic Supreme Court of <State> does not match lines with County", function() {
     var r = wlProfClassifyCourt("Supreme Court of New York, Kings County.");
     assert.notEqual(r.level, "supreme");
+  });
+  it("near-miss: Supreme Court of New York, Appellate Division stays App. Div. (not trial)", function() {
+    var r = wlProfClassifyCourt("Supreme Court of New York, Appellate Division, Second Department.");
+    assert.equal(r.level, "intermediate");
+    assert.notEqual(r.level, "trial");
+    assert.equal(r.bluebook, "N.Y. App. Div.");
+  });
+  it("near-miss: Supreme Court, Kings County (without New York) should not match", function() {
+    var r = wlProfClassifyCourt("Supreme Court, Kings County.");
+    assert.notEqual(r.system, "state");
+    assert.notEqual(r.level, "trial");
+  });
+  it("near-miss: Supreme Court of New Yorkshire should not classify as NY trial", function() {
+    var r = wlProfClassifyCourt("Supreme Court of New Yorkshire.");
+    assert.notEqual(r.state, "NY");
+    assert.notEqual(r.level, "trial");
+  });
+  it("spot-check: Supreme Court of California unaffected and classifies as supreme", function() {
+    var r = wlProfClassifyCourt("Supreme Court of California.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "supreme");
+    assert.equal(r.state, "CA");
+    assert.equal(r.bluebook, "Cal.");
+  });
+  it("spot-check: Supreme Court of Florida unaffected and classifies as supreme", function() {
+    var r = wlProfClassifyCourt("Supreme Court of Florida.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "supreme");
+    assert.equal(r.state, "FL");
+    assert.equal(r.bluebook, "Fla.");
+  });
+  it("spot-check: Supreme Court of Texas unaffected and classifies as supreme", function() {
+    var r = wlProfClassifyCourt("Supreme Court of Texas.");
+    assert.equal(r.system, "state");
+    assert.equal(r.level, "supreme");
+    assert.equal(r.state, "TX");
+    assert.equal(r.bluebook, "Tex.");
   });
 });
 
@@ -847,4 +898,263 @@ describe("W4 - high-court correctness fixes", function() {
     var c = wlProfClassifyCourt("Supreme Court of Oregon.");
     assert.equal(wlProfCourtForCitation(c, { reporter: "P.3d" }, null).court, "Or.");
   });
+  it("omission policy: N.Y. Sup. Ct. trial court with N.Y.S.2d omits N.Y. (Sup. Ct.)", function() {
+    var c = wlProfClassifyCourt("Supreme Court of New York.");
+    assert.equal(c.level, "trial");
+    assert.equal(c.bluebook, "N.Y. Sup. Ct.");
+    var result = wlProfCourtForCitation(c, { reporter: "N.Y.S.2d" }, null);
+    assert.equal(result.court, "Sup. Ct.");
+  });
+  it("omission policy: N.Y. Sup. Ct. trial court with N.Y.S.3d omits N.Y. (Sup. Ct.)", function() {
+    var c = wlProfClassifyCourt("Supreme Court of New York.");
+    var result = wlProfCourtForCitation(c, { reporter: "N.Y.S.3d" }, null);
+    assert.equal(result.court, "Sup. Ct.");
+  });
+  it("omission policy: N.Y. Sup. Ct. trial court with Misc. omits N.Y. (Sup. Ct.)", function() {
+    var c = wlProfClassifyCourt("Supreme Court of New York.");
+    var result = wlProfCourtForCitation(c, { reporter: "Misc." }, null);
+    assert.equal(result.court, "Sup. Ct.");
+  });
+  it("omission policy: N.Y. Sup. Ct. trial court with Misc. 2d omits N.Y. (Sup. Ct.)", function() {
+    var c = wlProfClassifyCourt("Supreme Court of New York.");
+    var result = wlProfCourtForCitation(c, { reporter: "Misc. 2d" }, null);
+    assert.equal(result.court, "Sup. Ct.");
+  });
+  it("omission policy: N.Y. Sup. Ct. trial court with Misc. 3d omits N.Y. (Sup. Ct.)", function() {
+    var c = wlProfClassifyCourt("Supreme Court of New York.");
+    var result = wlProfCourtForCitation(c, { reporter: "Misc. 3d" }, null);
+    assert.equal(result.court, "Sup. Ct.");
+  });
 });
+
+describe("Lane A - P1-1 regional reporter compares service court and never blanks a validated court", function() {
+  var TX_SVC_14 = "Tex. App.\u2014Houston [14th Dist.]";
+  function tx(city) { return wlProfClassifyCourt("Court of Appeals of Texas, " + city + "."); }
+  function reasons(r) { return Array.from(r.reviewReasons); }
+
+  it("regional reporter + service court that differs from the table value -> court-conflict (header authority kept)", function() {
+    var c = wlProfClassifyCourt("Supreme Court of California.");
+    var r = wlProfCourtForCitation(c, { reporter: "P.2d" }, "Colo.");
+    assert.equal(r.court, "Cal.");
+    assert.deepEqual(reasons(r), ["court-conflict"]);
+  });
+  it("regional reporter + matching service court -> no reason", function() {
+    var c = wlProfClassifyCourt("Supreme Court of California.");
+    var r = wlProfCourtForCitation(c, { reporter: "P.2d" }, "Cal.");
+    assert.equal(r.court, "Cal.");
+    assert.deepEqual(reasons(r), []);
+  });
+  it("Texas: bare Houston DOM + service [14th Dist.] -> court from service, no conflict", function() {
+    var r = wlProfCourtForCitation(tx("Houston"), { reporter: "S.W.3d" }, TX_SVC_14);
+    assert.equal(r.court, TX_SVC_14);
+    assert.deepEqual(reasons(r), []);
+  });
+  it("Texas: bare Houston DOM + service [1st Dist.] -> court from service, no conflict", function() {
+    var r = wlProfCourtForCitation(tx("Houston"), { reporter: "S.W.3d" }, "Tex. App.\u2014Houston [1st Dist.]");
+    assert.equal(r.court, "Tex. App.\u2014Houston [1st Dist.]");
+    assert.deepEqual(reasons(r), []);
+  });
+  it("Texas: bare Houston DOM + non-Houston service -> court-conflict", function() {
+    var r = wlProfCourtForCitation(tx("Houston"), { reporter: "S.W.3d" }, "Tex. App.\u2014Dallas");
+    assert.deepEqual(reasons(r), ["court-conflict"]);
+  });
+  it("Texas: bare Houston DOM without service is unresolved (district unknown)", function() {
+    var r = wlProfCourtForCitation(tx("Houston"), { reporter: "S.W.3d" }, null);
+    assert.equal(r.court, "");
+    assert.deepEqual(reasons(r), ["court-unresolved"]);
+  });
+  it("Texas: Houston (1st Dist.) DOM + service [14th Dist.] -> court-conflict", function() {
+    var r = wlProfCourtForCitation(tx("Houston (1st Dist.)"), { reporter: "S.W.3d" }, TX_SVC_14);
+    assert.deepEqual(reasons(r), ["court-conflict"]);
+  });
+  it("Texas: Dallas DOM + Austin service -> court-conflict", function() {
+    var r = wlProfCourtForCitation(tx("Dallas"), { reporter: "S.W.3d" }, "Tex. App.\u2014Austin");
+    assert.equal(r.court, "Tex. App.\u2014Austin");
+    assert.deepEqual(reasons(r), ["court-conflict"]);
+  });
+  it("Texas: Dallas DOM + matching service -> no reason", function() {
+    var r = wlProfCourtForCitation(tx("Dallas"), { reporter: "S.W.3d" }, "Tex. App.\u2014Dallas");
+    assert.equal(r.court, "Tex. App.\u2014Dallas");
+    assert.deepEqual(reasons(r), []);
+  });
+  it("Texas: unknown DOM city + unrecognized service court -> court-unresolved and blank", function() {
+    var r = wlProfCourtForCitation(tx("Foo"), { reporter: "S.W.3d" }, "Tex. App.\u2014Foo");
+    assert.equal(r.court, "");
+    assert.deepEqual(reasons(r), ["court-unresolved"]);
+  });
+  it("Texas: unknown DOM city + no service court -> court-unresolved", function() {
+    var r = wlProfCourtForCitation(tx("Foo"), { reporter: "S.W.3d" }, null);
+    assert.equal(r.court, "");
+    assert.deepEqual(reasons(r), ["court-unresolved"]);
+  });
+  it("Texas: unknown DOM city + known Texas service court -> service court, no reason", function() {
+    var r = wlProfCourtForCitation(tx("Foo"), { reporter: "S.W.3d" }, "Tex. App.\u2014Waco");
+    assert.equal(r.court, "Tex. App.\u2014Waco");
+    assert.deepEqual(reasons(r), []);
+  });
+  it("Texas: hyphenated Corpus Christi-Edinburg classifies like the en-dash form", function() {
+    var c = tx("Corpus Christi-Edinburg");
+    assert.equal(c.bluebook, "Tex. App.\u2014Corpus Christi\u2013Edinburg");
+    var r = wlProfCourtForCitation(c, { reporter: "S.W.3d" }, "Tex. App.\u2014Corpus Christi\u2013Edinburg");
+    assert.equal(r.court, "Tex. App.\u2014Corpus Christi\u2013Edinburg");
+    assert.deepEqual(reasons(r), []);
+  });
+  it("Texas: bare Corpus Christi DOM + Corpus Christi service is accepted; without service is unresolved", function() {
+    var c = tx("Corpus Christi");
+    var ok = wlProfCourtForCitation(c, { reporter: "S.W.3d" }, "Tex. App.\u2014Corpus Christi");
+    assert.equal(ok.court, "Tex. App.\u2014Corpus Christi");
+    assert.deepEqual(reasons(ok), []);
+    var none = wlProfCourtForCitation(c, { reporter: "S.W.3d" }, null);
+    assert.equal(none.court, "");
+    assert.deepEqual(reasons(none), ["court-unresolved"]);
+  });
+  it("Texas: G5-style known city without service still resolves from the table", function() {
+    var r = wlProfCourtForCitation(tx("Beaumont"), { reporter: "S.W.3d" }, null);
+    assert.equal(r.court, "Tex. App.\u2014Beaumont");
+    assert.deepEqual(reasons(r), []);
+  });
+  it("Supreme Court of Guam (table row without abbreviation) + P.3d and no service -> court-unresolved", function() {
+    var c = wlProfClassifyCourt("Supreme Court of Guam.");
+    assert.equal(c.bluebook, null);
+    var r = wlProfCourtForCitation(c, { reporter: "P.3d" }, null);
+    assert.equal(r.court, "");
+    assert.deepEqual(reasons(r), ["court-unresolved"]);
+  });
+  it("Supreme Court of Guam + service court -> service court with court-unclassified", function() {
+    var c = wlProfClassifyCourt("Supreme Court of Guam.");
+    var r = wlProfCourtForCitation(c, { reporter: "P.3d" }, "Guam");
+    assert.equal(r.court, "Guam");
+    assert.deepEqual(reasons(r), ["court-unclassified"]);
+  });
+  it("unknown bankruptcy district without service -> court-unresolved", function() {
+    var c = wlProfClassifyCourt("United States Bankruptcy Court, D. Nowhere.");
+    var r = wlProfCourtForCitation(c, { reporter: "B.R." }, null);
+    assert.equal(r.court, "");
+    assert.deepEqual(reasons(r), ["court-unresolved"]);
+  });
+  it("official reporter cannot establish the court of an unclassified jurisdiction", function() {
+    var c = wlProfClassifyCourt("Supreme Court of Guam.");
+    var r = wlProfCourtForCitation(c, { reporter: "Cal. 3d" }, null);
+    assert.equal(r.court, "");
+    assert.deepEqual(reasons(r), ["court-unresolved"]);
+  });
+});
+
+describe("Lane A - P1-5 SCOTUS with a non-U.S. primary", function() {
+  var scotus = wlProfClassifyCourt("Supreme Court of the United States");
+  it("WL primary gets court U.S.", function() {
+    var r = wlProfCourtForCitation(scotus, { kind: "wl", volume: "2020", reporter: "WL", page: "1234567" }, "U.S.");
+    assert.equal(r.court, "U.S.");
+    assert.deepEqual(Array.from(r.reviewReasons), []);
+  });
+  it("WL primary without service court still gets U.S.", function() {
+    var r = wlProfCourtForCitation(scotus, { reporter: "WL" }, null);
+    assert.equal(r.court, "U.S.");
+  });
+  it("U.S., S. Ct., L. Ed., L. Ed. 2d primaries keep court blank", function() {
+    ["U.S.", "S. Ct.", "L. Ed.", "L. Ed. 2d"].forEach(function(rep) {
+      var r = wlProfCourtForCitation(scotus, { reporter: rep }, "U.S.");
+      assert.equal(r.court, "", rep);
+      assert.deepEqual(Array.from(r.reviewReasons), [], rep);
+    });
+  });
+});
+
+describe("Lane A - P1-6 Kentucky Court of Appeals era", function() {
+  var line = "Court of Appeals of Kentucky.";
+  it("date before 1976-01-01 -> supreme level, Ky.", function() {
+    var r = wlProfClassifyCourt(line, "1950-03-03");
+    assert.equal(r.level, "supreme");
+    assert.equal(r.bluebook, "Ky.");
+    assert.equal(r.state, "KY");
+    assert.equal(r.eraUncertain, undefined);
+  });
+  it("1975-12-31 is still the highest court; 1976-01-01 is intermediate", function() {
+    assert.equal(wlProfClassifyCourt(line, "1975-12-31").bluebook, "Ky.");
+    var r = wlProfClassifyCourt(line, "1976-01-01");
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.bluebook, "Ky. Ct. App.");
+    assert.equal(r.eraUncertain, undefined);
+  });
+  it("year-only dates work", function() {
+    assert.equal(wlProfClassifyCourt(line, "1975").bluebook, "Ky.");
+    assert.equal(wlProfClassifyCourt(line, "1976").bluebook, "Ky. Ct. App.");
+  });
+  it("no date -> intermediate with eraUncertain true", function() {
+    var r = wlProfClassifyCourt(line);
+    assert.equal(r.level, "intermediate");
+    assert.equal(r.bluebook, "Ky. Ct. App.");
+    assert.equal(r.eraUncertain, true);
+    assert.equal(wlProfClassifyCourt(line, "").eraUncertain, true);
+    assert.equal(wlProfClassifyCourt(line, "not a date").eraUncertain, true);
+  });
+  it("Kentucky classification does not mutate the shared table row", function() {
+    wlProfClassifyCourt(line, "1950");
+    var r = wlProfClassifyCourt(line, "2000");
+    assert.equal(r.bluebook, "Ky. Ct. App.");
+    assert.equal(r.level, "intermediate");
+  });
+  it("other courts ignore the date and never gain eraUncertain", function() {
+    var r = wlProfClassifyCourt("Court of Appeals of Georgia.", "1950");
+    assert.equal(r.bluebook, "Ga. Ct. App.");
+    assert.equal(r.eraUncertain, undefined);
+    var s = wlProfClassifyCourt("Supreme Court of Kentucky.");
+    assert.equal(s.bluebook, "Ky.");
+    assert.equal(s.eraUncertain, undefined);
+  });
+  it("pre-1976 Kentucky with S.W.2d + service Ky. -> no conflict", function() {
+    var c = wlProfClassifyCourt(line, "1950-03-03");
+    var r = wlProfCourtForCitation(c, { reporter: "S.W.2d" }, "Ky.");
+    assert.equal(r.court, "Ky.");
+    assert.deepEqual(Array.from(r.reviewReasons), []);
+  });
+});
+
+describe("Lane A - P2-12c NY Bluebook 10.4(b) court forms", function() {
+  var ad = wlProfClassifyCourt("Supreme Court, Appellate Division, Second Department, New York.");
+  var term = wlProfClassifyCourt("Supreme Court, Appellate Term, Third Judicial Department, New York.");
+  var sup = wlProfClassifyCourt("Supreme Court, Kings County, New York.");
+  var nyReporters = ["N.Y.S.", "N.Y.S.2d", "N.Y.S.3d", "A.D.", "A.D.2d", "A.D.3d", "Misc.", "Misc. 2d", "Misc. 3d"];
+
+  it("table stores full T1 forms", function() {
+    assert.equal(ad.bluebook, "N.Y. App. Div.");
+    assert.equal(term.bluebook, "N.Y. App. Term");
+    assert.equal(sup.bluebook, "N.Y. Sup. Ct.");
+  });
+  it("NY-identifying reporters omit N.Y. (DOM only)", function() {
+    nyReporters.forEach(function(rep) {
+      assert.equal(wlProfCourtForCitation(ad, { reporter: rep }, null).court, "App. Div.", rep);
+      assert.equal(wlProfCourtForCitation(term, { reporter: rep }, null).court, "App. Term", rep);
+      assert.equal(wlProfCourtForCitation(sup, { reporter: rep }, null).court, "Sup. Ct.", rep);
+    });
+  });
+  it("NY-identifying reporters + service short forms -> no conflict", function() {
+    nyReporters.forEach(function(rep) {
+      [[ad, "App. Div."], [term, "App. Term"], [sup, "Sup. Ct."]].forEach(function(p) {
+        var r = wlProfCourtForCitation(p[0], { reporter: rep }, p[1]);
+        assert.equal(r.court, p[1], rep);
+        assert.deepEqual(Array.from(r.reviewReasons), [], rep + " " + p[1]);
+      });
+    });
+  });
+  it("N.E. reporters keep the full form", function() {
+    ["N.E.", "N.E.2d", "N.E.3d"].forEach(function(rep) {
+      assert.equal(wlProfCourtForCitation(ad, { reporter: rep }, null).court, "N.Y. App. Div.", rep);
+      assert.equal(wlProfCourtForCitation(term, { reporter: rep }, null).court, "N.Y. App. Term", rep);
+      assert.equal(wlProfCourtForCitation(sup, { reporter: rep }, null).court, "N.Y. Sup. Ct.", rep);
+      var ok = wlProfCourtForCitation(ad, { reporter: rep }, "N.Y. App. Div.");
+      assert.deepEqual(Array.from(ok.reviewReasons), [], rep);
+    });
+  });
+  it("N.E. reporter + short service form conflicts; N.Y.S.2d + wrong court conflicts", function() {
+    var a = wlProfCourtForCitation(ad, { reporter: "N.E.2d" }, "App. Div.");
+    assert.deepEqual(Array.from(a.reviewReasons), ["court-conflict"]);
+    var b = wlProfCourtForCitation(ad, { reporter: "N.Y.S.2d" }, "App. Term");
+    assert.deepEqual(Array.from(b.reviewReasons), ["court-conflict"]);
+  });
+  it("Court of Appeals of New York keeps N.Y. with N.Y.S.2d (not an omission target)", function() {
+    var c = wlProfClassifyCourt("Court of Appeals of New York.");
+    assert.equal(wlProfCourtForCitation(c, { reporter: "N.Y.S.2d" }, null).court, "N.Y.");
+  });
+});
+

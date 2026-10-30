@@ -9,6 +9,7 @@ function wlRecClean(s) {
 }
 
 function wlRecCitationMatchKey(c) {
+  if (c.kind === "unparsed") return "unparsed|" + wlRecClean(c.raw || c.text || "");
   return c.kind + "|" + c.volume + "|" + wlTextCompareKey(c.reporter || "") + "|" + c.page;
 }
 
@@ -27,6 +28,45 @@ function wlRecCitationInHistory(citation, history) {
   return re.test(histClean);
 }
 
+// First citation that is not kind "unparsed"; an unparsed line has no volume/reporter/page and can never be primary.
+function wlRecFirstParsedCitation(citations) {
+  for (var i = 0; i < (citations || []).length; i++) {
+    if (citations[i] && citations[i].kind !== "unparsed") return citations[i];
+  }
+  return null;
+}
+
+function wlRecAddEraReason(reviewReasons, classification) {
+  if (classification && classification.eraUncertain === true && reviewReasons.indexOf("court-era-uncertain") === -1) {
+    reviewReasons.push("court-era-uncertain");
+  }
+}
+
+function wlRecIsFullDate(date) {
+  return typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date);
+}
+
+// Docket tokens compared without the "No."/"Nos." label, whitespace, or case; a token list such as
+// "Nos. 1-2, 3-4" is split so it equals ["Nos. 1-2", "3-4"].
+function wlRecDocketKeys(dockets) {
+  var keys = [];
+  for (var i = 0; i < (dockets || []).length; i++) {
+    var parts = String(dockets[i]).split(/[,;&]|\band\b/i);
+    for (var j = 0; j < parts.length; j++) {
+      var key = wlRecClean(parts[j]).replace(/^nos?\.?\s*/i, "").replace(/\s+/g, "").toLowerCase();
+      if (key && keys.indexOf(key) === -1) keys.push(key);
+    }
+  }
+  return keys.sort();
+}
+
+function wlRecDocketsConflict(domDockets, serviceDockets) {
+  var a = wlRecDocketKeys(domDockets);
+  var b = wlRecDocketKeys(serviceDockets);
+  if (a.length === 0 || b.length === 0) return false;
+  return a.join("|") !== b.join("|");
+}
+
 function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenance) {
   var primary = null;
   if (dom.citations && dom.citations.length > 0) {
@@ -37,22 +77,24 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
       }
     }
     if (!primary) {
-      primary = dom.citations[0];
+      primary = wlRecFirstParsedCitation(dom.citations);
     }
   }
+  if (!primary) reviewReasons.push("no-citation");
 
-  var classification = wlProfClassifyCourt(dom.rawCourt || "");
+  var date = dom.date || null;
+  if (!date && dom.dateText) {
+    date = wlTextParseUSDate(dom.dateText);
+  }
+
+  var classification = wlProfClassifyCourt(dom.rawCourt || "", date);
   var courtResult = wlProfCourtForCitation(classification, primary, null);
   if (courtResult.reviewReasons) {
     for (var r = 0; r < courtResult.reviewReasons.length; r++) {
       reviewReasons.push(courtResult.reviewReasons[r]);
     }
   }
-
-  var date = dom.date || null;
-  if (!date && dom.dateText) {
-    date = wlTextParseUSDate(dom.dateText);
-  }
+  wlRecAddEraReason(reviewReasons, classification);
 
   provenance.caseName = "dom";
   provenance.primary = "dom";
@@ -66,6 +108,7 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
     url: context.url || "",
     caseName: wlRecClean(dom.headerName || ""),
     author: dom.author || null,
+    authors: dom.author ? [dom.author] : (Object.prototype.hasOwnProperty.call(dom, "author") ? [] : (Array.isArray(dom.authors) ? dom.authors.slice(0, 1) : [])),
     shortName: null,
     court: courtResult.court || "",
     rawCourt: dom.rawCourt || "",
@@ -83,32 +126,41 @@ function wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenanc
   };
 }
 
-// Forwards DOM review reason codes once each. Non-codes are dropped.
-function wlRecAddDomReasons(reviewReasons, dom) {
-  if (!dom || !Array.isArray(dom.reviewReasons)) return;
-  for (var i = 0; i < dom.reviewReasons.length; i++) {
-    var reason = dom.reviewReasons[i];
-    if (typeof reason === "string" && /^[a-z0-9:-]+$/.test(reason) && reviewReasons.indexOf(reason) === -1) {
-      reviewReasons.push(reason);
-    }
+// Forwards review reasons once each, keeping only code-only strings (never response or page text).
+// A reason that fails the filter becomes `droppedCode` (once) when one is given, so the degradation stays visible.
+function wlRecAddCodeReasons(reviewReasons, reasons, droppedCode) {
+  if (!Array.isArray(reasons)) return;
+  for (var i = 0; i < reasons.length; i++) {
+    var reason = reasons[i];
+    var codeOnly = typeof reason === "string" && /^[a-z0-9:-]+$/.test(reason);
+    var code = codeOnly ? reason : droppedCode;
+    if (code && reviewReasons.indexOf(code) === -1) reviewReasons.push(code);
   }
 }
 
-// header-fallback is recorded but does not by itself block validated-profile.
+// Forwards a service envelope's own review reasons.
+function wlRecAddEnvelopeReasons(reviewReasons, envelope) {
+  if (!envelope) return;
+  wlRecAddCodeReasons(reviewReasons, envelope.reviewReasons, "envelope-reason-dropped");
+}
+
+// Forwards DomFacts review reasons (code-only strings such as conflicting-header, header-fallback) once each.
+function wlRecAddDomReasons(reviewReasons, dom) {
+  if (!dom) return;
+  wlRecAddCodeReasons(reviewReasons, dom.reviewReasons, null);
+}
+
+// Review reasons that are informational and must not stop a service-validated record from being validated-profile.
+// header-fallback only says the DOM court/citations came from the .co_courtBlock/.co_cites selectors because the
+// header list was absent; the service forms still validated the citation, so the DOM provenance note alone is not a
+// reason to distrust the record. Every other reason (conflicting-header included) demotes.
+var wlRecNonDemotingReasons = ["header-fallback"];
+
 function wlRecHasDemotingReason(reviewReasons) {
   for (var i = 0; i < reviewReasons.length; i++) {
-    if (reviewReasons[i] !== "header-fallback") return true;
+    if (wlRecNonDemotingReasons.indexOf(reviewReasons[i]) === -1) return true;
   }
   return false;
-}
-
-// Forwards a service envelope's own review reasons (already code-only, never response text) once each.
-function wlRecAddEnvelopeReasons(reviewReasons, envelope) {
-  if (!envelope || !Array.isArray(envelope.reviewReasons)) return;
-  for (var i = 0; i < envelope.reviewReasons.length; i++) {
-    var reason = envelope.reviewReasons[i];
-    if (typeof reason === "string" && reviewReasons.indexOf(reason) === -1) reviewReasons.push(reason);
-  }
 }
 
 function wlRecReconcile(input) {
@@ -129,9 +181,11 @@ function wlRecReconcile(input) {
     // 1. Service A failure → metadata-only from DOM
     if (svcA.category !== "ok") {
       reviewReasons.push("service-" + (svcA.category || "unknown"));
+      wlRecAddDomReasons(reviewReasons, dom);
       return wlRecBuildDomOnlyRecord(dom, context, profile, reviewReasons, provenance);
     }
 
+    wlRecAddDomReasons(reviewReasons, dom);
     wlRecAddEnvelopeReasons(reviewReasons, svcA.envelope);
     if (svcB.category === "ok") wlRecAddEnvelopeReasons(reviewReasons, svcB.envelope);
 
@@ -275,8 +329,8 @@ function wlRecReconcile(input) {
     } else if (domReporterCites.length > 0) {
       primary = officialUS || domReporterCites[0];
       provenance.primary = "dom";
-    } else if (domCitations.length > 0) {
-      primary = domCitations[0];
+    } else if (wlRecFirstParsedCitation(domCitations)) {
+      primary = wlRecFirstParsedCitation(domCitations);
       provenance.primary = "dom";
     } else {
       reviewReasons.push("no-citation");
@@ -307,6 +361,9 @@ function wlRecReconcile(input) {
         if (key === historyCites[h]) return;
       }
       alternateKeys[key] = true;
+      if (cite.kind === "unparsed" && !cite.raw && cite.text) {
+        cite = { kind: "unparsed", raw: wlRecClean(cite.text) };
+      }
       alternates.push(cite);
     }
 
@@ -351,8 +408,28 @@ function wlRecReconcile(input) {
     provenance.alternates = "service";
 
     // 8. date
+    // A full date on the service long form (or the inventory) is compared with the DOM date. The DOM date is kept
+    // on conflict; a DOM date that is absent or year-only yields to a full service date.
+    var serviceFullDate = null;
+    if (parsedA && parsedA.ok && wlRecIsFullDate(parsedA.date)) {
+      serviceFullDate = parsedA.date;
+    } else if (parsedBinv && wlRecIsFullDate(parsedBinv.date)) {
+      serviceFullDate = parsedBinv.date;
+    }
     var date = null;
-    if (dom.date) {
+    if (dom.date && wlRecIsFullDate(dom.date)) {
+      date = dom.date;
+      provenance.date = "dom";
+      if (serviceFullDate && serviceFullDate !== dom.date) reviewReasons.push("date-conflict");
+    } else if (serviceFullDate) {
+      date = serviceFullDate;
+      provenance.date = "service";
+      if (dom.date && dom.date.substring(0, 4) !== serviceFullDate.substring(0, 4)) {
+        date = dom.date;
+        provenance.date = "dom";
+        reviewReasons.push("date-conflict");
+      }
+    } else if (dom.date) {
       date = dom.date;
       provenance.date = "dom";
     } else if (parsedBinv && parsedBinv.date) {
@@ -385,7 +462,7 @@ function wlRecReconcile(input) {
     // 9. dockets
     var dockets = [];
     var docketKey = function(ds) {
-      return wlMapFormatDocketNumber(ds).replace(/^Nos?\.\s*/, "").toLowerCase().split(/,\s*/).sort().join("|");
+      return wlMapFormatDocketNumber(ds).replace(/^Nos?\.\s*/i, "").toLowerCase().split(/,\s*/).sort().join("|");
     };
     var docketSources = [dom, parsedBinv, parsedA, parsedBstd];
     var firstDocketSet = null;
@@ -413,7 +490,8 @@ function wlRecReconcile(input) {
     }
 
     // 10. court
-    var classification = wlProfClassifyCourt(dom.rawCourt || "");
+    var classification = wlProfClassifyCourt(dom.rawCourt || "", date);
+    wlRecAddEraReason(reviewReasons, classification);
     var serviceCourt = (parsedA && parsedA.ok) ? parsedA.court : "";
     var courtResult = wlProfCourtForCitation(classification, primary, serviceCourt);
     if (courtResult.reviewReasons) {
@@ -491,6 +569,7 @@ function wlRecReconcile(input) {
       url: url,
       caseName: caseName,
       author: dom.author || null,
+    authors: dom.author ? [dom.author] : (Object.prototype.hasOwnProperty.call(dom, "author") ? [] : (Array.isArray(dom.authors) ? dom.authors.slice(0, 1) : [])),
       shortName: shortName,
       court: court,
       rawCourt: dom.rawCourt || "",
@@ -511,6 +590,7 @@ function wlRecReconcile(input) {
       guid: guid,
       url: url,
       caseName: "",
+      authors: [],
       shortName: null,
       court: "",
       rawCourt: "",

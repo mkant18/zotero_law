@@ -954,6 +954,43 @@ describe("wlDomReadFacts — plan §12 selector fallbacks", function() {
     assert.deepEqual(citeRaws(result), ["100 F.3d 200", "300 F. Supp. 2d 400"]);
   });
 
+  it("flags conflicting-header for two headers with different court lines", function() {
+    var first = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var second = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Another Placeholder Circuit"), el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.equal(result.reviewReasons.indexOf("conflicting-header") !== -1, true);
+    assert.equal(result.rawCourt, "Placeholder Court of Appeals");
+  });
+
+  it("flags conflicting-header when the second header's court line follows its date", function() {
+    var first = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var second = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"), el("li", {}, "Another Placeholder Circuit"));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.equal(result.reviewReasons.indexOf("conflicting-header") !== -1, true);
+  });
+
+  it("does not flag conflicting-header when a truncated second header has no court line", function() {
+    var first = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var second = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "March 15, 2020"), el("li", {}, "100 F.3d 200"));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.deepEqual(plain(result.reviewReasons), []);
+  });
+
+  it("does not flag conflicting-header for sticky copies whose court line differs only in case", function() {
+    var first = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"), el("li", {}, "100 F.3d 200"));
+    var second = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "PLACEHOLDER COURT OF APPEALS"), el("li", {}, "100 F.3d 200"));
+    var result = wlDomReadFacts(fallbackDoc([first, second]));
+    assert.equal(result.reviewReasons.indexOf("conflicting-header"), -1);
+  });
+
   it("does not silently pick the first of two headers with different dates", function() {
     var first = el("div", { id: "co_docHeaderCitation" }, el("li", {}, "March 15, 2020"));
     var second = el("div", { id: "co_docHeaderCitation" }, el("li", {}, "April 16, 2021"));
@@ -978,6 +1015,12 @@ describe("wlDomReadFacts — plan §12 selector fallbacks", function() {
     var cites = el("div", { class: "co_cites" }, "100 F.3d 200");
     var result = wlDomReadFacts(fallbackDoc([courtBlock, cites]));
     assert.equal(result.reviewReasons.indexOf("header-fallback") !== -1, true);
+  });
+
+  it("with no header list and no fallback court or cites, header-fallback is not emitted", function() {
+    var docket = el("div", { class: "co_docketBlock" }, "No. 20-1234.");
+    var result = wlDomReadFacts(fallbackDoc([docket]));
+    assert.equal(result.reviewReasons.indexOf("header-fallback"), -1);
   });
 
   it("does not mark header-fallback when the header list exists", function() {
@@ -1017,5 +1060,215 @@ describe("wlDomReadFacts — plan §12 selector fallbacks", function() {
     var header = el("div", { id: "co_docHeaderTitleLine" }, "Placeholder v. Example | Cases | Test Court");
     var doc = makeDoc({ title: "x | Cases | y", body: el("body", {}, header) });
     assert.equal(wlDomReadFacts(doc).headerName, "Placeholder v. Example");
+  });
+});
+
+// ---- final-review fixes: P2-10 docket splitting, P2-11 header li, P2-7 ambiguous guid ----
+
+describe("wlDomReadFacts — P2-10 docket splitting", function() {
+  function docketFacts(text) {
+    return wlDomReadFacts(fallbackDoc([el("div", { class: "co_docketBlock" }, text)]));
+  }
+
+  it("splits 'Consolidated with' into separate dockets", function() {
+    var r = docketFacts("No. 98-1, Consolidated with No. 98-2.");
+    assert.deepEqual(plain(r.dockets), ["No. 98-1", "No. 98-2"]);
+    assert.equal(r.reviewReasons.indexOf("docket-unparsed-text"), -1);
+  });
+
+  it("keeps 'Division B' out of dockets and flags docket-unparsed-text", function() {
+    var r = docketFacts("No. 2020-CA-000123-MR, Division B.");
+    assert.deepEqual(plain(r.dockets), ["No. 2020-CA-000123-MR"]);
+    assert.equal(r.reviewReasons.indexOf("docket-unparsed-text") !== -1, true);
+  });
+
+  it("drops a trailing court/date parenthetical from the docket and flags docket-unparsed-text", function() {
+    var r = docketFacts("No. 98-1 (2d Cir. Jan. 5, 1999).");
+    assert.deepEqual(plain(r.dockets), ["No. 98-1"]);
+    assert.equal(r.reviewReasons.indexOf("docket-unparsed-text") !== -1, true);
+  });
+
+  it("reads 'Docket No.' as No. and does not drop it", function() {
+    var r = docketFacts("Docket No. 98-1.");
+    assert.deepEqual(plain(r.dockets), ["No. 98-1"]);
+    assert.equal(r.reviewReasons.indexOf("docket-unparsed-text"), -1);
+  });
+
+  it("flags docket text that has no No./Nos. prefix instead of dropping it silently", function() {
+    var r = docketFacts("Case Number Unknown");
+    assert.deepEqual(plain(r.dockets), []);
+    assert.equal(r.reviewReasons.indexOf("docket-unparsed-text") !== -1, true);
+  });
+
+  it("normalizes bare follow-on numbers in a No. block and strips per-part periods", function() {
+    assert.deepEqual(plain(docketFacts("No. 98-1, 98-2").dockets), ["No. 98-1", "No. 98-2"]);
+    assert.deepEqual(plain(docketFacts("No. 98-40679.; No. 99-12345").dockets), ["No. 98-40679", "No. 99-12345"]);
+  });
+
+  it("never emits an 'Nos.' docket value or docket values containing 'Consolidated'", function() {
+    var r = docketFacts("No. 98-1, Consolidated with No. 98-2.");
+    assert.equal(r.dockets.every(function(d) { return d.indexOf("Nos") === -1 && !/consolidated/i.test(d); }), true);
+  });
+});
+
+describe("wlDomReadFacts — P2-11 header li handling", function() {
+  it("accepts a date li with a trailing period", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"),
+      el("li", {}, "August 25, 1999."),
+      el("li", {}, "100 F.3d 200"));
+    var r = wlDomReadFacts(fallbackDoc([list]));
+    assert.equal(r.date, "1999-08-25");
+    assert.equal(r.dateText, "August 25, 1999");
+    assert.equal(r.reviewReasons.indexOf("conflicting-header"), -1);
+  });
+
+  it("preserves an unparsed li with both text and raw and keeps kind unparsed", function() {
+    var list = el("div", { id: "co_docHeaderCitation" },
+      el("li", {}, "Placeholder Court of Appeals"),
+      el("li", {}, "August 25, 1999"),
+      el("li", {}, "100 F.3d 200"),
+      el("li", {}, "Rehearing Denied"));
+    var r = wlDomReadFacts(fallbackDoc([list]));
+    var un = r.citations.filter(function(c) { return c.kind === "unparsed"; });
+    assert.equal(un.length, 1);
+    assert.equal(un[0].text, "Rehearing Denied");
+    assert.equal(un[0].raw, "Rehearing Denied");
+  });
+});
+
+describe("wlDomReadPageContext — P2-7 ambiguous DocumentGuid", function() {
+  function guidDoc(cfg) {
+    return makeDoc({
+      title: "Case Name | Cases | Jurisdiction | Westlaw Advantage",
+      body: el("body", {},
+        el("div", { id: "co_docHeaderTitleLine" }, "Case Name"),
+        el("div", { id: "co_docHeaderCitation" }, el("li", {}, "187 F.3d 486")),
+        el("script", {}, cfg))
+    });
+  }
+  var cfg = 'var config = {"DocumentGuid":"' + GUID + '","DocumentGuid":"' + GUID2 + '","ContentType":"Cases","RelatedInfo":"relatedinfo.test.invalid","PageEventIdentifier":"TEST-PE-0001","ResourceToken":"TEST-RT-0001"};';
+  var url = "https://1.next.westlaw.com/Document/" + GUID + "/View/FullText.html";
+
+  it("pushes ambiguous-guid and makes the guid and secrets unusable even when one matches the URL", function() {
+    var r = wlDomReadPageContext(guidDoc(cfg), url);
+    assert.equal(r.ambiguous, true);
+    assert.equal(r.reviewReasons.indexOf("ambiguous-guid") !== -1, true);
+    assert.equal(r.config.guid, null);
+    assert.equal(r.secrets, null);
+  });
+
+  it("downgrades readiness capability to dom-only", function() {
+    var d = guidDoc(cfg);
+    d.location = { hostname: "1.next.westlaw.com" };
+    var r = wlDomInspectCaseReadiness(d, url);
+    assert.equal(r.capability, "dom-only");
+  });
+
+  it("does not push ambiguous-guid for repeated identical guids", function() {
+    var same = 'var config = {"DocumentGuid":"' + GUID + '","DocumentGuid":"' + GUID + '","ContentType":"Cases","PageEventIdentifier":"TEST-PE-0001","ResourceToken":"TEST-RT-0001"};';
+    var r = wlDomReadPageContext(guidDoc(same), url);
+    assert.equal(r.reviewReasons.indexOf("ambiguous-guid"), -1);
+    assert.equal(r.config.guid, GUID);
+  });
+});
+
+describe("wlDomReadFacts — opinion author", function() {
+  function authorDoc(line) {
+    return fallbackDoc([el("div", { class: "x_leadAuthorLine" }, line)]);
+  }
+
+  it("reads Associate Chief Justice Lee as the author", function() {
+    var authors = wlDomReadFacts(authorDoc("Associate Chief Justice Lee, opinion of the Court:")).authors;
+    assert.equal(authors.length, 1);
+    assert.equal(authors[0].lastName, "Lee");
+    assert.equal(authors[0].firstName, "");
+    assert.equal(authors[0].creatorType, "author");
+  });
+
+  it("title-cases an all-caps byline", function() {
+    var authors = wlDomReadFacts(authorDoc("BROOKSHIRE, Justice.")).authors;
+    assert.equal(authors[0].lastName, "Brookshire");
+    assert.equal(authors[0].firstName, "");
+  });
+
+  it("splits a full name and keeps a generational suffix on the last name", function() {
+    var authors = wlDomReadFacts(authorDoc("KIM MCLANE WARDLAW, Circuit Judge.")).authors;
+    assert.equal(authors[0].firstName, "Kim McLane");
+    assert.equal(authors[0].lastName, "Wardlaw");
+    var suffixed = wlDomReadFacts(authorDoc("JOSEPH TYREE SNEED III, Circuit Judge.")).authors;
+    assert.equal(suffixed[0].firstName, "Joseph Tyree");
+    assert.equal(suffixed[0].lastName, "Sneed III");
+  });
+
+  it("stores Per Curiam as a single-field author", function() {
+    var authors = wlDomReadFacts(authorDoc("PER CURIAM:")).authors;
+    assert.equal(authors[0].lastName, "Per Curiam");
+    assert.equal(authors[0].fieldMode, 1);
+  });
+
+  it("reads Alito, J. after the delivery clause", function() {
+    var authors = wlDomReadFacts(authorDoc("ALITO, J., delivered the opinion of the Court.")).authors;
+    assert.equal(authors[0].lastName, "Alito");
+    assert.equal(authors[0].firstName, "");
+  });
+
+  it("fills the given name from the signature when the byline has only a surname", function() {
+    var doc = fallbackDoc([
+      el("div", { class: "x_leadAuthorLine" }, "Associate Chief Justice Lee, opinion of the Court:"),
+      el("div", { class: "co_panelBlock" }, "Associate Chief Justice Lee authored the opinion of the Court, in which Justice Himonas joined."),
+      el("div", { class: "co_paragraph" }, "Thomas R. Lee, Associate Chief Justice")
+    ]);
+    var authors = wlDomReadFacts(doc).authors;
+    assert.equal(authors.length, 1);
+    assert.equal(authors[0].firstName, "Thomas R.");
+    assert.equal(authors[0].lastName, "Lee");
+  });
+
+  it("fills the given name from the byline link title", function() {
+    var doc = fallbackDoc([
+      el("div", { class: "x_leadAuthorLine" },
+        "Associate Chief Justice ",
+        el("a", { title: "Thomas R. Lee" }, "Lee"),
+        ", opinion of the Court:")
+    ]);
+    var authors = wlDomReadFacts(doc).authors;
+    assert.equal(authors[0].firstName, "Thomas R.");
+    assert.equal(authors[0].lastName, "Lee");
+  });
+
+  it("does not take a different judge's signature", function() {
+    var doc = fallbackDoc([
+      el("div", { class: "x_leadAuthorLine" }, "Associate Chief Justice Lee, opinion of the Court:"),
+      el("div", { class: "co_paragraph" }, "Deno G. Himonas, Justice")
+    ]);
+    var authors = wlDomReadFacts(doc).authors;
+    assert.equal(authors[0].firstName, "");
+    assert.equal(authors[0].lastName, "Lee");
+  });
+
+  it("reads a surname-first signature and keeps Jr with the last name", function() {
+    var doc = fallbackDoc([
+      el("div", { class: "x_leadAuthorLine" }, "ALITO, J., delivered the opinion of the Court."),
+      el("div", { class: "co_paragraph" }, "Samuel A. Alito, Jr.")
+    ]);
+    var authors = wlDomReadFacts(doc).authors;
+    assert.equal(authors[0].firstName, "Samuel A.");
+    assert.equal(authors[0].lastName, "Alito Jr.");
+  });
+
+  it("stays empty when the lead-author line is absent", function() {
+    assert.equal(wlDomReadFacts(fallbackDoc([])).authors.length, 0);
+  });
+
+  it("keeps one author when the sticky header repeats the line", function() {
+    var doc = fallbackDoc([
+      el("div", { class: "x_leadAuthorLine" }, "Justice Sonia Sotomayor delivered the opinion of the Court."),
+      el("div", { class: "x_leadAuthorLine" }, "Justice Sonia Sotomayor delivered the opinion of the Court.")
+    ]);
+    var authors = wlDomReadFacts(doc).authors;
+    assert.equal(authors.length, 1);
+    assert.equal(authors[0].firstName, "Sonia");
+    assert.equal(authors[0].lastName, "Sotomayor");
   });
 });

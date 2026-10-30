@@ -38,6 +38,78 @@ function wlTrReadService(result, req) {
   return { svc: { category: "ok", envelope: envelope }, echoReasons: [] };
 }
 
+var wlTrCodeReasonRe = /^[A-Za-z0-9:_-]{1,120}$/;
+var wlTrPageReasonRe = /^[a-z0-9:-]+$/;
+var wlTrHtmlTagRe = /<[^>]*>/g;
+var wlTrScalarFieldKeys = [
+  "caseName", "court", "dateDecided", "docketNumber",
+  "reporter", "reporterVolume", "firstPage", "history", "shortTitle", "url"
+];
+
+// Adds code-only reasons once each; any demoting reason moves a validated record to unverified.
+function wlTrAddReasons(rec, reasons) {
+  for (var i = 0; i < reasons.length; i++) {
+    if (rec.reviewReasons.indexOf(reasons[i]) === -1) rec.reviewReasons.push(reasons[i]);
+  }
+  if (rec.status === "validated-profile" && wlMapHasDemotingReason(rec.reviewReasons)) {
+    rec.status = "unverified-profile";
+  }
+}
+
+// Reasons are written verbatim into Extra, so anything that is not a short code is replaced by a fixed code.
+function wlTrCodeOnlyReasons(rec) {
+  var safe = [];
+  var unsafe = false;
+  for (var i = 0; i < rec.reviewReasons.length; i++) {
+    var reason = rec.reviewReasons[i];
+    if (typeof reason === "string" && wlTrCodeReasonRe.test(reason)) {
+      if (safe.indexOf(reason) === -1) safe.push(reason);
+    } else {
+      unsafe = true;
+    }
+  }
+  if (unsafe && safe.indexOf("unsafe-reason") === -1) safe.push("unsafe-reason");
+  rec.reviewReasons = safe;
+}
+
+// Validation problem strings look like "html:caseName", "token-leak:extra[3]" or "shortTitle-has-cite".
+function wlTrProblemCode(problem) {
+  return problem.split(":")[0];
+}
+
+function wlTrSanitizeFields(fields, problems) {
+  var dropExtraIndexes = {};
+  var leakedKeys = {};
+  for (var i = 0; i < problems.length; i++) {
+    var problem = problems[i];
+    var lineMatch = problem.match(/^(?:token-leak|html|watermark|value-too-long):extra\[(\d+)\]$/);
+    if (lineMatch) dropExtraIndexes[lineMatch[1]] = true;
+    var keyMatch = problem.match(/^token-leak:([A-Za-z]+)$/);
+    if (keyMatch) leakedKeys[keyMatch[1]] = true;
+    // Optional fields that caused problems are dropped rather than aborting the item
+    if (problem.indexOf("history") !== -1 && fields.history) fields.history = "";
+    if (problem.indexOf("shortTitle") !== -1 && fields.shortTitle) delete fields.shortTitle;
+    if (problem.indexOf("url") !== -1 && fields.url) delete fields.url;
+  }
+  for (var k = 0; k < wlTrScalarFieldKeys.length; k++) {
+    var key = wlTrScalarFieldKeys[k];
+    if (typeof fields[key] !== "string") continue;
+    if (leakedKeys[key]) {
+      fields[key] = "";
+      continue;
+    }
+    fields[key] = fields[key].replace(wlTrHtmlTagRe, "").replace(/\s{2,}/g, " ").trim();
+  }
+  if (typeof fields.extra === "string") {
+    var kept = [];
+    var lines = fields.extra.split("\n");
+    for (var n = 0; n < lines.length; n++) {
+      if (!dropExtraIndexes[String(n)]) kept.push(lines[n]);
+    }
+    fields.extra = kept.join("\n");
+  }
+}
+
 async function wlTrDoWeb(doc, url) {
   var deadline = Date.now() + wlSvcLimits.totalMs;
   // 1. Capture page context + DOM facts FIRST (frozen)
@@ -121,10 +193,14 @@ async function wlTrDoWeb(doc, url) {
   }
 
   if (!identityChanged) {
-    for (var e = 0; e < echoReasons.length; e++) {
-      if (rec.reviewReasons.indexOf(echoReasons[e]) === -1) rec.reviewReasons.push(echoReasons[e]);
-    }
+    wlTrAddReasons(rec, echoReasons);
   }
+
+  var pageReasons = (frozenContext.reviewReasons || []).filter(function(reason) {
+    return typeof reason === "string" && wlTrPageReasonRe.test(reason);
+  });
+  wlTrAddReasons(rec, pageReasons);
+  wlTrCodeOnlyReasons(rec);
 
   // 6. Map to Zotero fields
   var importRun = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);

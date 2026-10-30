@@ -1,4 +1,4 @@
-1 → 71/71
+1 → 71/71 → 228/228
 
 ## Review findings fixes
 
@@ -61,3 +61,22 @@
 - Generic `court of appeals of (<state list>)` row does not include New York or Maryland (asserted by a test).
 - Kentucky `Court of Appeals of Kentucky` (highest court pre-1976) left as intermediate `Ky. Ct. App.` with a code comment; no date logic. Open question.
 - Tests: 182 → 215 in `profile.test.mjs` (positives, near-miss unknowns, Texas profile unchanged, N.Y. omission policy with N.Y.2d/N.Y.3d vs N.E.2d/N.E.3d).
+
+## W10 — New York trial-level Supreme Court classification fix
+- Bug: bare `Supreme Court of New York.` and `Supreme Court, New York.` (no county/department qualifier) were matching generic `^supreme court of (<state>)...` row and incorrectly classified as state supreme (high court), when NY Supreme Court is actually the trial court; high court is Court of Appeals.
+- Fix: added two new full-match rows (anchored `^...$`) for NY trial court BEFORE the generic row:
+  - `^supreme court of new york$` → trial level, state `NY`, bluebook `N.Y. Sup. Ct.`, confidence `table`
+  - `^supreme court, new york$` → trial level, state `NY`, bluebook `N.Y. Sup. Ct.`, confidence `table`
+- Also tightened existing county-pattern rows to use 1-3 word county names instead of unlimited: `[a-z]+(?:\s+[a-z]+){0,2}` instead of `[a-z ]+` (matches 1-3 words, stops at 4+ word names).
+- Table order preserved: App. Div./App. Term rows still precede the new plain-text rows; generic row remains last and unreachable for NY.
+- Omission policy verified: `wlProfCourtForCitation` does NOT blank `N.Y. Sup. Ct.` for trial-level reporters (Misc., Misc. 2d, Misc. 3d, N.Y.S.2d, N.Y.S.3d) because the bluebook abbreviation `N.Y. Sup. Ct.` does not match the high-court reporter list `{N.Y., N.Y.2d, N.Y.3d}` keyed by reporter, so the classification bluebook is returned as-is (Bluebook rule: trial courts keep their abbreviation in trial reporters).
+- Tests added: 2 positive (bare forms), 5 omission policy tests (trial court + Misc./N.Y.S. reporters), 4 near-miss negatives (App. Div. stays intermediate, county-without-state stays unknown, New Yorkshire stays unknown), 3 spot-checks (CA/FL/TX Supreme Courts unaffected and stay high court).
+- Tests: 215 → 228 in `profile.test.mjs` (13 new tests added for W10).
+
+## Lane A — final-review fixes (P1-1, P1-5, P1-6, P2-12c), profile.js only
+- P1-1: `wlProfCourtForCitation` no longer has a separate regional-reporter branch that returned the DOM table value unchecked. Every non-SCOTUS, non-official-reporter case now compares the service court with the (post-omission) table value: match -> service court; differ -> `court-conflict` (service value kept); table value absent -> `court-unclassified` (service value kept). No service court and no table value -> `court-unresolved` (court `""`). Removed the now-unused `wlProfRegionalReporters` / `wlProfIsRegionalReporter`.
+- Texas courts of appeals use `wlProfTexasCourtForCitation`: bare `Houston` no longer defaults to `[1st Dist.]` (bluebook null, `city: "houston"`); service `Tex. App.—Houston [Nth Dist.]` supplies the district. Service court must be a known Texas court (`wlProfTexasCourts` values + bare `Tex. App.—Corpus Christi`); known + DOM specific and different -> `court-conflict`; unrecognized service value with a DOM city -> `court-conflict`; unrecognized/no service value with an unknown DOM city -> `court-unresolved` (court `""`). Hyphen variants (`Corpus Christi-Edinburg`) normalize to the en-dash key.
+- P1-5: SCOTUS row returns `U.S.` when the primary has a reporter that is not `U.S.`, `S. Ct.`, `L. Ed.`, `L. Ed. 2d` (e.g. `WL`); those four still return `""`; no primary -> `""`.
+- P1-6: `wlProfClassifyCourt(rawCourt, isoDate?)`. Court of Appeals of Kentucky: year < 1976 -> level `supreme`, `Ky.`; otherwise intermediate `Ky. Ct. App.`; missing/unparseable date -> intermediate plus `eraUncertain: true` (reconcile should push demoting `court-era-uncertain`). Result is a copy; the shared table row is not mutated.
+- P2-12c: NY App. Div. rows now store `N.Y. App. Div.` (App. Term / Sup. Ct. already stored full T1 forms). `wlProfCourtForCitation` drops `N.Y. ` (-> `App. Div.` / `App. Term` / `Sup. Ct.`) when the primary reporter is N.Y.S./2d/3d, A.D./2d/3d, Misc./2d/3d; N.E.* keep the full form. The service court is compared with the post-omission value. The W10 note above claiming `N.Y. Sup. Ct.` is kept with N.Y.S.2d/Misc. is withdrawn (orchestrator decision); those tests now expect `Sup. Ct.`.
+- Tests: 228 -> 263 in `profile.test.mjs`.

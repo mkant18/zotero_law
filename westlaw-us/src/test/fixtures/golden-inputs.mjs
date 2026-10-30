@@ -1,6 +1,6 @@
 // M1-J golden pipeline inputs — reconcile INPUTS for each golden case.
 // DomFacts + synthetic service envelopes shaped like wlSvcReadEnvelope output.
-// GUIDs are placeholder I + 32 hex; no tokens.
+// GUIDs are obviously fake placeholders: I + 32 lowercase hex of one repeated digit (2/3/5/7 = G2/G3/G5/G7); no tokens.
 
 function makeEnvelope(styles) {
   return { ok: true, styles: styles, reviewReasons: [] };

@@ -139,7 +139,7 @@ test('outgoing validator rejects impossible dates, nonnumeric citation parts, an
   for (const date of ['2023-02-29', '2024-04-31', '2024-13-01', 'tomorrow']) {
     assert.ok(ctx.wlMapValidateOutgoing({ dateDecided: date }).problems.includes('invalid-date:dateDecided'));
   }
-  assert.ok(ctx.wlMapValidateOutgoing({ dateDecided: '2024-02-29' }).ok);
+  assert.ok(ctx.wlMapValidateOutgoing({ itemType: 'case', caseName: 'Example v. Sample', dateDecided: '2024-02-29' }).ok);
   assert.ok(!ctx.wlMapValidateOutgoing({ reporterVolume: 'one', firstPage: '*4' }).ok);
   assert.ok(!ctx.wlMapValidateOutgoing({ creators: [{ creatorType: 'author', lastName: '<script>', fieldMode: 1 }] }).ok);
 });

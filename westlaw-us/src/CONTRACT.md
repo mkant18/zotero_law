@@ -76,6 +76,8 @@ or { ok:false, reason: "no-citation-anchor"|"unbalanced-parens"|"no-parenthetica
   pageCountText: "(Approx. 12 pages)"|null, reviewReasons: [] }
 ```
 
+`author` is the explicit majority byline (a structured name or Per Curiam). Surname-only bylines are sufficient; enrichment requires an attached title or a verified linked profile. Ambiguous bylines stay empty and flagged. The legacy `authors` array is retained for compatibility; the current `author` result takes precedence, including an explicit null. Unrelated signature text does not enrich the saved name.
+
 `CaseRecord` (reconcileCaseRecord output → mapCaseToZotero input):
 ```
 { guid, url, caseName, author|null, shortName|null, court (Bluebook authority or ""), rawCourt, date (ISO, full or "YYYY"),
@@ -94,7 +96,7 @@ wlSvcReadEnvelope(json, wantedStyleIds, expect?)
 **Parameters:**
 - `json` (object): parsed response body from `/RelatedInfo/v2/citestyles` endpoint.
 - `wantedStyleIds` (array of strings): expected style IDs, e.g., `["standard", "texas"]`; used to validate echo and detect missing styles.
-- `expect` (object, optional): one flat format-option map for the whole request, the object `wlSvcBuildRequests` attaches as `expect`. Example: `{ history: "true", parallelCiteRule: "westReporterOnly", subStyle: "LegalBriefs", underline: "false", bold: "false", italicize: "false" }`. It is not keyed by style.
+- `expect` (object, optional): one flat format-option map for the whole request, the object `wlSvcBuildRequests` attaches as `expect`. It is not keyed by style. Example: `{ history: "true", parallelCiteRule: "westReporterOnly", subStyle: "LegalBriefs", underline: "false", bold: "false", italicize: "false" }`.
 
 **Validation logic:**
 1. Verify envelope structure (presence of `responses` array).
@@ -107,10 +109,16 @@ wlSvcReadEnvelope(json, wantedStyleIds, expect?)
 - `missing-style:<id>`: a requested style ID is not present in responses.
 - `duplicate-style:<id>`: a style ID appears more than once in responses.
 - `missing-form:<id>:long`: requested style `<id>` has neither a `long` nor an `enhanced` form.
-- `echo-mismatch:<id>:<key>`: a present echoed option `<key>` for style `<id>` does not match `expect`; that style's response is omitted from output (not treated as a fatal error).
+- `echo-mismatch:<id>:<key>`: a present echoed option `<key>` for style `<id>` does not match `expect`; that style's response is omitted from output.
+
+**Translator-level policy (translator.js):**
+The wlTrReadService function checks if ANY style in a single request has `echo-mismatch`. If any echo-mismatch reasons are found, the entire envelope for that request is treated as unusable (category: "echo-mismatch", envelope: null). The translator then falls back to DOM-only citation capture. Echo-mismatch review reasons are forwarded into rec.reviewReasons and the record is classified as "metadata-only".
+
+**Forwarding review reasons:**
+Envelope review reasons (malformed-envelope, missing-style, duplicate-style, missing-form, echo-mismatch-*) are forwarded from the envelope into rec.reviewReasons by reconcile.js via wlRecAddEnvelopeReasons. DOM review reasons (conflicting-header, header-fallback) are also forwarded by wlRecAddDomReasons. The distinction: conflicting-header demotes a validated profile to unverified; header-fallback is informational and does not demote.
 
 **Key points:**
-- Absent echo keys (the response omits an option the service does not echo) are not failures; only a present key whose value differs is flagged.
+- Absent echo keys (the response omits an option the service does not echo) are not failures; only a present, non-null key whose value differs is flagged.
 - Echo-mismatched styles are omitted from the returned `styles` object; their review reasons are preserved for visibility.
 - Malformed envelopes, missing styles, and missing forms generate review reasons but do not throw exceptions.
 

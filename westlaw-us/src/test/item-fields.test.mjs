@@ -6,7 +6,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { loadModules } from './helpers/load.mjs';
-import { G1, G2, G4, G5, G7 } from './fixtures/golden-inputs.mjs';
+import { G1, G2, G3, G4, G5, G7 } from './fixtures/golden-inputs.mjs';
 
 const GUID_RE = /^I[0-9a-f]{32}$/;
 const ctx = loadModules([
@@ -104,8 +104,8 @@ describe('item-fields diff helper', () => {
 });
 
 describe('golden-inputs.mjs placeholder GUIDs', () => {
-  for (const [label, input] of Object.entries({ G1, G2, G4, G5, G7 })) {
-    it(`${label} input GUID is I + 32 hex`, () => {
+  for (const [label, input] of Object.entries({ G1, G2, G3, G4, G5, G7 })) {
+    it(`${label} input GUID is I + 32 lowercase hex`, () => {
       assert.match(input.context.guid, GUID_RE);
       assert.match(input.dom.guid, GUID_RE);
       assert.equal(input.context.url, `https://1.next.westlaw.com/Document/${input.context.guid}/View/FullText.html`);

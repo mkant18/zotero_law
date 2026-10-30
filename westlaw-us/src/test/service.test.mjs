@@ -617,6 +617,21 @@ describe("wlSvcReadEnvelope - basic", function() {
     assert.ok(result.reviewReasons.indexOf("duplicate-style:standard") !== -1);
   });
 
+  it("duplicate unwanted styleId is ignored silently (never echoes response text into reasons)", function() {
+    var junk = "Bearer TEST-SECRET some opinion text";
+    var json = {
+      responses: [
+        { request: { styleId: "standard" }, forms: [{ name: "long", text: { "text/plain": "Std" } }] },
+        { request: { styleId: junk }, forms: [] },
+        { request: { styleId: junk }, forms: [] }
+      ]
+    };
+    var result = wlSvcReadEnvelope(json, ["standard"]);
+    assert.equal(result.ok, true);
+    assert.equal(result.reviewReasons.length, 0);
+    assert.equal(JSON.stringify(result).indexOf("TEST-SECRET"), -1);
+  });
+
   it("missing wanted style → missing-style review reason", function() {
     var json = {
       responses: [

@@ -285,15 +285,16 @@ function wlSvcReadEnvelope(json, wantedStyleIds, expect) {
     var styleId = typeof req.styleId === "string" ? req.styleId : "";
     if (styleId === "") continue;
 
+    // Unwanted style ids are response text: ignored silently, never copied into a review reason.
+    if (wantedStyleIds.indexOf(styleId) === -1) {
+      continue;
+    }
+
     if (seenStyleIds[styleId]) {
       reviewReasons.push("duplicate-style:" + styleId);
       continue;
     }
     seenStyleIds[styleId] = true;
-
-    if (wantedStyleIds.indexOf(styleId) === -1) {
-      continue;
-    }
 
     var mismatchKey = wlSvcFindEchoMismatch(req, expect);
     if (mismatchKey) {

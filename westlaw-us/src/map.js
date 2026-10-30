@@ -3,13 +3,39 @@ var wlMapHtmlRe = /<[a-zA-Z]/;
 var wlMapTokenRe = /ResourceToken|PageEventIdentifier|x-cobalt|Bearer /;
 var wlMapYearParenRe = /\(\d{4}\)/;
 var wlMapCiteRe = /\d+ [A-Z].* \d+/;
+var wlMapCaseNameCiteRe = /,?\s\d{1,4}\s+[A-Z][A-Za-z0-9.']*(?:\s+[A-Za-z0-9.']+){0,3}\s+\d{1,5}$/;
 var wlMapGuidRe = /^I[0-9a-f]{32}$/;
-// A missing header list is recorded for provenance. It does not mean the validated citation needs review.
-var wlMapInformationalReasons = ["header-fallback"];
 var wlMapDashRe = /[\u2013\u2014]/g;
+
+// Review reasons that are informational: they stay visible as an Extra line but never add the needs-review tag.
+var wlMapInformationalReasons = ["header-fallback"];
+var wlMapUnparsedPayloadMax = 200;
 
 function wlMapStripWatermark(str) {
   return str.replace(/[\u200B-\u200F\u2060-\u2064\uFEFF]/g, "").replace(/\s+/g, " ").trim().normalize("NFC");
+}
+
+function wlMapHasDemotingReason(reviewReasons) {
+  for (var i = 0; i < reviewReasons.length; i++) {
+    if (wlMapInformationalReasons.indexOf(reviewReasons[i]) === -1) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function wlMapUnparsedPayload(alt) {
+  var payload = "";
+  if (typeof alt.raw === "string" && alt.raw.trim() !== "") {
+    payload = alt.raw;
+  } else if (typeof alt.text === "string") {
+    payload = alt.text;
+  }
+  payload = wlMapStripWatermark(payload).replace(/\s+/g, " ").trim();
+  if (payload.length > wlMapUnparsedPayloadMax) {
+    payload = payload.slice(0, wlMapUnparsedPayloadMax) + "\u2026";
+  }
+  return payload;
 }
 
 function wlMapNormalizeDocketSingle(docket) {
@@ -40,13 +66,6 @@ function wlMapFormatDocketNumber(dockets) {
     return s;
   });
   return "Nos. " + parts.join(", ");
-}
-
-function wlMapHasDemotingReason(reviewReasons) {
-  for (var i = 0; i < reviewReasons.length; i++) {
-    if (wlMapInformationalReasons.indexOf(reviewReasons[i]) === -1) return true;
-  }
-  return false;
 }
 
 function wlMapToZoteroFields(rec, opts) {
@@ -115,7 +134,10 @@ function wlMapToZoteroFields(rec, opts) {
   }
   alternates.forEach(function(alt) {
     if (alt.kind === "unparsed") {
-      extraLines.push("Westlaw unparsed citation: " + wlMapStripWatermark(alt.raw || ""));
+      var payload = wlMapUnparsedPayload(alt);
+      if (payload !== "") {
+        extraLines.push("Westlaw unparsed citation: " + payload);
+      }
     }
   });
   extraLines.push("Westlaw court (raw): " + wlMapStripWatermark(rec.rawCourt || ""));
@@ -139,6 +161,19 @@ function wlMapToZoteroFields(rec, opts) {
     tags.push({ tag: "Westlaw: needs citation review" });
   }
 
+  var creators = [];
+  var authors = Array.isArray(rec.authors) ? rec.authors : [];
+  for (var ai = 0; ai < authors.length && creators.length < 1; ai++) {
+    if (!wlMapAuthorOk(authors[ai])) continue;
+    var creator = {
+      firstName: authors[ai].firstName || "",
+      lastName: authors[ai].lastName,
+      creatorType: "author"
+    };
+    if (authors[ai].fieldMode === 1) creator.fieldMode = 1;
+    creators.push(creator);
+  }
+
   var result = {
     itemType: "case",
     caseName: caseName,
@@ -155,7 +190,7 @@ function wlMapToZoteroFields(rec, opts) {
       creatorType: "author", firstName: wlMapStripWatermark(rec.author.firstName || ""),
       lastName: wlMapStripWatermark(rec.author.lastName || ""),
       ...(rec.author.fieldMode === 1 ? { fieldMode: 1 } : {})
-    } : { creatorType: "author", lastName: wlMapStripWatermark(rec.author), fieldMode: 1 }] : [],
+    } : { creatorType: "author", lastName: wlMapStripWatermark(rec.author), fieldMode: 1 }] : creators,
     attachments: [],
     notes: []
   };
@@ -275,7 +310,14 @@ function wlMapValidateOutgoing(fields) {
     }
   });
 
-  if (typeof fields.shortTitle === "string" && fields.shortTitle) {
+  if (typeof fields.caseName === "string") {
+    var citeMatch = fields.caseName.match(wlMapCaseNameCiteRe);
+    if (citeMatch && citeMatch[0].indexOf(".") !== -1) {
+      problems.push("caseName-has-cite");
+    }
+  }
+
+  if (fields.shortTitle) {
     if (fields.shortTitle === "Id.") {
       problems.push("shortTitle-is-Id");
     }
@@ -328,10 +370,23 @@ function wlMapApply(fields, item) {
   return item;
 }
 
+function wlMapAuthorOk(creator) {
+  if (!creator || creator.creatorType !== "author") return false;
+  var first = typeof creator.firstName === "string" ? creator.firstName : "";
+  var last = typeof creator.lastName === "string" ? creator.lastName : "";
+  if (!last || last.length > 80 || first.length > 80) return false;
+  var nameRe = /^[A-Za-z][A-Za-z.'’\- ]*$/;
+  if (!nameRe.test(last)) return false;
+  if (first && !nameRe.test(first)) return false;
+  if (wlMapWatermarkRe.test(first + last) || wlMapHtmlRe.test(first + last)) return false;
+  return true;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     wlMapToZoteroFields: wlMapToZoteroFields,
     wlMapValidateOutgoing: wlMapValidateOutgoing,
+    wlMapHasDemotingReason: wlMapHasDemotingReason,
     wlMapApply: wlMapApply
   };
 }
