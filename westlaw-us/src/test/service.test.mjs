@@ -225,6 +225,21 @@ describe("wlSvcBuildRequests - invalid inputs", function() {
 // ---- wlSvcFetch ----
 
 describe("wlSvcFetch - categories", function() {
+  [0, 100, 199, 300, 302, 304, 399, 418, 422, 499].forEach(function(status) {
+    it("rejects HTTP " + status + " despite a valid-looking citation envelope", async function() {
+      var deps = makeDeps({ request: function() {
+        return Promise.resolve(makeResponse(status, JSON.stringify({ responses: [{
+          request: { styleId: "standard" },
+          forms: [{ name: "long", text: { "text/plain": "Example v. Sample, 1 F.3d 2 (1999)" } }]
+        }] }), { "content-type": "application/json" }));
+      } });
+      var result = await wlSvcFetch({ label: "A", url: "https://example.invalid", headers: {} }, deps);
+      assert.equal(result.category, "http-error");
+      assert.equal(result.status, status);
+      assert.equal(result.json, undefined);
+    });
+  });
+
   it("category ok on 200 with JSON", async function() {
     var deps = makeDeps({
       request: function() {

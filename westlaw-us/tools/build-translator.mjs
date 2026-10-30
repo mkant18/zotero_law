@@ -4,7 +4,7 @@
 // Can also be imported as a module: import { buildTranslator } from './build-translator.mjs'
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { Script } from 'node:vm';
@@ -29,7 +29,7 @@ var modules = [
   'translator.js'
 ];
 
-export function buildTranslator() {
+export function buildTranslator(destination = outputFile) {
   // Use stable translatorID
   var translatorID = TRANSLATOR_ID;
 
@@ -161,23 +161,23 @@ export function buildTranslator() {
   }
 
   // Zotero consumes the JSON header separately from the JavaScript body.
-  new Script(output.slice(output.indexOf('\n}\n') + 3), { filename: outputFile });
+  new Script(output.slice(output.indexOf('\n}\n') + 3), { filename: destination });
 
   // Ensure dist directory exists
-  if (!existsSync(distDir)) {
-    mkdirSync(distDir, { recursive: true });
+  if (!existsSync(dirname(destination))) {
+    mkdirSync(dirname(destination), { recursive: true });
   }
 
   // Write the output file
-  writeFileSync(outputFile, output, 'utf8');
+  writeFileSync(destination, output, 'utf8');
 
-  console.log('Build successful: ' + outputFile);
+  console.log('Build successful: ' + destination);
   console.log('translatorID: ' + translatorID);
 
-  return { outputFile, translatorID, build, lastUpdated, sha256: createHash('sha256').update(output).digest('hex') };
+  return { outputFile: destination, translatorID, build, lastUpdated, sha256: createHash('sha256').update(output).digest('hex') };
 }
 
 // Run build when executed directly
-if (process.argv[1] && process.argv[1].endsWith('build-translator.mjs')) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   buildTranslator();
 }

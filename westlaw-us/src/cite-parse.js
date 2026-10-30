@@ -44,6 +44,16 @@ function wlCiteParseParentheticalStandard(content) {
 }
 
 function wlCiteParseParentheticalTexas(content) {
+  var fullDate = wlCiteParseParentheticalStandard(content);
+  if (fullDate.dateText) return fullDate;
+  var datedStatus = content.match(/^(.*\d{4}),\s*(.+)$/);
+  if (datedStatus) {
+    fullDate = wlCiteParseParentheticalStandard(datedStatus[1]);
+    if (fullDate.dateText) {
+      fullDate.parentheticalSuffix = datedStatus[2].trim();
+      return fullDate;
+    }
+  }
   // Texas form: <court> <year>[, <status>]
   var tm = content.match(/^(.*?)\s+(\d{4}),\s*(.*)$/);
   if (tm) {

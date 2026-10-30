@@ -172,6 +172,8 @@ function wlMapToZoteroFields(rec, opts) {
 function wlMapValidateOutgoing(fields) {
   var problems = [];
   if (!fields || typeof fields !== "object") return { ok: false, problems: ["bad-fields"] };
+  if (fields.itemType !== "case") problems.push("invalid-item-type:itemType");
+  if (typeof fields.caseName !== "string" || !wlMapStripWatermark(fields.caseName)) problems.push("required:caseName");
   var scalarKeys = [
     "itemType", "caseName", "court", "dateDecided", "docketNumber",
     "reporter", "reporterVolume", "firstPage", "history", "shortTitle", "url"

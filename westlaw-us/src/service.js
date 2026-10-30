@@ -149,6 +149,10 @@ function wlSvcFetch(req, deps) {
       return { label: req.label, category: "server", status: status, ms: ms };
     }
 
+    if (!(status >= 200 && status < 300)) {
+      return { label: req.label, category: "http-error", status: status, ms: ms };
+    }
+
     if (body.length > wlSvcLimits.maxBodyBytes) {
       return { label: req.label, category: "oversized", status: status, ms: ms };
     }
