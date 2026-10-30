@@ -6,7 +6,7 @@ Merged main, release, and offline-prototype histories before packaging. Includes
 
 Merge decisions: header authority wins ordinary court conflicts; Texas district completion and New York reporter-specific omissions remain supported. Conflicting docket sets are retained and flagged. Current required-metadata rejection and explicit majority-byline/profile evidence take precedence over older permissive validation and signature scanning. Unknown jurisdictions cannot inherit a court solely from an unrelated official reporter.
 
-Install the XPI through Zotero → Tools → Plugins → gear → Install Plugin From File. Refresh Westlaw and save with Zotero Connector while Zotero desktop runs. Choose **Bluebook Law Review (Westlaw US local)** for citations. Repository access is required for private downloads; manual updates may be necessary.
+Install the XPI through Zotero → Tools → Plugins → gear → Install Plugin From File. Refresh Westlaw and save with Zotero Connector while Zotero desktop runs. Choose **Bluebook Law Review (Westlaw US local)** for citations. The repository and downloads are now public; manual updates may be necessary if automatic updates fail.
 
 Fresh verification is limited to bounded offline merge, metadata, built-translator, and packaging checks, plus inspection of the actual XPI/checksum/feed. The full suite was not rerun. Earlier native Zotero/Chrome/Word acceptance below is historical; the merged package has not been installed or freshly accepted through those apps. LibreOffice remains unverified. See [verification evidence](../reports/beta-v1/VERIFICATION.md).
 

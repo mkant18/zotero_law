@@ -10,7 +10,7 @@ The plugin installs the translator and citation style, backing up replaced files
 in `<datadir>/westlaw-us-plugin-backups/`. Refresh the Westlaw browser tab.
 Use Zotero Connector while Zotero desktop runs. Select **Bluebook Law Review
 (Westlaw US local)** in citation preferences. See `plugin/RELEASE-NOTES.md` for
-compatibility, private-repository update limits, and known metadata defects.
+compatibility and known metadata defects. The repository and downloads are public.
 
 Build the plugin with `python scripts/build-plugin.py`. The manual translator
 installation below remains available without the plugin.
