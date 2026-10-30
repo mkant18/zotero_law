@@ -19,6 +19,21 @@ it('lead opinion author stays in CSL metadata without changing Bluebook case cit
   assert.equal(withAuthor.text, baseline.text);
   assert.equal(withAuthor.html, baseline.html);
   assert.equal(withAuthor.cslJSON[0].author[0].literal, 'BROOKSHIRE');
+  item.creators = [{ creatorType: 'author', firstName: 'Harold R.', lastName: 'DeMoss', fieldMode: 0 }];
+  const withStructuredAuthor = render([item], [[{ id: 'G1' }]])[0];
+  assert.equal(withStructuredAuthor.text, baseline.text);
+  assert.equal(withStructuredAuthor.html, baseline.html);
+  assert.deepEqual(withStructuredAuthor.cslJSON[0].author, [{ family: 'DeMoss', given: 'Harold R.' }]);
+});
+
+it('all twelve WL date months use the explicit local month terms', () => {
+  const months = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'June', 'July', 'Aug.', 'Sept.', 'Oct.', 'Nov.', 'Dec.'];
+  for (let index = 0; index < months.length; index++) {
+    const item = structuredClone(items.find(item => item.uri === 'G7'));
+    item.dateDecided = `2024-${String(index + 1).padStart(2, '0')}-01`;
+    const result = render([item], [[{ id: 'G7' }]])[0];
+    assert.ok(result.text.includes(`(D. Kan. ${months[index]} 1, 2024)`), result.text);
+  }
 });
 
 // Helper: compare actual cite text against expected, normalizing U+2019→'

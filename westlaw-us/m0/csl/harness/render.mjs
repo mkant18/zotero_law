@@ -3,9 +3,14 @@ import vm from 'node:vm';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { validateStyle } from './validate.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../../..');
+const styleXml = readFileSync(
+  path.join(__dirname, '..', 'bluebook-law-review-westlaw-us.csl'), 'utf-8'
+);
+validateStyle(styleXml);
 
 // ---------------------------------------------------------------------------
 // 1. Load citeproc-js (1.4.61) via vm.runInThisContext so `CSL` becomes a
@@ -53,10 +58,6 @@ Zotero.localeCompare = new Intl.Collator(['en-US'], { numeric: true, sensitivity
 // ---------------------------------------------------------------------------
 // 3. Load the derivative style once (shared across all engine instances).
 // ---------------------------------------------------------------------------
-const styleXml = readFileSync(
-  path.join(__dirname, '..', 'bluebook-law-review-westlaw-us.csl'),
-  'utf-8'
-);
 const styleDoc = CSL.parseXml(styleXml);
 
 // ---------------------------------------------------------------------------

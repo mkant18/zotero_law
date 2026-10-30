@@ -2,6 +2,19 @@
 
 ## Quick Start
 
+### Install the plugin beta (recommended)
+
+Download the `.xpi` from https://github.com/mkant18/zotero_law/releases.
+In Zotero: Tools → Plugins → gear → Install Plugin From File. Select the XPI.
+The plugin installs the translator and citation style, backing up replaced files
+in `<datadir>/westlaw-us-plugin-backups/`. Refresh the Westlaw browser tab.
+Use Zotero Connector while Zotero desktop runs. Select **Bluebook Law Review
+(Westlaw US local)** in citation preferences. See `plugin/RELEASE-NOTES.md` for
+compatibility, private-repository update limits, and known metadata defects.
+
+Build the plugin with `python scripts/build-plugin.py`. The manual translator
+installation below remains available without the plugin.
+
 ### 1. Build the translator
 
 From the workspace root:
@@ -9,7 +22,7 @@ From the workspace root:
 node westlaw-us/tools/build-translator.mjs
 ```
 
-Output: `westlaw-us/dist/Westlaw Advantage US.js` (single translator file, stable ID `9abca805-707d-4064-958f-e08ac37f0862`).
+Output: `westlaw-us/dist/Westlaw Advantage US.js` (single translator file, stable ID `9abca805-707d-4064-958f-e08ac37f0862`, metadata version `0.2.1`).
 
 ### 2. Locate Zotero data directory
 
@@ -89,7 +102,7 @@ It renders synthetic golden cases and does not contact Westlaw.
 
 ## Privacy and Logging
 
-- **Metadata only:** the translator captures case metadata (name, court, date, dockets, citations). It does *not* save opinion text, PDFs, snapshots, attachments, or Westlaw session tokens (unverified: connector-level fallback may capture page HTML on some errors; see LEDGER.md).
+- **Metadata only:** the translator captures case metadata (name, lead opinion author when identifiable, court, date, dockets, citations). It does *not* save opinion text, PDFs, snapshots, attachments, or Westlaw session tokens (unverified: connector-level fallback may capture page HTML on some errors; see LEDGER.md).
 - **Logs:** Zotero translators use `Zotero.debug()` for diagnostic output. Debug logs may temporarily contain URLs. Before sharing a debug log, inspect and redact Westlaw session URLs or authorization parameters.
 - **No telemetry or background requests:** the translator makes explicit, user-triggered citation-service requests only during save (unverified: M0 spike pending).
 

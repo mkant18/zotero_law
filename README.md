@@ -3,7 +3,17 @@
 Research and planning for a personal Zotero web translator that saves **Westlaw Advantage (US)** case
 documents as Zotero `case` items that cite cleanly in **Bluebook**.
 
-Status: architecture plan in `reports/20-ASTRA-ARCHITECTURE.md`; M0 offline spikes + M1 offline translator modules built (`westlaw-us/`). See `westlaw-us/HANDOFF.md` and `westlaw-us/LEDGER.md`.
+Installable beta: [GitHub releases](https://github.com/mkant18/zotero_law/releases).
+Download the `.xpi`, then in Zotero open **Tools → Plugins → gear → Install Plugin From File**.
+Refresh the Westlaw tab and use Zotero Connector with Zotero desktop running.
+Choose **Bluebook Law Review (Westlaw US local)** for citations.
+
+The beta bundles the translator and CSL style. See [release notes and limitations](plugin/RELEASE-NOTES.md)
+and [installation details](westlaw-us/INSTALL.md). Repository visibility is private;
+downloads require access and automatic update authentication may be unavailable.
+
+Build with `python scripts/build-plugin.py` (Python 3 and Node.js required).
+Artifacts: `dist/*.xpi`, `dist/updates.json`, `dist/SHA256SUMS.txt`.
 
 ## Layout
 - `reports/00-SYNTHESIS.md` — consolidated findings: Zotero, the Chrome connector (MV3), translators, `case` → CSL → Bluebook.

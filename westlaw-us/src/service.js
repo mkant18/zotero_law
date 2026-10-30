@@ -241,9 +241,17 @@ function wlSvcFindEchoMismatch(echoedRequest, expect) {
 }
 
 function wlSvcFormText(form) {
-  if (!wlSvcIsObject(form.text)) return "";
-  var plain = form.text["text/plain"];
-  return typeof plain === "string" ? wlSvcClean(plain) : "";
+  if (wlSvcIsObject(form.text)) {
+    var plain = form.text["text/plain"];
+    if (typeof plain === "string") return wlSvcClean(plain);
+  }
+  if (Array.isArray(form.cites)) {
+    for (var i = 0; i < form.cites.length; i++) {
+      var cite = form.cites[i];
+      if (wlSvcIsObject(cite) && cite.type === "text/plain" && typeof cite.value === "string") return wlSvcClean(cite.value);
+    }
+  }
+  return "";
 }
 
 // Reads a citestyles envelope. Never throws.
@@ -301,7 +309,7 @@ function wlSvcReadEnvelope(json, wantedStyleIds, expect) {
         malformed = true;
         continue;
       }
-      var fname = form.name;
+      var fname = typeof form.name === "string" ? form.name : form.form;
       var text = wlSvcFormText(form);
 
       if (fname === "long") {

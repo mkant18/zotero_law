@@ -14,6 +14,68 @@ var wlRepFindCitations = ctx.wlRepFindCitations;
 var GUID = "I1234567890abcdef1234567890abcdef";
 var GUID2 = "Iabcdefabcdefabcdefabcdefabcdefab";
 
+describe("majority author identity evidence", function() {
+  function facts(...nodes) { return wlDomReadFacts(makeDoc({ body: el("body", {}, ...nodes) })); }
+  it("preserves initials, particles, suffixes and diacritics in separate fields", function() {
+    var author = facts(el("div", { class: "x_leadAuthorLine" }, "José A. de la Cruz, Jr., Circuit Judge.")).author;
+    assert.equal(author.firstName, "José A.");
+    assert.equal(author.lastName, "de la Cruz Jr.");
+    assert.equal(author.fieldMode, undefined);
+  });
+  it("accepts title-first byline and explicitly linked full name", function() {
+    var result = facts(el("div", { class: "x_leadAuthorLine" }, "Judge ", el("a", { title: "Harold R. DeMoss" }, "DeMoss"), ":"));
+    assert.equal(result.author.firstName, "Harold R.");
+    assert.equal(result.author.lastName, "DeMoss");
+    assert.equal(result.author.source, "lead-byline-linked-title");
+    assert.equal(result.reviewReasons.includes("author-name-incomplete"), false);
+  });
+  it("reads the Supreme Court's explicit delivered-opinion byline without taking narrative text as a name", function() {
+    var result = facts(el("div", { class: "x_leadAuthorLine" }, "Mr. Chief Justice WARREN delivered the opinion of the Court."));
+    assert.equal(result.author.lastName, "WARREN");
+    assert.equal(result.author.firstName, "");
+    assert.ok(result.reviewReasons.includes("author-name-incomplete"));
+    var ambiguous = facts(el("div", { class: "x_leadAuthorLine" }, "Mr. Chief Justice WARREN delivered the opinion of the Court and discussed BLACK."));
+    assert.equal(ambiguous.author, null);
+  });
+  it("never scans unrelated opinions, panel members or dissent for matching surname", function() {
+    var result = facts(el("div", { class: "x_leadAuthorLine" }, "DeMOSS, Circuit Judge."),
+      el("p", {}, "Harold R. DeMOSS, Circuit Judge"),
+      el("div", { class: "co_panelBlock" }, el("div", { class: "x_leadAuthorLine" }, "Other Person, Judge.")),
+      el("div", { class: "x_dissentAuthorLine" }, el("div", { class: "x_leadAuthorLine" }, "Wrong DeMOSS, Judge.")));
+    assert.equal(result.author.firstName, "");
+    assert.equal(result.author.lastName, "DeMOSS");
+    assert.ok(result.reviewReasons.includes("author-name-incomplete"));
+  });
+  it("retains surname and flags conflicting linked records", function() {
+    var result = facts(el("div", { class: "x_leadAuthorLine", title: "One Smith", "aria-label": "Two Smith" }, "Smith, Judge."));
+    assert.equal(result.author.firstName, "");
+    assert.ok(result.reviewReasons.includes("author-identity-conflict"));
+  });
+  it("leaves unnamed majority empty even when dissent has author", function() {
+    assert.equal(facts(el("div", { class: "x_dissentAuthorLine" }, "Named Person, Judge.")).author, null);
+  });
+  it("keeps per curiam institutional", function() {
+    var author = facts(el("div", { class: "x_leadAuthorLine" }, "PER CURIAM:")).author;
+    assert.equal(author.fieldMode, 1);
+    assert.equal(author.lastName, "Per Curiam");
+  });
+  it("does not choose between conflicting majority bylines", function() {
+    var result = facts(el("div", { class: "x_leadAuthorLine" }, "One Smith, Judge."), el("div", { class: "x_leadAuthorLine" }, "Two Jones, Judge."));
+    assert.equal(result.author, null);
+    assert.ok(result.reviewReasons.includes("author-conflict"));
+  });
+  it("rejects wrong surname and narrative popup headings", function() {
+    var partial = { firstName: "", lastName: "Smith" };
+    assert.equal(ctx.wlDomLinkedAuthor("Hon. Jane Jones", partial), null);
+    assert.equal(ctx.wlDomLinkedAuthor("Jane Smith dissent opinion", partial), null);
+  });
+});
+
+it("preserves seven bare numeric dockets from observed official Westlaw docket block", function() {
+  var doc = makeDoc({ body: el("body", {}, el("div", { class: "co_contentBlock co_briefItState co_docketBlock" }, "019125/97,2001-07484,2001-07486,2001-07487,2001-07488,2001-07489,2002-01777")) });
+  assert.deepEqual(JSON.parse(JSON.stringify(wlDomReadFacts(doc).dockets)), ["No. 019125/97", "No. 2001-07484", "No. 2001-07486", "No. 2001-07487", "No. 2001-07488", "No. 2001-07489", "No. 2002-01777"]);
+});
+
 // ---- fakedom selector self-tests ----
 
 describe("fakedom selector engine", function() {
@@ -141,6 +203,21 @@ describe("wlDomReadPageContext", function() {
     var result = wlDomReadPageContext(doc, "https://1.next.westlaw.com/Document/not-a-valid-guid/View/FullText.html");
     assert.equal(result.ok, false);
     assert.equal(result.config.guid, null);
+  });
+  it("accepts bounded pipe-delimited tokens without exposing them", function() {
+    var doc = makeDocWithScripts([el("script", {}, JSON.stringify({ DocumentGuid: GUID, ContentType: "Cases", RelatedInfo: "relatedinfo.test.invalid", PageEventIdentifier: "TEST-PE-0001", ResourceToken: "TEST|RT|0001" }))]);
+    var result = wlDomReadPageContext(doc, "https://1.next.westlaw.com/Document/" + GUID);
+    assert.equal(result.secrets.resourceToken, "TEST|RT|0001");
+    assert.equal(wlDomInspectCaseReadiness(doc, "https://1.next.westlaw.com/Document/" + GUID).capability, "service");
+    assert.doesNotMatch(JSON.stringify(result.config) + JSON.stringify(result.reviewReasons), /TEST\|RT\|0001/);
+    var invalid = makeDocWithScripts([el("script", {}, JSON.stringify({ DocumentGuid: GUID, PageEventIdentifier: "TEST-PE-0001", ResourceToken: "TEST|RT\r\nInjected" }))]);
+    assert.equal(wlDomReadPageContext(invalid, "").secrets, null);
+  });
+
+  it("refuses service identity when distinct document GUIDs coexist", function() {
+    var result = wlDomReadPageContext(makeDocWithScripts([el("script", {}, JSON.stringify({ DocumentGuid: GUID })), el("script", {}, JSON.stringify({ DocumentGuid: GUID2 }))]), "https://1.next.westlaw.com/Document/" + GUID);
+    assert.equal(result.config.guid, null);
+    assert.equal(result.config.identityReason, "identity-ambiguous");
   });
 
   it("sets ambiguous when duplicate keys have different values", function() {

@@ -19,7 +19,7 @@ function wlCiteParseParentheticalStandard(content) {
   var dm = content.match(wlCiteMonthRe);
   if (dm) {
     var dateStr = wlTextParseUSDate(dm[2] + ' ' + dm[3] + ', ' + dm[4]);
-    return { court: dm[1].trim().replace(/,$/, ''), year: dm[4], date: dateStr, dateText: content.substring(dm[1].length).trim(), parentheticalSuffix: '' };
+    return { court: dm[1].trim().replace(/,$/, ''), year: dm[4], date: dateStr, dateText: content.substring(dm[1].length).trim(), dateSeparator: /,$/.test(dm[1].trim()) ? ', ' : ' ', parentheticalSuffix: '' };
   }
 
   // Try Texas form: <court> <year>, <status>
@@ -55,6 +55,17 @@ function wlCiteParseParentheticalTexas(content) {
     return { court: '', year: ym[1], date: null, dateText: null, parentheticalSuffix: '' };
   }
   return { court: '', year: '', date: null, dateText: null, parentheticalSuffix: '' };
+}
+
+function wlCiteFindDecisionParen(text, start) {
+  var open = text.indexOf('(', start);
+  while (open !== -1) {
+    var close = wlCiteFindMatchingParen(text, open);
+    if (close === -1) return open;
+    if (wlCiteParseParentheticalStandard(text.substring(open + 1, close)).year) return open;
+    open = text.indexOf('(', close + 1);
+  }
+  return -1;
 }
 
 // Peel trailing docket segments ("No. 24-123", or "Nos. 1-2, 3-4" as ["Nos. 1-2", "3-4"]) off the
@@ -201,7 +212,7 @@ function wlCiteParseStandardForm(text) {
   // NOT digits followed by more words (e.g., "2003 N.Y. Slip Op. 19972" is not a pin).
   var unparsedSegments = [];
   if (pin === null) {
-    var parenIdx = cleaned.indexOf('(', searchFrom);
+    var parenIdx = wlCiteFindDecisionParen(cleaned, searchFrom);
     if (parenIdx !== -1) {
       var textToParen = cleaned.substring(runEnd, parenIdx);
       // Pin must be followed by ", " + next citation, " (" , or end — not by more words
@@ -220,7 +231,7 @@ function wlCiteParseStandardForm(text) {
     }
   }
 
-  var parenOpen = cleaned.indexOf('(', searchFrom);
+  var parenOpen = wlCiteFindDecisionParen(cleaned, searchFrom);
   if (parenOpen === -1) return { ok: false, reason: "no-parenthetical" };
 
   var parenClose = wlCiteFindMatchingParen(cleaned, parenOpen);
@@ -278,6 +289,7 @@ function wlCiteParseStandardForm(text) {
     year: parenParsed.year,
     date: parenParsed.date,
     dateText: parenParsed.dateText,
+    dateSeparator: parenParsed.dateSeparator,
     parentheticalSuffix: parenParsed.parentheticalSuffix,
     history: history,
     unparsedTail: "",
@@ -393,15 +405,7 @@ function wlCiteParseWestlawInventory(text) {
 
   // Dockets: region between name and first citation anchor, starting with No./Nos.
   var dockets = [];
-  var noMatch = beforeName.match(/(No\.|Nos\.)\s.*/);
-  if (noMatch) {
-    var docketsRegion = noMatch[0];
-    var docketParts = docketsRegion.split(", ");
-    for (var d = 0; d < docketParts.length; d++) {
-      var part = docketParts[d].trim();
-      if (part) dockets.push(part);
-    }
-  }
+  dockets = wlCitePeelDockets(beforeName).dockets;
 
   // Main citation run
   var mainRun = [anchors[0]];
@@ -446,6 +450,17 @@ function wlCiteParseWestlawInventory(text) {
   // Parse parenthetical for date and rawCourt
   var parenParsed = wlCiteParseParentheticalStandard(parenContent);
 
+  // Enhanced inventory can append its docket list after the decision parenthetical.
+  var inventoryTail = cleaned.substring(parenClose + 1).replace(/^,\s*/, '');
+  if (wlCiteDocketStartRe.test(inventoryTail)) {
+    var tailAnchors = wlRepFindCitations(inventoryTail);
+    var docketTail = tailAnchors.length ? inventoryTail.substring(0, tailAnchors[0].index) : inventoryTail;
+    var tailDockets = wlCitePeelDockets('inventory, ' + docketTail).dockets;
+    for (var td = 0; td < tailDockets.length; td++) {
+      if (dockets.indexOf(tailDockets[td]) === -1) dockets.push(tailDockets[td]);
+    }
+  }
+
   // Find WL cites in the text
   var wlRe = /\b(\d{4})\s+WL\s+(\d+)\b/g;
   var wlCites = [];
@@ -473,7 +488,7 @@ function wlCiteParseWestlawInventory(text) {
 
   // Check for dockets in the long form
   var reviewReasons = [];
-  if (dockets.length > 0 && docketsRegion.length > 0) {
+  if (dockets.length > 0) {
     reviewReasons.push("docket-in-long-form");
   }
 
@@ -622,7 +637,7 @@ function wlCiteRoundTrip(parsed, originalText) {
       var prefixParts = parenParts.slice(0, -1);
       parenStr = prefixParts.join(' ') + ', ' + parenParts[parenParts.length - 1];
     } else {
-      parenStr = parenParts.join(' ');
+      parenStr = parenParts.join(parsed.dateText && parsed.dateSeparator ? parsed.dateSeparator : ' ');
     }
     recomposed += ' (' + parenStr + ')';
   }

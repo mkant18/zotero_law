@@ -501,3 +501,42 @@ describe("wlCiteRoundTrip: dockets, full date text, pin forms (R4)", function() 
     assert.equal(ctx.wlCiteRoundTrip(r2, text.replace("Mar. 1, 2024", "Mar. 3, 2024")).ok, false);
   });
 });
+
+describe('repair plan citation regressions', function () {
+  it('retains Miele court/date comma without suppressing changed dates', function () {
+    const text = fixtures.westlawInventory.miele.long;
+    const parsed = ctx.wlCiteParseStandardForm(text);
+    assert.equal(ctx.wlCiteRoundTrip(parsed, text).ok, true);
+    parsed.dateText = 'Dec. 30, 2003';
+    assert.equal(ctx.wlCiteRoundTrip(parsed, text).ok, false);
+  });
+  it('inventory retains exactly seven Miele dockets, without a separator token', function () {
+    const parsed = ctx.wlCiteParseWestlawInventory(fixtures.westlawInventory.miele.long);
+    assert.deepEqual(Array.from(parsed.dockets), fixtures.westlawInventory.miele.expected.dockets);
+    assert.equal(parsed.dockets.length, 7);
+  });
+  it('party name No. does not create an inventory docket', function () {
+    const parsed = ctx.wlCiteParseWestlawInventory('Union No. 10 v. Roe, 187 F.3d 486 (5th Cir. 1999)');
+    assert.deepEqual(Array.from(parsed.dockets), []);
+  });
+});
+
+describe('reporter publisher parentheticals', function () {
+  it('preserves CCH publisher token and flags unsupported reporter', function () {
+    const text = 'Sanchez v. Liggett & Myers, Inc., 187 F.3d 486, Prod. Liab. Rep. (CCH) P 15610, 1999 WL 652310 (5th Cir. 1999)';
+    const parsed = ctx.wlCiteParseStandardForm(text);
+    assert.equal(parsed.year, '1999');
+    assert.equal(parsed.court, '5th Cir.');
+    assert.ok(parsed.citations.some(c => c.kind === 'unparsed' && c.raw.includes('(CCH)')));
+    assert.ok(parsed.reviewReasons.includes('unknown-reporter'));
+    assert.equal(ctx.wlCiteRoundTrip(parsed, text).ok, true);
+  });
+});
+
+describe('enhanced inventory appended dockets', function () {
+  it('retains Sanchez docket following the main parenthetical', function () {
+    const text = 'Sanchez v. Liggett & Myers, Inc., 187 F.3d 486 (5th Cir. 1999), No. 98-40679, 1999 WL 652310';
+    const parsed = ctx.wlCiteParseWestlawInventory(text);
+    assert.deepEqual(Array.from(parsed.dockets), ['No. 98-40679']);
+  });
+});

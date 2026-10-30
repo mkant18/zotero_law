@@ -462,6 +462,40 @@ describe("wlSvcFetchAll - budget and max requests", function() {
 // ---- wlSvcReadEnvelope ----
 
 describe("wlSvcReadEnvelope - basic", function() {
+  it("reads proven cites plain-text array and ignores HTML or malformed entries", function() {
+    var result = wlSvcReadEnvelope({ responses: [{ request: { styleId: "standard" }, forms: [
+      { form: "long", cites: [null, { type: "text/html", value: "<b>not metadata</b>" }, { type: "text/plain", value: 3 }, { type: "text/plain", value: "  Plain TEST  " }] }
+    ] }] }, ["standard"]);
+    assert.ok(result.ok);
+    assert.equal(result.styles.standard.long, "Plain TEST");
+  });
+  it("retains text map precedence and refuses cites without plain text", function() {
+    var result = wlSvcReadEnvelope({ responses: [{ request: { styleId: "standard" }, forms: [
+      { name: "long", text: { "text/plain": "Primary TEST" }, cites: [{ type: "text/plain", value: "Fallback TEST" }] }
+    ] }] }, ["standard"]);
+    assert.equal(result.styles.standard.long, "Primary TEST");
+    var missing = wlSvcReadEnvelope({ responses: [{ request: { styleId: "standard" }, forms: [{ form: "long", cites: [{ type: "text/html", value: "TEST" }] }] }] }, ["standard"]);
+    assert.equal(missing.styles.standard.long, null);
+    assert.ok(missing.reviewReasons.includes("missing-form:standard:long"));
+  });
+  it("accepts installed translator's form discriminator alias", function() {
+    var result = wlSvcReadEnvelope({ responses: [{ request: { styleId: "standard" }, forms: [
+      { form: "long", text: { "text/plain": "Long TEST" } },
+      { form: "short", text: { "text/plain": "Short TEST" } },
+      { form: "enhanced", text: { "text/plain": "Enhanced TEST" } }
+    ] }] }, ["standard"]);
+    assert.ok(result.ok);
+    assert.equal(result.styles.standard.long, "Long TEST");
+    assert.equal(result.styles.standard.shorts[0], "Short TEST");
+    assert.equal(result.styles.standard.enhanced, "Enhanced TEST");
+  });
+  it("keeps explicit name authoritative when alias disagrees", function() {
+    var result = wlSvcReadEnvelope({ responses: [{ request: { styleId: "standard" }, forms: [
+      { name: "short", form: "long", text: { "text/plain": "TEST" } }
+    ] }] }, ["standard"]);
+    assert.equal(result.styles.standard.long, null);
+    assert.ok(result.reviewReasons.includes("missing-form:standard:long"));
+  });
   it("extracts long and shorts by styleId", function() {
     var json = {
       responses: [

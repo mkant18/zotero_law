@@ -994,3 +994,74 @@ describe("wlRecReconcile - DOM review reasons", function() {
     assert.ok(result.reviewReasons.indexOf("header-fallback") !== -1);
   });
 });
+
+describe('repair plan docket retention', function () {
+  it('retains service-only dockets and flags conflicting DOM docket sets', function () {
+    const long = 'Foo v. Bar, Nos. 1-2, 3-4, 187 F.3d 486 (5th Cir. 1999)';
+    const result = wlRecReconcile({
+      context: {}, profile: 'standard',
+      dom: makeDom({headerName: 'Foo v. Bar', rawCourt: 'United States Court of Appeals, Fifth Circuit.', date: '1999-08-25', dockets: ['No. 1-2']}),
+      svcA: makeSvc('ok', makeEnvelope({standard: {long, shorts: []}})),
+      svcB: makeSvc('ok', makeEnvelope({standard: {long, shorts: []}, westlaw: {enhanced: long}}))
+    });
+    assert.deepEqual(Array.from(result.dockets), ['No. 1-2', '3-4']);
+    assert.ok(result.reviewReasons.includes('docket-conflict'));
+    assert.equal(result.provenance.dockets, 'dom+service');
+    assert.notEqual(result.status, 'validated-profile');
+  });
+});
+
+
+describe('independent review citation precedence and source retention', function () {
+  it('prefers the official U.S. reporter even when the service leads with a matching S. Ct. parallel', function () {
+    const long = 'Brown v. Board of Ed., 74 S. Ct. 686 (1954)';
+    const result = wlRecReconcile({context: {}, profile: 'standard',
+      dom: makeDom({headerName: 'Brown v. Board of Ed.', rawCourt: 'Supreme Court of the United States', date: '1954-05-17', citations: [
+        {kind: 'reporter', volume: '347', reporter: 'U.S.', page: '483', raw: '347 U.S. 483'},
+        {kind: 'reporter', volume: '74', reporter: 'S. Ct.', page: '686', raw: '74 S. Ct. 686'}
+      ]}),
+      svcA: makeSvc('ok', makeEnvelope({standard: {long, shorts: []}})),
+      svcB: makeSvc('ok', makeEnvelope({standard: {long, shorts: []}}))
+    });
+    assert.equal(result.primary.raw, '347 U.S. 483');
+    assert.ok(result.alternates.some(c => c.raw === '74 S. Ct. 686'));
+    assert.equal(result.reviewReasons.includes('primary-conflict'), false);
+  });
+  it('deduplicates suffix-bearing docket dash variants without a false source conflict', function () {
+    const long = 'Rogers v. State, No. 09-87-120 CV, 761 S.W.2d 788 (Tex. App.—Beaumont 1988)';
+    const result = wlRecReconcile({context: {}, profile: 'standard',
+      dom: makeDom({headerName: 'Rogers v. State', rawCourt: 'Court of Appeals of Texas, Beaumont.', date: '1988-10-06', dockets: ['No. 09–87–120 CV']}),
+      svcA: makeSvc('ok', makeEnvelope({standard: {long, shorts: []}})),
+      svcB: makeSvc('ok', makeEnvelope({standard: {long, shorts: []}}))
+    });
+    assert.equal(wlMapToZoteroFields(result).docketNumber, 'No. 09-87-120 CV');
+    assert.equal(result.dockets.length, 1);
+    assert.equal(result.reviewReasons.includes('docket-conflict'), false);
+  });
+  it('formats plural docket prefix once', function () {
+    assert.equal(ctx.wlMapFormatDocketNumber(['Nos. 1-2', '3-4']), 'Nos. 1-2, 3-4');
+  });
+  it('compares and retains A, B-standard and B-inventory docket sets', function () {
+    const result = wlRecReconcile({context: {}, profile: 'standard',
+      dom: makeDom({headerName: 'Foo v. Bar', rawCourt: 'United States Court of Appeals, Fifth Circuit.', date: '1999-08-25', dockets: ['No. 1-2']}),
+      svcA: makeSvc('ok', makeEnvelope({standard: {long: 'Foo v. Bar, No. 5-6, 187 F.3d 486 (5th Cir. 1999)', shorts: []}})),
+      svcB: makeSvc('ok', makeEnvelope({standard: {long: 'Foo v. Bar, No. 7-8, 187 F.3d 486 (5th Cir. 1999)', shorts: []}, westlaw: {enhanced: 'Foo v. Bar, No. 1-2, 187 F.3d 486 (5th Cir. 1999)'}}))
+    });
+    assert.deepEqual(Array.from(result.dockets), ['No. 1-2', 'No. 5-6', 'No. 7-8']);
+    assert.equal(result.reviewReasons.filter(r => r === 'docket-conflict').length, 1);
+    assert.equal(result.provenance.dockets, 'dom+service');
+  });
+  it('prefers DOM published reporter over service WL-only, retaining WL with conflict', function () {
+    const long = 'Foo v. Bar, No. 1-2, 1999 WL 652310 (5th Cir. Aug. 25, 1999)';
+    const result = wlRecReconcile({context: {}, profile: 'standard',
+      dom: makeDom({headerName: 'Foo v. Bar', rawCourt: 'United States Court of Appeals, Fifth Circuit.', date: '1999-08-25', citations: [{kind: 'reporter', volume: '187', reporter: 'F.3d', page: '486', raw: '187 F.3d 486'}]}),
+      svcA: makeSvc('ok', makeEnvelope({standard: {long, shorts: []}})),
+      svcB: makeSvc('ok', makeEnvelope({standard: {long, shorts: []}}))
+    });
+    assert.equal(result.primary.raw, '187 F.3d 486');
+    assert.equal(result.wlPrimary, false);
+    assert.ok(result.alternates.some(c => c.kind === 'wl' && c.raw === '1999 WL 652310'));
+    assert.ok(result.reviewReasons.includes('primary-conflict'));
+    assert.equal(result.provenance.primary, 'dom');
+  });
+});

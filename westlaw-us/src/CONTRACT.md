@@ -131,6 +131,11 @@ a Zotero single-field author (`fieldMode: 1`) rather than guessing first/last na
 Per curiam is a literal author. Panel, counsel, and dissent lines never supply authors. Duplicate identical
 lines are harmless; conflicting or unparsed lead lines leave authors empty and add review reasons.
 Absent lead lines leave authors empty; absence is not evidence of a named author.
+Version 0.2.1 also accepts lead names without a comma before the judicial title, an explicit
+"Opinion by/of" prefix, and Jr./Sr./roman-numeral name suffixes. It rejects panel-like text.
+Header title attributes supply full case names; documented legacy `#courtline`, `#filedate`,
+and `#cite0`–`#cite2` elements fill missing court/date/citation facts. Court fallback requires
+court-like text; dates and citations still pass their parsers. Header facts retain precedence.
 
 Compare full decision dates even within one year, normalize and compare docket sets, and flag disagreement
 between header and service names and between standard citation names. Abbreviation differences may

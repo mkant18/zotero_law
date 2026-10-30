@@ -1,4 +1,5 @@
-var wlTrVersion = "0.2.0";
+var wlTrVersion = "0.3.2";
+var wlTrBuild = "source-unbuilt";
 
 function wlTrDetectWeb(doc, url) {
   var readiness = wlDomInspectCaseReadiness(doc, url);
@@ -43,6 +44,7 @@ async function wlTrDoWeb(doc, url) {
   var frozenDom = wlDomReadFacts(doc);
   var frozenGuid = frozenContext.config && frozenContext.config.guid;
   var frozenHeaderName = frozenDom.headerName || "";
+  await wlTrResolveAuthorPopup(doc, url, frozenDom, frozenGuid);
 
   // 2. Classify court + select profile
   var classification = wlProfClassifyCourt(frozenDom.rawCourt || "");
@@ -122,7 +124,8 @@ async function wlTrDoWeb(doc, url) {
   }
 
   // 6. Map to Zotero fields
-  var fields = wlMapToZoteroFields(rec, { version: wlTrVersion });
+  var importRun = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+  var fields = wlMapToZoteroFields(rec, { version: wlTrVersion, build: wlTrBuild, importRun: importRun });
 
   // 7. Reject unsafe values before they reach Zotero; retain bounded reason codes.
   var validation = wlMapValidateOutgoing(fields);
@@ -153,12 +156,63 @@ async function wlTrDoWeb(doc, url) {
   var aCategory = svcA.category || "none";
   var bCategory = svcB.category || "none";
   var recStatus = rec.status || "metadata-only";
-  Zotero.debug("Westlaw US " + wlTrVersion + " profile=" + profile + " A=" + aCategory + " B=" + bCategory + " status=" + recStatus);
+  Zotero.debug("Westlaw US " + wlTrVersion + " build=" + wlTrBuild + " run=" + importRun + " profile=" + profile + " A=" + aCategory + " B=" + bCategory + " status=" + recStatus);
 
   // 9. Create and complete the item
   var item = new Zotero.Item("case");
   wlMapApply(fields, item);
   item.complete();
+}
+
+// Westlaw author popup is evidence only when opened from the exact majority byline.
+async function wlTrResolveAuthorPopup(doc, url, dom, guid) {
+  var partial = dom.author;
+  if (!partial || partial.firstName || partial.fieldMode === 1) return;
+  var lines = doc.querySelectorAll(".x_leadAuthorLine");
+  var buttons = [];
+  for (var i = 0; i < lines.length; i++) {
+    if (wlDomAuthorSkipped(lines[i])) continue;
+    var candidates = lines[i].querySelectorAll("button.co_linkBlue[data-href]");
+    for (var j = 0; j < candidates.length; j++) {
+      var button = candidates[j];
+      var href = button.getAttribute("data-href") || "";
+      if (wlDomClean(button.textContent).toLowerCase() === partial.lastName.toLowerCase() && /^(?:https:\/\/1\.next\.westlaw\.com)?\/Link\/Document\/FullText\?/.test(href) && typeof button.click === "function") buttons.push(button);
+    }
+  }
+  if (buttons.length !== 1) return;
+  // An already-open dialog has no proven relationship to this click. Leave it untouched.
+  if (doc.querySelector("#popBox")) return;
+  var opened = null;
+  var failure = "author-popup-not-visible";
+  try {
+    buttons[0].click();
+    for (var poll = 0; poll < 12; poll++) {
+      var popup = doc.querySelector('#popBox[role="dialog"][aria-labelledby="co_infoBox_header"]');
+      if (popup) {
+        opened = popup;
+        var header = popup.querySelector(".co_infoBox_message > h3#co_infoBox_header");
+        var author = header && wlDomLinkedAuthor(header.textContent, partial);
+        failure = !header ? "author-popup-heading-missing" : !author ? "author-popup-name-mismatch" : "author-popup-document-changed";
+        var fresh = wlDomReadPageContext(doc, url);
+        var freshTitle = doc.querySelector("#co_docHeaderTitleLine");
+        var title = freshTitle && wlDomClean(freshTitle.getAttribute("title") || freshTitle.textContent).split(" | Cases")[0];
+        if (author && (!guid || fresh.config.guid === guid) && title === dom.headerName) {
+          dom.author = author;
+          dom.reviewReasons = dom.reviewReasons.filter(function(r) { return r !== "author-name-incomplete"; });
+          return;
+        }
+      }
+      await new Promise(function(resolve) { setTimeout(resolve, 150); });
+    }
+    dom.reviewReasons.push(failure);
+  } catch (e) {
+    dom.reviewReasons.push("author-popup-unavailable");
+  } finally {
+    var close = opened && opened.querySelector(".co_infoBox_closeButton");
+    if (close && typeof close.click === "function") {
+      try { close.click(); } catch (e) { /* Name evidence remains valid; closing is cosmetic. */ }
+    }
+  }
 }
 
 // Zotero requires real function declarations (not var aliases) so its tooling

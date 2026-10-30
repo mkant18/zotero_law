@@ -123,6 +123,10 @@ function wlDomReadPageContext(doc, url) {
     }
   }
 
+  if (typeof uniqGUIDs !== "undefined" && uniqGUIDs.length > 1) {
+    identityGUID = null;
+    identityReason = "identity-ambiguous";
+  }
   config.guid = identityGUID;
   config.identityReason = identityReason;
   config.ambiguous = ambiguous;
@@ -130,7 +134,7 @@ function wlDomReadPageContext(doc, url) {
   var ok = validGUIDs.length > 0 || identityGUID !== null;
 
   // Validate and resolve secrets
-  var tokenPattern = /^[A-Za-z0-9._~+\/=:-]{8,512}$/;
+  var tokenPattern = /^[A-Za-z0-9._~+\/=:\|-]{8,512}$/;
   var peiValid = [];
   for (var p = 0; p < peiValues.length; p++) {
     if (tokenPattern.test(peiValues[p])) peiValid.push(peiValues[p]);
@@ -273,21 +277,78 @@ function wlDomReadAuthor(doc, reviewReasons) {
   var lines = doc.querySelectorAll(".x_leadAuthorLine");
   var names = [];
   for (var i = 0; i < lines.length; i++) {
+    if (wlDomAuthorSkipped(lines[i])) continue;
     var line = wlDomClean(lines[i].textContent);
+    var popup = lines[i].querySelector(".co_infoBox");
+    if (popup) line = wlDomClean(line.replace(wlDomClean(popup.textContent), ""));
     var name = "";
     if (/^per curiam[:.]?$/i.test(line)) name = "Per Curiam";
     else {
-      var match = line.match(/^(.+?),\s*(?:(?:Senior|Chief|Associate|United States|U\.?S\.?|District|Circuit|Magistrate|Bankruptcy)\s+)*(?:Judge|Justice|J\.|C\.?J\.?)[:.]?$/i);
+      var match = line.match(/^(?:Opinion\s+(?:by|of)\s+)?(.+?)(?:,\s*|\s+)(?:(?:Senior|Chief|Associate|United States|U\.?S\.?|District|Circuit|Magistrate|Bankruptcy)\s+)*(?:Judge|Justice|J\.|C\.?J\.?)[:.]?$/i);
+      if (!match) match = line.match(/^(?:(?:Senior|Chief|Associate|United States|District|Circuit|Magistrate|Bankruptcy)\s+)*(?:Judge|Justice)\s+(.+?)[:.]?$/i);
+      if (!match) match = line.match(/^(?:Mr\.?\s+)?(?:(?:Chief|Associate)\s+)?Justice\s+(.+?)\s+delivered the opinion of the Court\.?$/i);
       if (match) name = match[1];
     }
-    if (!name || name.length > 200 || !/^[\p{L}\p{M} .'’-]+$/u.test(name)) {
+    if (!name || name.length > 200 || !/^[\p{L}\p{M} .'’-]+(?:,\s*(?:Jr\.?|Sr\.?|II|III|IV))?$/u.test(name) || /\b(?:and|before|opinion|delivered|by)\b/i.test(name)) {
       if (reviewReasons.indexOf("author-unparsed") === -1) reviewReasons.push("author-unparsed");
       continue;
     }
-    if (!names.some(function(n) { return n.toLowerCase() === name.toLowerCase(); })) names.push(name);
+    var author = wlDomSplitAuthor(name);
+    author.source = "lead-majority-byline";
+    author.evidence = line;
+    // Only evidence explicitly attached to this byline may enrich a surname.
+    if (!author.firstName && author.fieldMode !== 1) {
+      var records = [lines[i]].concat(Array.prototype.slice.call(lines[i].querySelectorAll("a, button")));
+      var fuller = [];
+      records.forEach(function(record) {
+        ["title", "aria-label"].forEach(function(attr) {
+          var text = wlDomClean(record.getAttribute(attr));
+          if (!text || text.length > 200 || /\b(?:panel|dissent|concurr|opinion|before|and)\b/i.test(text)) return;
+          text = text.replace(/^(?:Hon\.?|Judge|Justice)\s+/i, "").replace(/,\s*(?:Judge|Justice)\.?$/i, "");
+          if (!/^[\p{L}\p{M} .'’-]+(?:,\s*(?:Jr\.?|Sr\.?|II|III|IV))?$/u.test(text)) return;
+          var candidate = wlDomSplitAuthor(text);
+          if (!candidate.firstName || candidate.lastName.toLowerCase() !== author.lastName.toLowerCase()) return;
+          candidate.source = "lead-byline-linked-" + attr;
+          candidate.evidence = text;
+          if (!fuller.some(function(n) { return n.firstName === candidate.firstName && n.lastName === candidate.lastName; })) fuller.push(candidate);
+        });
+      });
+      if (fuller.length === 1) author = fuller[0];
+      else if (fuller.length > 1 && reviewReasons.indexOf("author-identity-conflict") === -1) reviewReasons.push("author-identity-conflict");
+    }
+    if (!names.some(function(n) { return n.firstName.toLowerCase() === author.firstName.toLowerCase() && n.lastName.toLowerCase() === author.lastName.toLowerCase(); })) names.push(author);
   }
   if (names.length > 1) reviewReasons.push("author-conflict");
-  return names.length === 1 && reviewReasons.indexOf("author-unparsed") === -1 ? names[0] : null;
+  var result = names.length === 1 && reviewReasons.indexOf("author-unparsed") === -1 ? names[0] : null;
+  if (result && !result.firstName && result.fieldMode !== 1) reviewReasons.push("author-name-incomplete");
+  return result;
+}
+
+function wlDomAuthorSkipped(el) {
+  for (var node = el; node; node = node.parentElement || node._parent) {
+    if (/(^|\s)(?:co_panelBlock|co_attorneyBlock|x_dissentAuthorLine|x_concurAuthorLine|co_dissent|co_concurrence)(\s|$)/i.test(node.className || "")) return true;
+  }
+  return false;
+}
+
+function wlDomSplitAuthor(name) {
+  if (name === "Per Curiam") return { creatorType: "author", firstName: "", lastName: name, fieldMode: 1 };
+  var parts = name.replace(/,\s*(Jr\.?|Sr\.?|II|III|IV)$/i, " $1").split(/\s+/);
+  var last = parts.pop();
+  if (/^(?:Jr\.?|Sr\.?|II|III|IV)$/i.test(last) && parts.length) last = parts.pop() + " " + last;
+  while (parts.length && /^(?:de|del|della|di|da|dos|du|la|le|van|von|der|den|ten|ter)$/i.test(parts[parts.length - 1])) last = parts.pop() + " " + last;
+  return { creatorType: "author", firstName: parts.join(" "), lastName: last };
+}
+
+function wlDomLinkedAuthor(text, partial) {
+  var name = wlDomClean(text).replace(/^Hon\.?\s+/i, "");
+  if (!name || name.length > 200 || !/^[\p{L}\p{M} .'’-]+(?:,\s*(?:Jr\.?|Sr\.?|II|III|IV))?$/u.test(name) || /\b(?:panel|dissent|concurr|opinion|before|and|judge|justice)\b/i.test(name)) return null;
+  var author = wlDomSplitAuthor(name);
+  var base = function(s) { return s.replace(/\s+(?:Jr\.?|Sr\.?|II|III|IV)$/i, "").toLowerCase(); };
+  if (!author.firstName || base(author.lastName) !== base(partial.lastName)) return null;
+  author.source = "lead-byline-linked-author-popup";
+  author.evidence = wlDomClean(text);
+  return author;
 }
 
 function wlDomReadFacts(doc) {
@@ -303,7 +364,7 @@ function wlDomReadFacts(doc) {
 
   var header = doc.querySelector("#co_docHeaderTitleLine");
   if (header) {
-    var rawTitle = wlDomClean(header.textContent);
+    var rawTitle = wlDomClean(header.getAttribute("title") || header.textContent);
     var caseIdx = rawTitle.indexOf(" | Cases");
     if (caseIdx !== -1) {
       headerName = rawTitle.substring(0, caseIdx);
@@ -407,10 +468,10 @@ function wlDomReadFacts(doc) {
 
   var courtFallbackSupplied = false;
   if (!rawCourt) {
-    var courtBlock = doc.querySelector(".co_courtBlock");
+    var courtBlock = doc.querySelector(".co_courtBlock") || doc.querySelector("#courtline");
     if (courtBlock) {
       var courtFallbackText = wlDomClean(courtBlock.textContent);
-      if (courtFallbackText) {
+      if (courtFallbackText && (courtBlock.id !== "courtline" || wlDomCourtLineRe.test(courtFallbackText))) {
         rawCourt = courtFallbackText;
         courtFallbackSupplied = true;
       }
@@ -435,6 +496,9 @@ function wlDomReadFacts(doc) {
         var npTrimmed = noParts[np].trim();
         if (npTrimmed) docketParts.push(npTrimmed);
       }
+    } else if (/^\d+(?:[-/]\d+)*(?:,\s*\d+(?:[-/]\d+)*)*$/.test(docketText)) {
+      // Live Westlaw docket blocks can omit No./Nos.; preserve every bounded numeric docket.
+      docketParts = docketText.split(/,\s*/).map(function(part) { return "No. " + part; });
     }
     for (var dp = 0; dp < docketParts.length; dp++) {
       var dpKey = typeof wlTextCompareKey === "function" ? wlTextCompareKey(docketParts[dp]) : docketParts[dp];
@@ -447,20 +511,35 @@ function wlDomReadFacts(doc) {
     }
   }
 
-  var citesFallbackSupplied = false;
-  if (!citations.length) {
-    var citesFallback = doc.querySelector(".co_cites");
-    if (citesFallback) {
-      var citesText = wlDomClean(citesFallback.textContent);
-      var fallbackCits = wlRepFindCitations(citesText);
-      if (fallbackCits.length > 0) citesFallbackSupplied = true;
-      for (var fc = 0; fc < fallbackCits.length; fc++) {
-        citations.push(fallbackCits[fc]);
+  var dateFallbackSupplied = false;
+  if (!date) {
+    var fileDate = doc.querySelector("#filedate");
+    if (fileDate) {
+      var fileDateText = wlDomClean(fileDate.textContent);
+      var fileDateValue = wlTextParseUSDate(fileDateText);
+      if (fileDateValue) {
+        date = fileDateValue;
+        dateText = fileDateText;
+        dateFallbackSupplied = true;
       }
     }
   }
 
-  if (headerLists.length === 0 && (courtFallbackSupplied || citesFallbackSupplied)) {
+  var citesFallbackSupplied = false;
+  if (!citations.length) {
+    var fallbackBlocks = doc.querySelectorAll(".co_cites, #cite0, #cite1, #cite2");
+    for (var fb = 0; fb < fallbackBlocks.length; fb++) {
+      var citesFallback = fallbackBlocks[fb];
+      var citesText = wlDomClean(citesFallback.textContent);
+      var fallbackCits = wlRepFindCitations(citesText);
+      if (fallbackCits.length > 0) citesFallbackSupplied = true;
+      for (var fc = 0; fc < fallbackCits.length; fc++) {
+        if (!citations.some(function(c) { return c.raw === fallbackCits[fc].raw; })) citations.push(fallbackCits[fc]);
+      }
+    }
+  }
+
+  if (headerLists.length === 0 && (courtFallbackSupplied || citesFallbackSupplied || dateFallbackSupplied)) {
     reviewReasons.push("header-fallback");
   }
 

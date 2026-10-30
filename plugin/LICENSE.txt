@@ -1,0 +1,11 @@
+The translator and plugin bootstrap/build code are licensed under the GNU
+Affero General Public License, version 3 or later.
+License text: https://www.gnu.org/licenses/agpl-3.0.txt
+Translator copyright and notices are retained in resources/Westlaw Advantage US.js.
+
+The bundled Bluebook CSL derivative is licensed under Creative Commons
+Attribution-ShareAlike 3.0: https://creativecommons.org/licenses/by-sa/3.0/
+The original authors and contributors are credited in the CSL file's info element.
+Original style: https://github.com/citation-style-language/styles/blob/master/bluebook-law-review.csl
+
+This project is independent of Zotero, Thomson Reuters, Westlaw, and The Bluebook.

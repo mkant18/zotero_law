@@ -444,6 +444,53 @@ describe("translator - doWeb envelope echo mismatch", function() {
 
 // ---- Non-echo envelope review reasons reach the saved item (W5) ----
 describe("built translator - explicit opinion author", function() {
+  it("records exact popup visibility failure and preserves known surname", async function() {
+    var button = el("button", { class: "co_linkBlue", "data-href": "/Link/Document/FullText?findType=h" }, "Smith");
+    button.click = function() {};
+    var doc = makeDoc({ body: el("body", {}, el("div", { class: "x_leadAuthorLine" }, button, ", Judge.")) });
+    var ctx = loadBuiltFile(makeFakeZotero(), makeFakeZU());
+    ctx.setTimeout = function(resolve) { resolve(); };
+    var facts = ctx.wlDomReadFacts(doc);
+    await ctx.wlTrResolveAuthorPopup(doc, doc.location.href, facts, null);
+    assert.equal(facts.author.lastName, "Smith");
+    assert.ok(facts.reviewReasons.includes("author-popup-not-visible"));
+    assert.ok(facts.reviewReasons.includes("author-name-incomplete"));
+  });
+  it("resolves exact majority popup, keeps provenance and closes it", async function() {
+    var button = el("button", { class: "co_linkBlue", "data-href": "/Link/Document/FullText?findType=h&cite=0248303601" }, "DeMOSS");
+    var close = el("button", { class: "co_infoBox_closeButton" });
+    var popup = el("div", { id: "popBox", role: "dialog", "aria-labelledby": "co_infoBox_header" },
+      el("div", { class: "co_infoBox_message" }, el("h3", { id: "co_infoBox_header" }, "Hon. Harold R. DeMoss Jr.")), close);
+    var doc = makeDoc({ title: "Example | Cases", body: el("body", {},
+      el("div", { id: "co_docHeaderTitleLine" }, "Example"),
+      el("div", { class: "x_leadAuthorLine" }, button, ", Circuit Judge.")) });
+    var visible = null;
+    var clicks = 0;
+    button.click = function() { clicks++; visible = popup; };
+    close.click = function() { visible = null; };
+    var original = doc.querySelector.bind(doc);
+    doc.querySelector = function(selector) { return selector.startsWith("#popBox") ? visible : original(selector); };
+    var result = await runDoWebRouted(doc);
+    var item = result.fz.items[0];
+    assert.equal(clicks, 1);
+    assert.equal(visible, null);
+    assert.equal(item.creators[0].firstName, "Harold R.");
+    assert.equal(item.creators[0].lastName, "DeMoss Jr.");
+    assert.match(item.extra, /Westlaw author evidence: Hon\. Harold R\. DeMoss Jr\./);
+    assert.match(item.extra, /Westlaw author source: lead-byline-linked-author-popup/);
+    assert.doesNotMatch(item.extra, /author-name-incomplete/);
+    assert.match(item.extra, /Westlaw build: [a-f0-9]{64}/);
+    assert.match(item.extra, /Westlaw import run: [a-z0-9]+-[a-z0-9]+/);
+    var second = await runDoWebRouted(doc);
+    assert.notEqual(item.extra.match(/Westlaw import run: (.+)/)[1], second.fz.items[0].extra.match(/Westlaw import run: (.+)/)[1]);
+    // Stale dialog must neither enrich surname nor be closed by importer.
+    visible = popup;
+    var stale = await runDoWebRouted(doc);
+    assert.equal(clicks, 2);
+    assert.equal(stale.fz.items[0].creators[0].firstName, "");
+    assert.match(stale.fz.items[0].extra, /author-name-incomplete/);
+    assert.equal(visible, popup);
+  });
   it("saves lead author, excludes dissent, and preserves citation fields", async function() {
     var doc = makeDoc({
       title: "Example v. Sample | Cases | Westlaw Advantage",
@@ -463,7 +510,10 @@ describe("built translator - explicit opinion author", function() {
     assert.equal(item.creators.length, 1);
     assert.equal(item.creators[0].lastName, "BROOKSHIRE");
     assert.equal(item.creators[0].creatorType, "author");
-    assert.equal(item.creators[0].fieldMode, 1);
+    assert.equal(item.creators[0].fieldMode, undefined);
+    assert.equal(item.creators[0].firstName, "");
+    assert.match(item.extra, /Westlaw review: author-name-incomplete/);
+    assert.match(item.extra, /Westlaw author source: lead-majority-byline/);
     assert.equal(item.court, "5th Cir.");
     assert.equal(item.dateDecided, "1999-08-25");
     assert.equal(item.firstPage, "486");
@@ -702,6 +752,8 @@ describe("translator - build script", function() {
   it("two builds produce the same translatorID (stable across builds)", function() {
     var result1 = buildTranslator();
     var result2 = buildTranslator();
+    assert.equal(result1.sha256, result2.sha256, "identical source produces identical bytes");
+    assert.equal(result1.build, result2.build);
     assert.equal(result1.translatorID, result2.translatorID, "translatorID must be stable across builds");
     assert.equal(result1.translatorID, "9abca805-707d-4064-958f-e08ac37f0862", "translatorID must be the hard-coded constant");
   });

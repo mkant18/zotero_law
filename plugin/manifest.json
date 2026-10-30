@@ -1,0 +1,16 @@
+{
+  "manifest_version": 2,
+  "name": "Westlaw Advantage US",
+  "version": "0.1.0beta1",
+  "description": "Westlaw US case metadata translator and local Bluebook citation style (beta).",
+  "author": "mkant18",
+  "homepage_url": "https://github.com/mkant18/zotero_law",
+  "applications": {
+    "zotero": {
+      "id": "westlaw-us@mkant18.github.io",
+      "update_url": "https://github.com/mkant18/zotero_law/releases/download/beta/updates.json",
+      "strict_min_version": "7.0",
+      "strict_max_version": "10.*"
+    }
+  }
+}

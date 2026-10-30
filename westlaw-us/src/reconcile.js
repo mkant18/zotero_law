@@ -173,6 +173,8 @@ function wlRecReconcile(input) {
     }
 
     // 4. Round-trip checks
+    wlRecAddDomReasons(reviewReasons, parsedA);
+    wlRecAddDomReasons(reviewReasons, parsedBstd);
     if (parsedA && parsedA.ok && aLongText) {
       var rtA = wlCiteRoundTrip(parsedA, aLongText);
       if (!rtA.ok) {
@@ -236,6 +238,8 @@ function wlRecReconcile(input) {
 
     // Track whether service primary conflicts with DOM (for R3: conflicting service cites become unparsed)
     var servicePrimaryConflictsWithDOM = false;
+    var classification = wlProfClassifyCourt(dom.rawCourt || "");
+    var officialUS = classification.system === "federal" && classification.level === "supreme" ? domUSCite : null;
 
     // Determine primary
     if (firstReporterCite) {
@@ -251,26 +255,25 @@ function wlRecReconcile(input) {
       }
 
       if (matchesDOM || domReporterCites.length === 0) {
-        primary = firstReporterCite;
-        provenance.primary = domReporterCites.length === 0 ? "service" : "both";
+        primary = officialUS || firstReporterCite;
+        provenance.primary = officialUS && firstReporterCite.reporter !== "U.S." ? "dom" : domReporterCites.length === 0 ? "service" : "both";
       } else {
         // Conflict: prefer U.S. cite if SCOTUS, else DOM first reporter cite
-        var classification = wlProfClassifyCourt(dom.rawCourt || "");
-        if (domUSCite && classification.system === "federal" && classification.level === "supreme") {
-          primary = domUSCite;
-        } else {
-          primary = domReporterCites[0];
-        }
+        primary = officialUS || domReporterCites[0];
         reviewReasons.push("primary-conflict");
         provenance.primary = "dom";
         servicePrimaryConflictsWithDOM = true;
       }
+    } else if (firstWLCite && domReporterCites.length > 0) {
+      primary = officialUS || domReporterCites[0];
+      provenance.primary = "dom";
+      reviewReasons.push("primary-conflict");
     } else if (firstWLCite) {
       primary = firstWLCite;
       wlPrimary = true;
       provenance.primary = "service";
     } else if (domReporterCites.length > 0) {
-      primary = domReporterCites[0];
+      primary = officialUS || domReporterCites[0];
       provenance.primary = "dom";
     } else if (domCitations.length > 0) {
       primary = domCitations[0];
@@ -381,25 +384,30 @@ function wlRecReconcile(input) {
 
     // 9. dockets
     var dockets = [];
-    if (dom.dockets && dom.dockets.length > 0) {
-      dockets = dom.dockets.slice();
-      provenance.dockets = "dom";
-    } else if (parsedBinv && parsedBinv.dockets && parsedBinv.dockets.length > 0) {
-      dockets = parsedBinv.dockets.slice();
-      provenance.dockets = "service";
+    var docketKey = function(ds) {
+      return wlMapFormatDocketNumber(ds).replace(/^Nos?\.\s*/, "").toLowerCase().split(/,\s*/).sort().join("|");
+    };
+    var docketSources = [dom, parsedBinv, parsedA, parsedBstd];
+    var firstDocketSet = null;
+    for (var ds = 0; ds < docketSources.length; ds++) {
+      var sourceDockets = docketSources[ds] && docketSources[ds].dockets;
+      if (!sourceDockets || !sourceDockets.length) continue;
+      var sourceSetKey = docketKey(sourceDockets);
+      if (firstDocketSet === null) {
+        firstDocketSet = sourceSetKey;
+        provenance.dockets = ds === 0 ? "dom" : "service";
+      } else if (sourceSetKey !== firstDocketSet && reviewReasons.indexOf("docket-conflict") === -1) {
+        reviewReasons.push("docket-conflict");
+      }
+      for (var sd = 0; sd < sourceDockets.length; sd++) {
+        var sourceKey = docketKey([sourceDockets[sd]]);
+        if (!dockets.some(function(docket) { return docketKey([docket]) === sourceKey; })) {
+          dockets.push(sourceDockets[sd]);
+          if (ds > 0 && dom.dockets && dom.dockets.length) provenance.dockets = "dom+service";
+        }
+      }
     }
-
-    // WL-primary requires at least one docket
-    var serviceDockets = parsedBinv && parsedBinv.dockets && parsedBinv.dockets.length ? parsedBinv.dockets : parsedA && parsedA.dockets;
-    if (!dockets.length && serviceDockets && serviceDockets.length) {
-      dockets = serviceDockets.slice();
-      provenance.dockets = "service";
-    } else if (dom.dockets && dom.dockets.length && serviceDockets && serviceDockets.length) {
-      var docketKey = function(ds) {
-        return wlMapFormatDocketNumber(ds).replace(/^Nos?\.\s*/, "").toLowerCase().split(/,\s*/).sort().join("|");
-      };
-      if (docketKey(dom.dockets) !== docketKey(serviceDockets)) reviewReasons.push("docket-conflict");
-    }
+    // WL-primary requires at least one docket.
     if (wlPrimary && dockets.length === 0) {
       reviewReasons.push("wl-missing-docket");
     }

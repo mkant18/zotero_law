@@ -36,18 +36,18 @@
       <term name="editor" form="verb-short">ed.</term>
       <term name="ibid">id.</term>
       <term name="translator" form="verb-short">trans.</term>
-      <term name="month" form="short">Jan.</term>
-      <term name="month" form="short" type="1">Feb.</term>
-      <term name="month" form="short" type="2">Mar.</term>
-      <term name="month" form="short" type="3">Apr.</term>
-      <term name="month" form="short" type="4">May</term>
-      <term name="month" form="short" type="5">June</term>
-      <term name="month" form="short" type="6">July</term>
-      <term name="month" form="short" type="7">Aug.</term>
-      <term name="month" form="short" type="8">Sept.</term>
-      <term name="month" form="short" type="9">Oct.</term>
-      <term name="month" form="short" type="10">Nov.</term>
-      <term name="month" form="short" type="11">Dec.</term>
+      <term name="month-01" form="short">Jan.</term>
+      <term name="month-02" form="short">Feb.</term>
+      <term name="month-03" form="short">Mar.</term>
+      <term name="month-04" form="short">Apr.</term>
+      <term name="month-05" form="short">May</term>
+      <term name="month-06" form="short">June</term>
+      <term name="month-07" form="short">July</term>
+      <term name="month-08" form="short">Aug.</term>
+      <term name="month-09" form="short">Sept.</term>
+      <term name="month-10" form="short">Oct.</term>
+      <term name="month-11" form="short">Nov.</term>
+      <term name="month-12" form="short">Dec.</term>
     </terms>
   </locale>
   <macro name="name-macro">
@@ -427,8 +427,8 @@
                   <choose>
                     <if type="book" match="any">
                       <text variable="volume"/>
-                    </choose>
-                  </group>
+                    </if>
+                  </choose>
                   <text macro="author-short"/>
                 </group>
                 <group delimiter=" ">
@@ -448,8 +448,8 @@
               <choose>
                 <if type="book" match="any">
                   <text variable="volume"/>
-                </choose>
-              </group>
+                </if>
+              </choose>
               <text macro="author"/>
             </group>
             <text macro="source"/>

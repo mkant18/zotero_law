@@ -9,7 +9,7 @@ const ctx = loadModules(modules);
 const plain = value => JSON.parse(JSON.stringify(value));
 const clone = value => structuredClone(value);
 
-test('lead author reaches completed Zotero item without guessing name parts', async () => {
+test('lead author reaches completed Zotero item with structured name parts', async () => {
   const items = [];
   const c = loadModules(modules, { Zotero: {
     Item: function(type) { this.itemType = type; this.tags = []; this.creators = []; this.complete = () => items.push(this); },
@@ -22,7 +22,7 @@ test('lead author reaches completed Zotero item without guessing name parts', as
     el('div', { class: 'co_panelBlock' }, 'Before OTHER and THIRD, Judges.')) });
   await c.doWeb(doc, doc.location.href);
   assert.equal(items.length, 1);
-  assert.deepEqual(plain(items[0].creators), [{ creatorType: 'author', lastName: 'JOSÉ O’NEILL', fieldMode: 1 }]);
+  assert.deepEqual(plain(items[0].creators), [{ creatorType: 'author', firstName: 'JOSÉ', lastName: 'O’NEILL' }]);
 });
 
 test('ambiguous or unparseable authors stay empty and require review', () => {
@@ -40,8 +40,53 @@ test('ambiguous or unparseable authors stay empty and require review', () => {
 test('duplicate author lines and per curiam survive safely', () => {
   const doc = makeDoc({ body: el('body', {}, el('div', { class: 'x_leadAuthorLine' }, 'PER CURIAM:'), el('div', { class: 'x_leadAuthorLine' }, 'Per Curiam.')) });
   const facts = ctx.wlDomReadFacts(doc);
-  assert.equal(facts.author, 'Per Curiam');
+  assert.equal(facts.author.lastName, 'Per Curiam');
+  assert.equal(facts.author.fieldMode, 1);
   assert.equal(facts.reviewReasons.length, 0);
+});
+
+test('lead author accepts judicial title variants and name suffixes', () => {
+  for (const [line, name] of [
+    ['JOHN ROBERTS Chief Justice.', 'JOHN ROBERTS'],
+    ['Opinion by JOSÉ O’NEILL, Circuit Judge.', 'JOSÉ O’NEILL'],
+    ['JOHN SMITH, Jr., District Judge.', 'JOHN SMITH, Jr.'],
+    ['SMITH, C.J.', 'SMITH']
+  ]) {
+    const facts = ctx.wlDomReadFacts(makeDoc({ body: el('body', {}, el('div', { class: 'x_leadAuthorLine' }, line)) }));
+    assert.equal([facts.author.firstName, facts.author.lastName].filter(Boolean).join(' '), name.replace(', Jr.', ' Jr.'));
+    assert.ok(!facts.reviewReasons.includes('author-unparsed'));
+  }
+  for (const line of ['Before SMITH and JONES, Circuit Judge.', 'Opinion delivered by SMITH, Justice.']) {
+    const facts = ctx.wlDomReadFacts(makeDoc({ body: el('body', {}, el('div', { class: 'x_leadAuthorLine' }, line)) }));
+    assert.equal(facts.author, null);
+  }
+});
+
+test('documented legacy header fields reach completed Zotero metadata', async () => {
+  const items = [];
+  const c = loadModules(modules, { Zotero: {
+    Item: function() { this.tags = []; this.creators = []; this.complete = () => items.push(this); }, debug() {}
+  } });
+  const doc = makeDoc({ body: el('body', {},
+    el('h2', { id: 'co_docHeaderTitleLine', title: 'Example v. Sample' }, 'Example…'),
+    el('span', { id: 'courtline' }, 'United States Court of Appeals, Fifth Circuit.'),
+    el('span', { id: 'filedate' }, 'August 25, 1999'),
+    el('span', { id: 'cite0' }, '187 F.3d 486'),
+    el('span', { id: 'cite1' }, '187 F.3d 486'),
+    el('div', { class: 'co_docketBlock' }, 'No. 98-40679'),
+    el('div', { class: 'x_leadAuthorLine' }, 'SMITH Circuit Judge.')) });
+  const facts = c.wlDomReadFacts(doc);
+  assert.equal(facts.citations.length, 1);
+  await c.doWeb(doc, doc.location.href);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].caseName, 'Example v. Sample');
+  assert.equal(items[0].dateDecided, '1999-08-25');
+  assert.equal(items[0].court, '5th Cir.');
+  assert.equal(items[0].reporter, 'F.3d');
+  assert.equal(items[0].reporterVolume, '187');
+  assert.equal(items[0].firstPage, '486');
+  assert.equal(items[0].docketNumber, 'No. 98-40679');
+  assert.equal(items[0].creators[0].lastName, 'SMITH');
 });
 
 test('full dates disagreeing within one year require review', () => {

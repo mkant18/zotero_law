@@ -26,3 +26,6 @@
 
 # Linked git worktrees for isolated feature work
 .worktrees/
+
+# Generated plugin release artifacts
+/dist/

@@ -1,7 +1,7 @@
 # Golden citation targets (registry)
 
 Source: `reports/20-ASTRA-ARCHITECTURE.md` §11 "Golden citation examples". Law-review CSL may add a terminal
-period and italics; strings below are citation bodies (plain text).
+period; first full law-review case names remain roman, short names italicized. Strings below are citation bodies (plain text). G1/G4 received bounded independent review in [citation audit](../../reports/zotero-citation-audit-2026-10-11.md); direct Bluebook edition/table access remains unresolved.
 
 Status labels: **[V]** observed in a recorded service matrix (`westlaw-samples/cite-matrix/*.json`, private);
 **[P]** proposed/illustrative, not a Westlaw fixture; **[U]** unverified recipe; **[S]** synthetic/fictional.
@@ -20,3 +20,4 @@ output alone is NOT correctness evidence.
 | G7 | WL-only (fictional) | `Example v. Sample, No. 24-123, 2024 WL 1234567, at *4 (D. Kan. Mar. 1, 2024)`; short `Example, 2024 WL 1234567, at *4`; `Id. at *5`; no-locator form omits `, at *4` | [S] synthetic format fixture | **missing** — real unpublished opinion required before M1 sign-off | pending (format only) |
 
 M0 does not declare G3, G6, or real-WL-only coverage. A published case's alternate WL number is not a WL-only test.
+

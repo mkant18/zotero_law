@@ -7,7 +7,6 @@ var wlMapGuidRe = /^I[0-9a-f]{32}$/;
 // A missing header list is recorded for provenance. It does not mean the validated citation needs review.
 var wlMapInformationalReasons = ["header-fallback"];
 var wlMapDashRe = /[\u2013\u2014]/g;
-var wlMapDocketCleanRe = /^[0-9a-zA-Z\u2013\u2014-]+$/;
 
 function wlMapStripWatermark(str) {
   return str.replace(/[\u200B-\u200F\u2060-\u2064\uFEFF]/g, "").replace(/\s+/g, " ").trim().normalize("NFC");
@@ -20,9 +19,7 @@ function wlMapNormalizeDocketSingle(docket) {
     s = s.slice(4);
     hasPrefix = true;
   }
-  if (wlMapDocketCleanRe.test(s)) {
-    s = s.replace(wlMapDashRe, "-");
-  }
+  s = s.replace(wlMapDashRe, "-");
   if (hasPrefix) {
     s = "No. " + s;
   }
@@ -38,12 +35,8 @@ function wlMapFormatDocketNumber(dockets) {
   }
   var parts = dockets.map(function(d) {
     var s = d.replace(/\.$/, "");
-    if (s.indexOf("No. ") === 0) {
-      s = s.slice(4);
-    }
-    if (wlMapDocketCleanRe.test(s)) {
-      s = s.replace(wlMapDashRe, "-");
-    }
+    s = s.replace(/^Nos?\.\s*/, "");
+    s = s.replace(wlMapDashRe, "-");
     return s;
   });
   return "Nos. " + parts.join(", ");
@@ -132,6 +125,12 @@ function wlMapToZoteroFields(rec, opts) {
     extraLines.push("Westlaw review: " + wlMapStripWatermark(r));
   });
   extraLines.push("Westlaw translator: " + version);
+  if (opts.build) extraLines.push("Westlaw build: " + opts.build);
+  if (opts.importRun) extraLines.push("Westlaw import run: " + opts.importRun);
+  if (rec.author && typeof rec.author === "object") {
+    extraLines.push("Westlaw author source: " + wlMapStripWatermark(rec.author.source || "lead-majority-byline"));
+    extraLines.push("Westlaw author evidence: " + wlMapStripWatermark(rec.author.evidence || ""));
+  }
   var extra = extraLines.join("\n");
 
   var tags = [];
@@ -151,7 +150,11 @@ function wlMapToZoteroFields(rec, opts) {
     history: history,
     extra: extra,
     tags: tags,
-    creators: rec.author ? [{ creatorType: "author", lastName: wlMapStripWatermark(rec.author), fieldMode: 1 }] : [],
+    creators: rec.author ? [typeof rec.author === "object" ? {
+      creatorType: "author", firstName: wlMapStripWatermark(rec.author.firstName || ""),
+      lastName: wlMapStripWatermark(rec.author.lastName || ""),
+      ...(rec.author.fieldMode === 1 ? { fieldMode: 1 } : {})
+    } : { creatorType: "author", lastName: wlMapStripWatermark(rec.author), fieldMode: 1 }] : [],
     attachments: [],
     notes: []
   };
@@ -239,7 +242,7 @@ function wlMapValidateOutgoing(fields) {
   }
 
   if (Array.isArray(fields.creators)) fields.creators.forEach(function(c, i) {
-    if (!c || c.creatorType !== "author" || c.fieldMode !== 1 || typeof c.lastName !== "string" || !c.lastName.trim() || c.lastName.length > 200 || wlMapWatermarkRe.test(c.lastName) || wlMapHtmlRe.test(c.lastName) || wlMapTokenRe.test(c.lastName)) {
+    if (!c || c.creatorType !== "author" || (c.fieldMode !== undefined && c.fieldMode !== 0 && c.fieldMode !== 1) || typeof c.lastName !== "string" || !c.lastName.trim() || c.lastName.length > 200 || wlMapWatermarkRe.test(c.lastName) || wlMapHtmlRe.test(c.lastName) || wlMapTokenRe.test(c.lastName) || (c.firstName !== undefined && (typeof c.firstName !== "string" || c.firstName.length > 200 || wlMapWatermarkRe.test(c.firstName) || wlMapHtmlRe.test(c.firstName) || wlMapTokenRe.test(c.firstName)))) {
       problems.push("invalid-creator:creators[" + i + "]");
     }
   });

@@ -38,10 +38,28 @@ These diagnostic lines remain in the `note` CSL variable as plain text and do no
 ## How to run tests
 
 ```bash
+python westlaw-us/m0/csl/harness/validate.py westlaw-us/m0/csl/bluebook-law-review-westlaw-us.csl
 node --test "westlaw-us/m0/csl/test/*.test.mjs"
 ```
 
-Run from the workspace root (`M:/Coding_Projects/_zotero-research`).
+Run from the workspace root (`C:/Users/micha/Documents/ChatGPT/Zotero_Law`). Python with `lxml` is required. The rendering harness validates the style before loading citeproc; malformed XML, official schema errors, and macro errors stop rendering. Set `CSL_PYTHON` to a Python executable when `python` on PATH is unavailable. The workspace's system Python has lxml 6.1.2; Codex's bundled Python has lxml 6.1.1.
+
+## Validation source and repair
+
+The two missing `</if>` tags and misplaced `</group>` tags in the general first/subsequent citation branches were repaired. Month overrides now use `month-01` through `month-12`, as defined by the [official CSL specification](https://docs.citationstyles.org/en/stable/specification.html#terms).
+
+`schema/` vendors the [official CSL schema](https://github.com/citation-style-language/schema/tree/506040022f6c37846343edd36658b23e85b5b8ff), tag `v1.0.2`, commit `506040022f6c37846343edd36658b23e85b5b8ff`. `csl.rng` is generated from the official compact RELAX NG source using rnc2rng 2.7.0. `provenance.json` records source URLs and SHA-256 hashes. The official `csl.sch` supplies the additional undefined/duplicate macro checks; these are required alongside RELAX NG according to the [schema repository documentation](https://github.com/citation-style-language/schema#csl-schema).
+
+Validation runs locally without contacting a remote validator. XML entity expansion, DTD loading, and network resolution are disabled; styles declaring a DOCTYPE are rejected. Runtime validation requires only Python and lxml. To regenerate `csl.rng`, install rnc2rng 2.7.0 into an isolated build directory, expose that directory through `PYTHONPATH`, and run:
+
+```python
+import rnc2rng
+from pathlib import Path
+source = rnc2rng.load('westlaw-us/m0/csl/schema/csl.rnc')
+Path('westlaw-us/m0/csl/schema/csl.rng').write_text(rnc2rng.dumps(source), encoding='utf-8')
+```
+
+October 11, 2026: strict XML, official RELAX NG, and official Schematron passed; all 36 offline tests passed. Regression checks cover the old malformed XML, invalid month identifiers, missing/duplicate macros, DOCTYPE rejection, all twelve month terms, and structured author metadata not altering ordinary case citations. Existing Extra/CSL bridge and golden strings remain unchanged.
 
 ## CSL-JSON key findings
 
@@ -61,6 +79,6 @@ G2i's `history` field contains `<i>aff'd in part, vacated in part</i>` (HTML typ
 ## Limitations
 
 - Offline citeproc 1.4.61 from the clone (`zotero/chrome/content/zotero/xpcom/citeproc.js`), NOT the installed Zotero 7.0.32.
-- CSL schema validation: **not run** (no validator is installed).
+- CSL schema validation: **passed** using pinned CSL 1.0.2 RELAX NG plus official macro Schematron. This validates CSL structure, not Bluebook legal correctness or installed Zotero behavior.
 - The `annote` feature is not implemented in this spike.
 - The `vm.runInThisContext` approach loads citeproc-js and utilities_item.js into the global V8 context; this is a workaround for the lack of a proper module system in citeproc-js 1.4.61.

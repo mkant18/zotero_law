@@ -6,7 +6,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 const distDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
@@ -64,7 +64,9 @@ export function buildTranslator() {
   var outputParts = [];
 
   // JSON header block
-  var now = new Date();
+  // Advance for each changed deployed release so Connector invalidates cached code.
+  // Keep fixed within a release so repeated builds remain byte-for-byte reproducible.
+  var now = new Date('2026-10-11T20:00:00Z');
   var lastUpdated = now.getUTCFullYear() + '-' +
     String(now.getUTCMonth() + 1).padStart(2, '0') + '-' +
     String(now.getUTCDate()).padStart(2, '0') + ' ' +
@@ -96,10 +98,14 @@ export function buildTranslator() {
   }
 
   // Concatenate modules, removing trailing module.exports guards
+  var buildHash = createHash('sha256');
+  buildHash.update(readFileSync(fileURLToPath(import.meta.url)));
+  buildHash.update(licenseComment);
   for (var i = 0; i < modules.length; i++) {
     var modFile = modules[i];
     var modPath = join(srcDir, modFile);
-    var modCode = readFileSync(modPath, 'utf8');
+    var modCode = readFileSync(modPath, 'utf8').replace(/\r\n/g, '\n');
+    buildHash.update(modFile + '\n' + modCode);
 
     // Collect top-level function names for duplicate check
     var names = extractTopLevelFunctionNames(modCode);
@@ -140,7 +146,8 @@ export function buildTranslator() {
   outputParts.push('');
 
   // Join all parts
-  var output = outputParts.join('\n');
+  var build = buildHash.digest('hex');
+  var output = outputParts.join('\n').replace('var wlTrBuild = "source-unbuilt";', 'var wlTrBuild = "' + build + '";');
 
   // B5: Verify no module.exports or require( in built file
   if (output.indexOf('module.exports') !== -1) {
@@ -163,7 +170,7 @@ export function buildTranslator() {
   console.log('Build successful: ' + outputFile);
   console.log('translatorID: ' + translatorID);
 
-  return { outputFile, translatorID };
+  return { outputFile, translatorID, build, lastUpdated, sha256: createHash('sha256').update(output).digest('hex') };
 }
 
 // Run build when executed directly

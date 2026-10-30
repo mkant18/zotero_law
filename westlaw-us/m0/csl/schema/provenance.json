@@ -1,0 +1,53 @@
+{
+  "repository": "https://github.com/citation-style-language/schema",
+  "tag": "v1.0.2",
+  "commit": "506040022f6c37846343edd36658b23e85b5b8ff",
+  "converter": "rnc2rng 2.7.0",
+  "files": [
+    {
+      "name": "csl-categories.rnc",
+      "sha256": "890fdb79eab561b0689ae54ed48c9913b463a1734965baaf3a422137917a1ec7",
+      "source": "https://raw.githubusercontent.com/citation-style-language/schema/506040022f6c37846343edd36658b23e85b5b8ff/schemas/styles/csl-categories.rnc"
+    },
+    {
+      "name": "csl-choose.rnc",
+      "sha256": "27aadd65e05ab8122245f541d97174dd1012bc0f21e2a7a67ca55b1a94985539",
+      "source": "https://raw.githubusercontent.com/citation-style-language/schema/506040022f6c37846343edd36658b23e85b5b8ff/schemas/styles/csl-choose.rnc"
+    },
+    {
+      "name": "csl-terms.rnc",
+      "sha256": "46972bb50a59d387c73259463aa11e2f25252b42a44f89e3291dd89ce39aafbd",
+      "source": "https://raw.githubusercontent.com/citation-style-language/schema/506040022f6c37846343edd36658b23e85b5b8ff/schemas/styles/csl-terms.rnc"
+    },
+    {
+      "name": "csl-types.rnc",
+      "sha256": "0965d36fd15999274370521e1f7e79017133a273e5182c565a302d04a656647e",
+      "source": "https://raw.githubusercontent.com/citation-style-language/schema/506040022f6c37846343edd36658b23e85b5b8ff/schemas/styles/csl-types.rnc"
+    },
+    {
+      "name": "csl-variables.rnc",
+      "sha256": "b68223b73671f012eea04214199457631e594b7cec504d27ff47a7eb01362711",
+      "source": "https://raw.githubusercontent.com/citation-style-language/schema/506040022f6c37846343edd36658b23e85b5b8ff/schemas/styles/csl-variables.rnc"
+    },
+    {
+      "name": "csl.rnc",
+      "sha256": "0c9d4cbd655f02a80dfc02a688c1d7da104d31b0c8a29cde16c2bd330e21f318",
+      "source": "https://raw.githubusercontent.com/citation-style-language/schema/506040022f6c37846343edd36658b23e85b5b8ff/schemas/styles/csl.rnc"
+    },
+    {
+      "name": "csl.rng",
+      "sha256": "aff7d1c3ef1c8fb89896431fbf0dd3ace1fe089c403edcc3a9eb9b4df029557d",
+      "source": "Generated from csl.rnc using rnc2rng 2.7.0"
+    },
+    {
+      "name": "csl.sch",
+      "sha256": "f7aa872b5355b199eebb7067c81b9f65b75c364ea0738af4cfb3ad4224c983bb",
+      "source": "https://raw.githubusercontent.com/citation-style-language/schema/506040022f6c37846343edd36658b23e85b5b8ff/schemas/styles/csl.sch"
+    },
+    {
+      "name": "LICENSE.txt",
+      "sha256": "6d77b80c6b2412a010e22ee5b5d0a92689f402ddb8766dea2346b525db6a7c6d",
+      "source": "https://raw.githubusercontent.com/citation-style-language/schema/506040022f6c37846343edd36658b23e85b5b8ff/LICENSE.txt"
+    }
+  ]
+}
