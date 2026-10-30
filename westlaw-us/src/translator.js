@@ -1,4 +1,4 @@
-var wlTrVersion = "0.3.2";
+var wlTrVersion = "0.3.5";
 var wlTrBuild = "source-unbuilt";
 
 function wlTrDetectWeb(doc, url) {
@@ -39,12 +39,11 @@ function wlTrReadService(result, req) {
 }
 
 async function wlTrDoWeb(doc, url) {
+  var deadline = Date.now() + wlSvcLimits.totalMs;
   // 1. Capture page context + DOM facts FIRST (frozen)
   var frozenContext = wlDomReadPageContext(doc, url);
   var frozenDom = wlDomReadFacts(doc);
   var frozenGuid = frozenContext.config && frozenContext.config.guid;
-  var frozenHeaderName = frozenDom.headerName || "";
-  await wlTrResolveAuthorPopup(doc, url, frozenDom, frozenGuid);
 
   // 2. Classify court + select profile
   var classification = wlProfClassifyCourt(frozenDom.rawCourt || "");
@@ -93,6 +92,10 @@ async function wlTrDoWeb(doc, url) {
         identityChanged = true;
       }
     }
+  }
+
+  if (!identityChanged && ["auth", "rate-limited", "timeout", "network-or-origin"].indexOf(svcA.category) === -1) {
+    await wlTrResolveAuthor(doc, url, frozenDom, frozenContext, deadline);
   }
 
   // 5. Reconcile
@@ -164,55 +167,71 @@ async function wlTrDoWeb(doc, url) {
   item.complete();
 }
 
-// Westlaw author popup is evidence only when opened from the exact majority byline.
-async function wlTrResolveAuthorPopup(doc, url, dom, guid) {
+async function wlTrFetchAuthorJSON(url, headers, deadline) {
+  var remaining = Math.min(wlSvcLimits.timeoutMs, deadline - Date.now());
+  if (remaining <= 0) return { ok: false, reason: "timeout" };
+  var timer;
+  var timedOut = false;
+  try {
+    var response = await Promise.race([
+      ZU.request(url, { headers: headers, responseType: "text", successCodes: false }),
+      new Promise(function(_, reject) { timer = setTimeout(function() { timedOut = true; reject(new Error("timeout")); }, remaining); })
+    ]);
+    if (response.status === 401 || response.status === 403) return { ok: false, reason: "auth" };
+    if (response.status === 429) return { ok: false, reason: "rate-limited" };
+    if (response.status < 200 || response.status >= 300) return { ok: false, reason: "http" };
+    if (typeof response.body !== "string" || response.body.length > wlSvcLimits.maxBodyBytes) return { ok: false, reason: "oversized" };
+    if (!response.headers || !/application\/json/i.test(response.headers["content-type"] || "")) return { ok: false, reason: "unexpected-response" };
+    try { return { ok: true, json: JSON.parse(response.body) }; }
+    catch (_) { return { ok: false, reason: "malformed-json" }; }
+  } catch (_) {
+    return { ok: false, reason: timedOut ? "timeout" : "network" };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function wlTrResolveAuthor(doc, url, dom, context, deadline) {
   var partial = dom.author;
   if (!partial || partial.firstName || partial.fieldMode === 1) return;
   var lines = doc.querySelectorAll(".x_leadAuthorLine");
-  var buttons = [];
+  var links = [];
   for (var i = 0; i < lines.length; i++) {
     if (wlDomAuthorSkipped(lines[i])) continue;
-    var candidates = lines[i].querySelectorAll("button.co_linkBlue[data-href]");
+    var candidates = lines[i].querySelectorAll("button[data-href], a[href]");
     for (var j = 0; j < candidates.length; j++) {
-      var button = candidates[j];
-      var href = button.getAttribute("data-href") || "";
-      if (wlDomClean(button.textContent).toLowerCase() === partial.lastName.toLowerCase() && /^(?:https:\/\/1\.next\.westlaw\.com)?\/Link\/Document\/FullText\?/.test(href) && typeof button.click === "function") buttons.push(button);
+      var candidate = candidates[j];
+      if (wlDomClean(candidate.textContent).toLowerCase() !== partial.lastName.toLowerCase()) continue;
+      try {
+        var linked = new URL(candidate.getAttribute("data-href") || candidate.getAttribute("href"), "https://1.next.westlaw.com");
+        if (linked.origin !== "https://1.next.westlaw.com" || linked.pathname !== "/Link/Document/FullText" || linked.username || linked.password || linked.hash) continue;
+        var params = linked.searchParams;
+        if (params.getAll("findType").length !== 1 || params.get("findType") !== "h" || params.getAll("pubNum").length !== 1 || !/^\d{1,8}$/.test(params.get("pubNum") || "") || params.getAll("cite").length !== 1 || !/^\d{10}$/.test(params.get("cite") || "")) continue;
+        var lookup = "https://1.next.westlaw.com/Document/GetProfileSummary?findType=h&pubNum=" + params.get("pubNum") + "&cite=" + params.get("cite") + "&refType=RQ";
+        if (links.indexOf(lookup) === -1) links.push(lookup);
+      } catch (_) { /* Untrusted links cannot supply a profile. */ }
     }
   }
-  if (buttons.length !== 1) return;
-  // An already-open dialog has no proven relationship to this click. Leave it untouched.
-  if (doc.querySelector("#popBox")) return;
-  var opened = null;
-  var failure = "author-popup-not-visible";
-  try {
-    buttons[0].click();
-    for (var poll = 0; poll < 12; poll++) {
-      var popup = doc.querySelector('#popBox[role="dialog"][aria-labelledby="co_infoBox_header"]');
-      if (popup) {
-        opened = popup;
-        var header = popup.querySelector(".co_infoBox_message > h3#co_infoBox_header");
-        var author = header && wlDomLinkedAuthor(header.textContent, partial);
-        failure = !header ? "author-popup-heading-missing" : !author ? "author-popup-name-mismatch" : "author-popup-document-changed";
-        var fresh = wlDomReadPageContext(doc, url);
-        var freshTitle = doc.querySelector("#co_docHeaderTitleLine");
-        var title = freshTitle && wlDomClean(freshTitle.getAttribute("title") || freshTitle.textContent).split(" | Cases")[0];
-        if (author && (!guid || fresh.config.guid === guid) && title === dom.headerName) {
-          dom.author = author;
-          dom.reviewReasons = dom.reviewReasons.filter(function(r) { return r !== "author-name-incomplete"; });
-          return;
-        }
-      }
-      await new Promise(function(resolve) { setTimeout(resolve, 150); });
-    }
-    dom.reviewReasons.push(failure);
-  } catch (e) {
-    dom.reviewReasons.push("author-popup-unavailable");
-  } finally {
-    var close = opened && opened.querySelector(".co_infoBox_closeButton");
-    if (close && typeof close.click === "function") {
-      try { close.click(); } catch (e) { /* Name evidence remains valid; closing is cosmetic. */ }
-    }
+  if (links.length !== 1) return;
+  if (!context.secrets || context.ambiguous || !context.config.guid || !context.config.searchHost) {
+    dom.reviewReasons.push("author-profile-context-unavailable");
+    return;
   }
+  var headers = { "Accept": "application/json", "X-Requested-With": "XMLHttpRequest", "x-cobalt-exectype": "async", "x-cobalt-pcid": context.secrets.pageEventId, "x-cobalt-rtid": context.secrets.resourceToken };
+  var mapped = await wlTrFetchAuthorJSON(links[0], headers, deadline);
+  if (!mapped.ok) { dom.reviewReasons.push("author-profile-" + mapped.reason); return; }
+  var guid = mapped.json && mapped.json.docGuid;
+  if (typeof guid !== "string" || !/^I[0-9a-f]{32}$/i.test(guid)) { dom.reviewReasons.push("author-profile-identity-mismatch"); return; }
+  headers["x-cobalt-host"] = context.config.searchHost;
+  var snapshot = await wlTrFetchAuthorJSON("https://1.next.westlaw.com/Search/v1/snapshot/guid?guid=" + encodeURIComponent(guid) + "&indexType=person", headers, deadline);
+  if (!snapshot.ok) { dom.reviewReasons.push("author-profile-" + snapshot.reason); return; }
+  var author = wlDomReadJudgeProfile(snapshot.json, partial, guid);
+  if (!author) { dom.reviewReasons.push("author-profile-identity-mismatch"); return; }
+  var fresh = wlDomReadPageContext(doc, url);
+  var header = doc.querySelector("#co_docHeaderTitleLine");
+  var title = header && wlDomClean(header.getAttribute("title") || header.textContent).split(" | Cases")[0];
+  if (fresh.config.guid !== context.config.guid || title !== dom.headerName) { dom.reviewReasons.push("author-profile-document-changed"); return; }
+  dom.author = author;
 }
 
 // Zotero requires real function declarations (not var aliases) so its tooling

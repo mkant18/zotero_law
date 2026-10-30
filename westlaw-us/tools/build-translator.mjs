@@ -67,7 +67,7 @@ export function buildTranslator() {
   // JSON header block
   // Advance for each changed deployed release so Connector invalidates cached code.
   // Keep fixed within a release so repeated builds remain byte-for-byte reproducible.
-  var now = new Date('2026-10-11T20:00:00Z');
+  var now = new Date('2026-10-30T22:57:00Z');
   var lastUpdated = now.getUTCFullYear() + '-' +
     String(now.getUTCMonth() + 1).padStart(2, '0') + '-' +
     String(now.getUTCDate()).padStart(2, '0') + ' ' +

@@ -1020,12 +1020,27 @@ describe('independent review citation precedence and source retention', function
         {kind: 'reporter', volume: '347', reporter: 'U.S.', page: '483', raw: '347 U.S. 483'},
         {kind: 'reporter', volume: '74', reporter: 'S. Ct.', page: '686', raw: '74 S. Ct. 686'}
       ]}),
-      svcA: makeSvc('ok', makeEnvelope({standard: {long, shorts: []}})),
+      svcA: makeSvc('ok', makeEnvelope({standard: {long, shorts: ['Brown, 74 S. Ct. at 690']}})),
       svcB: makeSvc('ok', makeEnvelope({standard: {long, shorts: []}}))
     });
     assert.equal(result.primary.raw, '347 U.S. 483');
+    assert.equal(result.shortName, 'Brown');
     assert.ok(result.alternates.some(c => c.raw === '74 S. Ct. 686'));
     assert.equal(result.reviewReasons.includes('primary-conflict'), false);
+  });
+  it('does not borrow a short name from an unverified conflicting service reporter', function () {
+    const long = 'Other v. Board of Ed., 75 S. Ct. 686 (1954)';
+    const result = wlRecReconcile({context: {}, profile: 'standard',
+      dom: makeDom({headerName: 'Brown v. Board of Ed.', rawCourt: 'Supreme Court of the United States', date: '1954-05-17', citations: [
+        {kind: 'reporter', volume: '347', reporter: 'U.S.', page: '483', raw: '347 U.S. 483'},
+        {kind: 'reporter', volume: '74', reporter: 'S. Ct.', page: '686', raw: '74 S. Ct. 686'}
+      ]}),
+      svcA: makeSvc('ok', makeEnvelope({standard: {long, shorts: ['Other, 75 S. Ct. at 690']}})),
+      svcB: makeSvc('ok', makeEnvelope({standard: {long, shorts: []}}))
+    });
+    assert.equal(result.primary.raw, '347 U.S. 483');
+    assert.equal(result.shortName, null);
+    assert.ok(result.reviewReasons.includes('primary-conflict'));
   });
   it('deduplicates suffix-bearing docket dash variants without a false source conflict', function () {
     const long = 'Rogers v. State, No. 09-87-120 CV, 761 S.W.2d 788 (Tex. App.—Beaumont 1988)';

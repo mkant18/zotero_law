@@ -22,7 +22,7 @@ From the workspace root:
 node westlaw-us/tools/build-translator.mjs
 ```
 
-Output: `westlaw-us/dist/Westlaw Advantage US.js` (single translator file, stable ID `9abca805-707d-4064-958f-e08ac37f0862`, metadata version `0.2.1`).
+Output: `westlaw-us/dist/Westlaw Advantage US.js` (single translator file, stable ID `9abca805-707d-4064-958f-e08ac37f0862`, translator version `0.3.5`).
 
 ### 2. Locate Zotero data directory
 
@@ -71,6 +71,11 @@ node westlaw-us/tools/prototype.mjs
 It renders synthetic golden cases and does not contact Westlaw.
 
 ## Updates
+
+With the plugin installed, rebuild using `python scripts/build-plugin.py` and
+install the new XPI through Zotero's Plugins window. The plugin restores its
+bundled resources on startup; replacing only the loose translator is temporary.
+The manual steps below apply when using the translator without the plugin.
 
 1. Edit translator source in `westlaw-us/src/`.
 2. Run `node westlaw-us/tools/build-translator.mjs`.

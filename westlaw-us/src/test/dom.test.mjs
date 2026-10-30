@@ -33,9 +33,17 @@ describe("majority author identity evidence", function() {
     var result = facts(el("div", { class: "x_leadAuthorLine" }, "Mr. Chief Justice WARREN delivered the opinion of the Court."));
     assert.equal(result.author.lastName, "WARREN");
     assert.equal(result.author.firstName, "");
-    assert.ok(result.reviewReasons.includes("author-name-incomplete"));
+    assert.equal(result.reviewReasons.includes("author-name-incomplete"), false);
     var ambiguous = facts(el("div", { class: "x_leadAuthorLine" }, "Mr. Chief Justice WARREN delivered the opinion of the Court and discussed BLACK."));
     assert.equal(ambiguous.author, null);
+  });
+  it('ignores structured star pages inside a majority byline', function() {
+    var result = facts(el('div', {class: 'x_leadAuthorLine'}, ' ',
+      el('span', {class: 'co_starPage', 'aria-label': 'Star page 486'}, el('span', {'aria-hidden': 'true'}, '*486')),
+      ' Mr. Chief Justice WARREN delivered the opinion of the Court.'));
+    assert.equal(result.author.lastName, 'WARREN');
+    assert.equal(result.reviewReasons.includes('author-unparsed'), false);
+    assert.equal(facts(el('div', {class: 'x_leadAuthorLine'}, '*486 Mr. Chief Justice WARREN delivered the opinion of the Court.')).author, null);
   });
   it("never scans unrelated opinions, panel members or dissent for matching surname", function() {
     var result = facts(el("div", { class: "x_leadAuthorLine" }, "DeMOSS, Circuit Judge."),
@@ -44,7 +52,7 @@ describe("majority author identity evidence", function() {
       el("div", { class: "x_dissentAuthorLine" }, el("div", { class: "x_leadAuthorLine" }, "Wrong DeMOSS, Judge.")));
     assert.equal(result.author.firstName, "");
     assert.equal(result.author.lastName, "DeMOSS");
-    assert.ok(result.reviewReasons.includes("author-name-incomplete"));
+    assert.equal(result.reviewReasons.includes("author-name-incomplete"), false);
   });
   it("retains surname and flags conflicting linked records", function() {
     var result = facts(el("div", { class: "x_leadAuthorLine", title: "One Smith", "aria-label": "Two Smith" }, "Smith, Judge."));
@@ -68,6 +76,17 @@ describe("majority author identity evidence", function() {
     var partial = { firstName: "", lastName: "Smith" };
     assert.equal(ctx.wlDomLinkedAuthor("Hon. Jane Jones", partial), null);
     assert.equal(ctx.wlDomLinkedAuthor("Jane Smith dissent opinion", partial), null);
+  });
+  it('preserves explicit profile name fields, suffixes and provenance', function() {
+    var guid = 'Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    var profile = {snapshotResponse: {guid: guid.toUpperCase(), type: 'judge', firstName: 'José A.', lastName: 'de la Cruz, Jr.', fullName: 'Hon. José A. de la Cruz, Jr.'}};
+    var author = ctx.wlDomReadJudgeProfile(profile, {lastName: 'de la Cruz'}, guid);
+    assert.equal(author.firstName, 'José A.');
+    assert.equal(author.lastName, 'de la Cruz, Jr.');
+    assert.equal(author.source, 'lead-byline-linked-judge-profile');
+    assert.equal(ctx.wlDomReadJudgeProfile({...profile, snapshotResponse: {...profile.snapshotResponse, firstName: '<José A.'}}, {lastName: 'de la Cruz'}, guid), null);
+    assert.equal(ctx.wlDomReadJudgeProfile(profile, {lastName: 'Wrong'}, guid), null);
+    assert.equal(ctx.wlDomReadJudgeProfile(profile, {lastName: 'de la Cruz'}, null), null);
   });
 });
 
@@ -195,6 +214,16 @@ describe("wlDomReadPageContext", function() {
     assert.equal(result.config.guid, GUID);
     assert.equal(result.config.contentType, "Cases");
     assert.equal(result.config.relatedInfoHost, "relatedinfo.test.invalid");
+  });
+  it('uses a unique bounded Search routing value without degrading case readiness when it is unavailable', function() {
+    function context(extra) {
+      return wlDomReadPageContext(makeDocWithScripts([el('script', {}, '{"DocumentGuid":"' + GUID + '","Search":"search.test.invalid"' + extra + '}')]), 'https://1.next.westlaw.com/Document/' + GUID + '/View/FullText.html');
+    }
+    assert.equal(context('').config.searchHost, 'search.test.invalid');
+    assert.equal(context(',"Search":"other.test.invalid"').config.searchHost, undefined);
+    assert.equal(context(',"Search":"other.test.invalid"').ambiguous, false);
+    var unsafe = wlDomReadPageContext(makeDocWithScripts([el('script', {}, '{"Search":"bad\r\nheader"}')]), 'https://1.next.westlaw.com/');
+    assert.equal(unsafe.config.searchHost, undefined);
   });
 
   it("validates GUID format", function() {

@@ -27,7 +27,7 @@ function wlDomReadPageContext(doc, url) {
 
   var scripts = doc.querySelectorAll("script");
   var kv = {};
-  var keyPattern = /"(DocumentGuid|ContentType|RelatedInfo|PageEventIdentifier|ResourceToken)"\s*:\s*"([^"]*)"/g;
+  var keyPattern = /"(DocumentGuid|ContentType|RelatedInfo|Search|PageEventIdentifier|ResourceToken)"\s*:\s*"([^"]*)"/g;
 
   for (var i = 0; i < scripts.length; i++) {
     var text = scripts[i].textContent;
@@ -46,6 +46,8 @@ function wlDomReadPageContext(doc, url) {
   var riValues = kv["RelatedInfo"] || [];
   var peiValues = kv["PageEventIdentifier"] || [];
   var rtValues = kv["ResourceToken"] || [];
+  var searchHosts = (kv["Search"] || []).filter(function(value, index, values) { return values.indexOf(value) === index; });
+  if (searchHosts.length === 1 && /^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$/.test(searchHosts[0])) config.searchHost = searchHosts[0];
 
   var validGUIDs = [];
   for (var g = 0; g < guidValues.length; g++) {
@@ -279,8 +281,8 @@ function wlDomReadAuthor(doc, reviewReasons) {
   for (var i = 0; i < lines.length; i++) {
     if (wlDomAuthorSkipped(lines[i])) continue;
     var line = wlDomClean(lines[i].textContent);
-    var popup = lines[i].querySelector(".co_infoBox");
-    if (popup) line = wlDomClean(line.replace(wlDomClean(popup.textContent), ""));
+    var artifacts = lines[i].querySelectorAll(".co_starPage, .co_infoBox");
+    for (var a = 0; a < artifacts.length; a++) line = wlDomClean(line.replace(wlDomClean(artifacts[a].textContent), ""));
     var name = "";
     if (/^per curiam[:.]?$/i.test(line)) name = "Per Curiam";
     else {
@@ -320,7 +322,6 @@ function wlDomReadAuthor(doc, reviewReasons) {
   }
   if (names.length > 1) reviewReasons.push("author-conflict");
   var result = names.length === 1 && reviewReasons.indexOf("author-unparsed") === -1 ? names[0] : null;
-  if (result && !result.firstName && result.fieldMode !== 1) reviewReasons.push("author-name-incomplete");
   return result;
 }
 
@@ -344,10 +345,26 @@ function wlDomLinkedAuthor(text, partial) {
   var name = wlDomClean(text).replace(/^Hon\.?\s+/i, "");
   if (!name || name.length > 200 || !/^[\p{L}\p{M} .'’-]+(?:,\s*(?:Jr\.?|Sr\.?|II|III|IV))?$/u.test(name) || /\b(?:panel|dissent|concurr|opinion|before|and|judge|justice)\b/i.test(name)) return null;
   var author = wlDomSplitAuthor(name);
-  var base = function(s) { return s.replace(/\s+(?:Jr\.?|Sr\.?|II|III|IV)$/i, "").toLowerCase(); };
+  var base = function(s) { return s.replace(/,?\s+(?:Jr\.?|Sr\.?|II|III|IV)$/i, "").toLowerCase(); };
   if (!author.firstName || base(author.lastName) !== base(partial.lastName)) return null;
-  author.source = "lead-byline-linked-author-popup";
+  author.source = "lead-byline-linked-judge-profile";
   author.evidence = wlDomClean(text);
+  return author;
+}
+
+function wlDomReadJudgeProfile(json, partial, guid) {
+  var profile = json && json.snapshotResponse;
+  if (typeof guid !== "string" || !/^I[0-9a-f]{32}$/i.test(guid) || !partial || typeof partial.lastName !== "string") return null;
+  if (!profile || profile.type !== "judge" || typeof profile.guid !== "string" || profile.guid.toLowerCase() !== guid.toLowerCase()) return null;
+  if (typeof profile.firstName !== "string" || typeof profile.lastName !== "string" || typeof profile.fullName !== "string") return null;
+  var first = wlDomClean(profile.firstName);
+  var last = wlDomClean(profile.lastName);
+  var full = wlDomClean(profile.fullName);
+  var author = wlDomLinkedAuthor(full, partial);
+  if (!author || !first || !last || first.length + last.length > 200 || !/^[\p{L}\p{M} .'’-]+$/u.test(first) || !/^[\p{L}\p{M} .'’-]+(?:,\s*(?:Jr\.?|Sr\.?|II|III|IV))?$/u.test(last) || wlTextCompareKey(first + " " + last) !== wlTextCompareKey(full.replace(/^Hon\.?\s+/i, ""))) return null;
+  author.firstName = first;
+  author.lastName = last;
+  author.profileGuid = profile.guid;
   return author;
 }
 

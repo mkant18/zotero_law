@@ -130,6 +130,7 @@ function wlMapToZoteroFields(rec, opts) {
   if (rec.author && typeof rec.author === "object") {
     extraLines.push("Westlaw author source: " + wlMapStripWatermark(rec.author.source || "lead-majority-byline"));
     extraLines.push("Westlaw author evidence: " + wlMapStripWatermark(rec.author.evidence || ""));
+    if (typeof rec.author.profileGuid === "string" && /^I[0-9a-f]{32}$/i.test(rec.author.profileGuid)) extraLines.push("Westlaw author profile: " + rec.author.profileGuid);
   }
   var extra = extraLines.join("\n");
 

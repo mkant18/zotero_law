@@ -461,6 +461,9 @@ function wlRecReconcile(input) {
     var shortName = null;
     if (aShorts.length > 0 && primary) {
       shortName = wlCiteSelectShortName(aShorts, primary);
+      if (shortName === null && officialUS && matchesDOM) {
+        shortName = wlCiteSelectShortName(aShorts, firstReporterCite);
+      }
     }
     if (shortName !== null) {
       provenance.shortName = "service";

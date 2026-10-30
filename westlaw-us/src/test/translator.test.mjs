@@ -117,6 +117,7 @@ function loadBuiltFile(fakeZotero, fakeZU) {
 
   var context = vm.createContext({
     console: console,
+    URL: URL,
     Zotero: fakeZotero,
     ZU: { request: fakeZU },
     setTimeout: setTimeout,
@@ -167,7 +168,8 @@ function makeSanchezDoc(opts) {
     title: title,
     href: href,
     hostname: hostname,
-    body: el("body", {}, header, citationList, docketBlock, el("script", {}, ""), ...scripts)
+    body: el("body", {}, header, citationList, docketBlock, el("script", {}, ""), ...scripts,
+      opts.author ? el("div", {class: "x_leadAuthorLine"}, opts.author) : null)
   });
 }
 
@@ -217,7 +219,7 @@ async function runDoWeb(doc, mockA, mockB) {
 
 // ---- Test suite ----
 
-describe("offline journey â€” built translator to real Zotero CSL renderer", function() {
+describe("offline journey — built translator to real Zotero CSL renderer", function() {
   const expected = JSON.parse(readFileSync(new URL('../../m0/csl/fixtures/expected.json', import.meta.url)));
   const fields = JSON.parse(readFileSync(new URL('./fixtures/item-fields-expected.json', import.meta.url)));
   const cases = [
@@ -566,52 +568,117 @@ describe("translator - doWeb envelope echo mismatch", function() {
 
 // ---- Non-echo envelope review reasons reach the saved item (W5) ----
 describe("built translator - explicit opinion author", function() {
-  it("records exact popup visibility failure and preserves known surname", async function() {
-    var button = el("button", { class: "co_linkBlue", "data-href": "/Link/Document/FullText?findType=h" }, "Smith");
-    button.click = function() {};
-    var doc = makeDoc({ body: el("body", {}, el("div", { class: "x_leadAuthorLine" }, button, ", Judge.")) });
-    var ctx = loadBuiltFile(makeFakeZotero(), makeFakeZU());
-    ctx.setTimeout = function(resolve) { resolve(); };
+  var profileGuid = 'Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  function authorFixture(href, tag) {
+    var base = makeSanchezDoc();
+    tag = tag || 'button';
+    var link = el(tag, {class: 'co_linkBlue', [tag === 'button' ? 'data-href' : 'href']: href || '/Link/Document/FullText?findType=h&pubNum=176284&cite=0000000001&refType=RQ'}, 'DeMOSS');
+    link.click = function() { throw new Error('A detached translator must never click the page'); };
+    return makeDoc({title: base.title, body: el('body', {}, ...base.documentElement.children[0].children,
+      el('script', {}, '{"Search":"search.test.invalid"}'),
+      el('div', {class: 'x_leadAuthorLine'}, link, ', Circuit Judge.'))});
+  }
+  function profileResponse(overrides) {
+    return jsonResponse({snapshotResponse: {type: 'judge', guid: profileGuid, firstName: 'Harold R.', lastName: 'DeMoss Jr.', fullName: 'Hon. Harold R. DeMoss Jr.', ...overrides}});
+  }
+  async function resolveProfile(doc, response) {
+    var request = makeFakeZU();
+    request.setMockResponse('GetProfileSummary', jsonResponse({docGuid: profileGuid}));
+    request.setMockResponse('snapshot/guid', response || profileResponse());
+    var ctx = loadBuiltFile(makeFakeZotero(), request);
     var facts = ctx.wlDomReadFacts(doc);
-    await ctx.wlTrResolveAuthorPopup(doc, doc.location.href, facts, null);
-    assert.equal(facts.author.lastName, "Smith");
-    assert.ok(facts.reviewReasons.includes("author-popup-not-visible"));
-    assert.ok(facts.reviewReasons.includes("author-name-incomplete"));
+    await ctx.wlTrResolveAuthor(doc, doc.location.href, facts, ctx.wlDomReadPageContext(doc, doc.location.href), Date.now() + 20000);
+    return {facts, request, ctx};
+  }
+  it('resolves the linked judge record without detached DOM clicks, for buttons and anchors', async function() {
+    for (const tag of ['button', 'a']) {
+      var result = await resolveProfile(authorFixture(null, tag));
+      assert.equal(result.facts.author.firstName, 'Harold R.');
+      assert.equal(result.facts.author.lastName, 'DeMoss Jr.');
+      assert.equal(result.facts.author.source, 'lead-byline-linked-judge-profile');
+      assert.equal(result.facts.reviewReasons.includes('author-name-incomplete'), false);
+      var calls = result.request.getCalls();
+      assert.equal(calls.length, 2);
+      assert.match(calls[0].url, /^https:\/\/1\.next\.westlaw\.com\/Document\/GetProfileSummary\?/);
+      assert.equal(calls[1].options.headers.Accept, 'application/json');
+      assert.equal(calls[1].options.headers['x-cobalt-host'], 'search.test.invalid');
+      assert.doesNotMatch(calls.map(c => c.url).join('\n'), /TEST-RT|TEST-PEI/);
+    }
   });
-  it("resolves exact majority popup, keeps provenance and closes it", async function() {
-    var button = el("button", { class: "co_linkBlue", "data-href": "/Link/Document/FullText?findType=h&cite=0248303601" }, "DeMOSS");
-    var close = el("button", { class: "co_infoBox_closeButton" });
-    var popup = el("div", { id: "popBox", role: "dialog", "aria-labelledby": "co_infoBox_header" },
-      el("div", { class: "co_infoBox_message" }, el("h3", { id: "co_infoBox_header" }, "Hon. Harold R. DeMoss Jr.")), close);
-    var doc = makeDoc({ title: "Example | Cases", body: el("body", {},
-      el("div", { id: "co_docHeaderTitleLine" }, "Example"),
-      el("div", { class: "x_leadAuthorLine" }, button, ", Circuit Judge.")) });
-    var visible = null;
-    var clicks = 0;
-    button.click = function() { clicks++; visible = popup; };
-    close.click = function() { visible = null; };
-    var original = doc.querySelector.bind(doc);
-    doc.querySelector = function(selector) { return selector.startsWith("#popBox") ? visible : original(selector); };
-    var result = await runDoWebRouted(doc);
-    var item = result.fz.items[0];
-    assert.equal(clicks, 1);
-    assert.equal(visible, null);
-    assert.equal(item.creators[0].firstName, "Harold R.");
-    assert.equal(item.creators[0].lastName, "DeMoss Jr.");
-    assert.match(item.extra, /Westlaw author evidence: Hon\. Harold R\. DeMoss Jr\./);
-    assert.match(item.extra, /Westlaw author source: lead-byline-linked-author-popup/);
-    assert.doesNotMatch(item.extra, /author-name-incomplete/);
-    assert.match(item.extra, /Westlaw build: [a-f0-9]{64}/);
-    assert.match(item.extra, /Westlaw import run: [a-z0-9]+-[a-z0-9]+/);
-    var second = await runDoWebRouted(doc);
-    assert.notEqual(item.extra.match(/Westlaw import run: (.+)/)[1], second.fz.items[0].extra.match(/Westlaw import run: (.+)/)[1]);
-    // Stale dialog must neither enrich surname nor be closed by importer.
-    visible = popup;
-    var stale = await runDoWebRouted(doc);
-    assert.equal(clicks, 2);
-    assert.equal(stale.fz.items[0].creators[0].firstName, "");
-    assert.match(stale.fz.items[0].extra, /author-name-incomplete/);
-    assert.equal(visible, popup);
+  it('retains the surname when profile identity, type or name conflicts', async function() {
+    for (const overrides of [{guid: 'Ibbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'}, {type: 'attorney'}, {lastName: 'Jones', fullName: 'Hon. Harold R. Jones'}]) {
+      var result = await resolveProfile(authorFixture(), profileResponse(overrides));
+      assert.equal(result.facts.author.firstName, '');
+      assert.ok(result.facts.reviewReasons.includes('author-profile-identity-mismatch'));
+      assert.equal(result.facts.reviewReasons.includes('author-name-incomplete'), false);
+    }
+  });
+  it('rejects unsafe and ambiguous profile links before making requests', async function() {
+    for (const href of ['https://evil.invalid/Link/Document/FullText?findType=h&pubNum=176284&cite=0000000001', '/Link/Document/FullText?findType=h&pubNum=176284&cite=0000000001&cite=0000000002', '/Link/Document/FullText?findType=h&pubNum=176284&cite=not-an-id']) {
+      var result = await resolveProfile(authorFixture(href));
+      assert.equal(result.request.getCalls().length, 0);
+      assert.equal(result.facts.author.firstName, '');
+    }
+  });
+  it('saves attributed personal name fields and evidence through the complete translator', async function() {
+    var request = makeFakeZU();
+    request.setMockResponse('GetProfileSummary', jsonResponse({docGuid: profileGuid}));
+    request.setMockResponse('snapshot/guid', profileResponse());
+    var zotero = makeFakeZotero();
+    var ctx = loadBuiltFile(zotero, request);
+    var doc = authorFixture();
+    await ctx.doWeb(doc, doc.location.href);
+    assert.equal(zotero.items.length, 1);
+    assert.equal(zotero.items[0].creators[0].firstName, 'Harold R.');
+    assert.match(zotero.items[0].extra, /Westlaw author evidence: Hon\. Harold R\. DeMoss Jr\./);
+    assert.equal(zotero.items[0].reporter, 'F.3d');
+    assert.equal(zotero.items[0].attachments.length, 0);
+    assert.equal(request.getCalls().length, 4);
+    assert.match(zotero.items[0].extra, /Westlaw author profile: Iaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/);
+  });
+  it('stops after an auth failure and retains bounded diagnostics without response contents', async function() {
+    var request = makeFakeZU();
+    request.setMockResponse('GetProfileSummary', {status: 403, body: 'TEST-PRIVATE-RESPONSE', headers: {}});
+    var ctx = loadBuiltFile(makeFakeZotero(), request);
+    var doc = authorFixture();
+    var facts = ctx.wlDomReadFacts(doc);
+    await ctx.wlTrResolveAuthor(doc, doc.location.href, facts, ctx.wlDomReadPageContext(doc, doc.location.href), Date.now()+20000);
+    assert.equal(request.getCalls().length, 1);
+    assert.equal(facts.author.firstName, '');
+    assert.ok(facts.reviewReasons.includes('author-profile-auth'));
+    assert.doesNotMatch(JSON.stringify(facts), /TEST-PRIVATE-RESPONSE|TEST-RT|TEST-PEI/);
+  });
+  it('rejects malformed JSON, HTML, oversized bodies and expired deadlines', async function() {
+    for (const [response, reason] of [
+      [{status: 200, body: '{', headers: {'content-type': 'application/json'}}, 'malformed-json'],
+      [{status: 200, body: '<html>login</html>', headers: {'content-type': 'text/html'}}, 'unexpected-response'],
+      [{status: 200, body: 'x'.repeat(2000001), headers: {'content-type': 'application/json'}}, 'oversized']
+    ]) {
+      var request = makeFakeZU(); request.setMockResponse('GetProfileSummary', response);
+      var ctx = loadBuiltFile(makeFakeZotero(), request);
+      var result = await ctx.wlTrFetchAuthorJSON('https://1.next.westlaw.com/Document/GetProfileSummary', {}, Date.now()+20000);
+      assert.equal(result.reason, reason);
+    }
+    var request = makeFakeZU(); var ctx = loadBuiltFile(makeFakeZotero(), request);
+    assert.equal((await ctx.wlTrFetchAuthorJSON('https://1.next.westlaw.com/Document/GetProfileSummary', {}, Date.now()-1)).reason, 'timeout');
+    assert.equal(request.getCalls().length, 0);
+  });
+  it('bounds an unanswered request and rejects a changed case before attribution', async function() {
+    var ctx = loadBuiltFile(makeFakeZotero(), function() { return new Promise(function() {}); });
+    ctx.setTimeout = function(callback) { callback(); return 1; }; ctx.clearTimeout = function() {};
+    assert.equal((await ctx.wlTrFetchAuthorJSON('https://1.next.westlaw.com/Document/GetProfileSummary', {}, Date.now()+20000)).reason, 'timeout');
+    var doc = authorFixture();
+    var request = makeFakeZU(); request.setMockResponse('GetProfileSummary', jsonResponse({docGuid: profileGuid}));
+    request.setMockResponse('snapshot/guid', profileResponse());
+    var changedRequest = function(url, options) {
+      if (url.includes('snapshot/guid')) Object.defineProperty(doc.querySelector('#co_docHeaderTitleLine'), 'textContent', {value: 'Another case'});
+      return request(url, options);
+    };
+    ctx = loadBuiltFile(makeFakeZotero(), changedRequest);
+    var facts = ctx.wlDomReadFacts(doc);
+    await ctx.wlTrResolveAuthor(doc, doc.location.href, facts, ctx.wlDomReadPageContext(doc, doc.location.href), Date.now()+20000);
+    assert.equal(facts.author.firstName, '');
+    assert.ok(facts.reviewReasons.includes('author-profile-document-changed'));
   });
   it("saves lead author, excludes dissent, and preserves citation fields", async function() {
     var doc = makeDoc({
@@ -634,7 +701,7 @@ describe("built translator - explicit opinion author", function() {
     assert.equal(item.creators[0].creatorType, "author");
     assert.equal(item.creators[0].fieldMode, undefined);
     assert.equal(item.creators[0].firstName, "");
-    assert.match(item.extra, /Westlaw review: author-name-incomplete/);
+    assert.doesNotMatch(item.extra, /Westlaw review: author-name-incomplete/);
     assert.match(item.extra, /Westlaw author source: lead-majority-byline/);
     assert.equal(item.court, "5th Cir.");
     assert.equal(item.dateDecided, "1999-08-25");
@@ -755,6 +822,20 @@ describe("translator - doWeb envelope review reasons (non-echo)", function() {
     assert.deepEqual(w5ReviewLines(item), [], "no review lines");
     assert.ok(item.extra.indexOf("Westlaw status: validated-profile") !== -1, "validated");
     assert.equal(w5HasReviewTag(item), false, "no review tag");
+  });
+  it('accepts an unambiguous surname-only majority author without demoting the citation', async function() {
+    var result = await runDoWebRouted(makeSanchezDoc({author: 'DeMOSS, Circuit Judge.'}),
+      jsonResponse({responses: [w5StandardResponse()]}),
+      jsonResponse({responses: [w5StandardResponse(), w5WestlawResponse()]}));
+    var item = result.fz.items[0];
+    assert.deepEqual(JSON.parse(JSON.stringify(item.creators)), [{creatorType: 'author', firstName: '', lastName: 'DeMOSS'}]);
+    assert.deepEqual(w5ReviewLines(item), []);
+    assert.match(item.extra, /Westlaw status: validated-profile/);
+    assert.match(item.extra, /Westlaw author evidence: DeMOSS, Circuit Judge\./);
+    assert.equal(w5HasReviewTag(item), false);
+    assert.equal(result.fzu.getCalls().length, 2);
+    assert.equal(item.shortTitle, 'Sanchez');
+    assert.equal(item.reporter, 'F.3d');
   });
 });
 
