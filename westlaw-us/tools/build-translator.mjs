@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { Script } from 'node:vm';
 
 const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 const distDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
@@ -158,6 +159,9 @@ export function buildTranslator() {
     console.error('ERROR: Built file contains require(');
     process.exit(1);
   }
+
+  // Zotero consumes the JSON header separately from the JavaScript body.
+  new Script(output.slice(output.indexOf('\n}\n') + 3), { filename: outputFile });
 
   // Ensure dist directory exists
   if (!existsSync(distDir)) {

@@ -29,3 +29,6 @@
 
 # Generated plugin release artifacts
 /dist/
+
+# Python test caches
+__pycache__/

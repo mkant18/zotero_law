@@ -742,11 +742,14 @@ describe("translator - Zotero.debug strings", function() {
 
 describe("translator - build script", function() {
   it("build-translator.mjs runs without error", function() {
-    assert.ok(true, "build was called at test setup");
+    assert.ok(readFileSync(builtFile, "utf8").length > 0);
   });
 
-  it("built file passes node --check", function() {
-    assert.ok(true, "node --check passed during build");
+  it("built translator body compiles after its Zotero JSON header", function() {
+    const content = readFileSync(builtFile, "utf8");
+    const headerEnd = content.indexOf("\n}\n");
+    assert.ok(headerEnd > 0);
+    assert.doesNotThrow(() => new vm.Script(content.slice(headerEnd + 3), { filename: builtFile }));
   });
 
   it("two builds produce the same translatorID (stable across builds)", function() {

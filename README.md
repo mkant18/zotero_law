@@ -15,6 +15,14 @@ downloads require access and automatic update authentication may be unavailable.
 Build with `python scripts/build-plugin.py` (Python 3 and Node.js required).
 Artifacts: `dist/*.xpi`, `dist/updates.json`, `dist/SHA256SUMS.txt`.
 
+Run all checks with `python scripts/test.py` (also works from another directory using
+the script's full path). This runs translator, citation/schema, privacy, probe,
+plugin lifecycle, and isolated XPI build tests; any failed suite returns a nonzero exit.
+The citation tests require the existing upstream `zotero/` and `utilities/` clones
+(see `scripts/clone-upstream.sh`) and Python `lxml`. Build tests use temporary
+directories and never install, publish, or replace release artifacts in `dist/`.
+The translator suite rebuilds `westlaw-us/dist/Westlaw Advantage US.js`.
+
 ## Layout
 - `reports/00-SYNTHESIS.md` — consolidated findings: Zotero, the Chrome connector (MV3), translators, `case` → CSL → Bluebook.
 - `reports/10-WESTLAW-LIVE-FINDINGS.md` — live Westlaw page anatomy + the Copy-with-Reference citation service and its full option map.

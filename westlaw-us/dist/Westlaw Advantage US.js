@@ -3402,7 +3402,7 @@ function wlRecReconcile(input) {
 
 /* ---- translator.js ---- */
 var wlTrVersion = "0.3.2";
-var wlTrBuild = "9ad6be6f331a02b6bb6251a3ca7feb06243dc0bad7dbd147bb9eda9658c2e0f4";
+var wlTrBuild = "b4441f74a92840e4f98376d7105b97c581e598bb19b5b4e188f409ef003f027c";
 
 function wlTrDetectWeb(doc, url) {
   var readiness = wlDomInspectCaseReadiness(doc, url);
