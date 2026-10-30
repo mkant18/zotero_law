@@ -4,7 +4,7 @@
 
 Copyright © 2026 Michael Kanter, for his original contributions.
 
-Author attribution: **Michael Kanter at Harvard Law School**.
+Author attribution: **[Michael Kanter](https://www.linkedin.com/in/michael-kanter) at Harvard Law School**.
 
 The original translator and plugin bootstrap/build code is licensed under the
 GNU Affero General Public License, version 3 or, at your option, any later

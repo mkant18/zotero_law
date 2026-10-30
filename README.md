@@ -7,7 +7,7 @@
 Save Westlaw Advantage US cases to Zotero with structured metadata.<br>
 Cite with the bundled Bluebook Law Review style.
 
-By **Michael Kanter at Harvard Law School**.
+By **[Michael Kanter](https://www.linkedin.com/in/michael-kanter) at Harvard Law School**.
 
 [![Release: Beta v.1](https://img.shields.io/badge/release-Beta_v.1-6D5EF5?style=flat-square)](https://github.com/mkant18/zotero_law/releases/tag/v0.1.1beta1)
 [![Declared compatibility: Zotero 7–10](https://img.shields.io/badge/Zotero-7%E2%80%9310-CC2936?style=flat-square)](#compatibility-and-beta-limits)
@@ -122,7 +122,7 @@ For this release, the previously recorded restriction against rerunning the full
 
 Translator and plugin code: **AGPL-3.0-or-later**. Bundled CSL derivative: **CC BY-SA 3.0**, with upstream attribution retained in the style. See [license notices](plugin/LICENSE.txt).
 
-**Required attribution: Michael Kanter at Harvard Law School.** Preserve this author attribution when redistributing covered original code under the section 7(b) term in [License and attribution](LICENSE.md). For the local CSL modifications, provide attribution under CC BY-SA 3.0 and retain upstream credits. Copying and modification remain permitted under the applicable licenses.
+**Required attribution: [Michael Kanter](https://www.linkedin.com/in/michael-kanter) at Harvard Law School.** Preserve this author attribution when redistributing covered original code under the section 7(b) term in [License and attribution](LICENSE.md). For the local CSL modifications, provide attribution under CC BY-SA 3.0 and retain upstream credits. Copying and modification remain permitted under the applicable licenses.
 
 The affiliation identifies the author and does not imply Harvard Law School sponsorship or endorsement.
 
