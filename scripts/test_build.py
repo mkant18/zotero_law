@@ -142,6 +142,75 @@ class BuildTests(unittest.TestCase):
         self.assertIn('ENOENT', self.build(success=False).stderr)
         self.assertFalse(self.xpi.exists())
 
+    def test_unrelated_private_and_stale_files_are_not_packaged(self):
+        for relative in ('plugin/private-note.txt', 'westlaw-us/src/unlisted.js',
+                         'westlaw-us/.private/capture.txt'):
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'TEST-PRIVATE-BUILD-SENTINEL')
+        self.xpi.parent.mkdir()
+        stale = self.xpi.parent / 'unrelated-release.xpi'
+        stale.write_bytes(b'PREVIOUS-RELEASE')
+        self.build()
+        with zipfile.ZipFile(self.xpi) as archive:
+            self.assertEqual(set(archive.namelist()), set(RESOURCES))
+            for name in archive.namelist():
+                self.assertNotIn(b'TEST-PRIVATE-BUILD-SENTINEL', archive.read(name))
+        self.assertEqual(stale.read_bytes(), b'PREVIOUS-RELEASE')
+
+    def test_bootstrap_and_style_changes_reach_bundle_and_checksum(self):
+        self.build()
+        before = self.xpi.read_bytes()
+        changes = {
+            'bootstrap.js': b'\n// build bootstrap sentinel\n',
+            'resources/bluebook-law-review-westlaw-us.csl': b'\n<!-- build style sentinel -->\n',
+        }
+        for target, addition in changes.items():
+            source = self.root / RESOURCES[target]
+            source.write_bytes(source.read_bytes() + addition)
+        self.build()
+        self.assertNotEqual(before, self.xpi.read_bytes())
+        with zipfile.ZipFile(self.xpi) as archive:
+            for target in changes:
+                self.assertEqual(archive.read(target), (self.root / RESOURCES[target]).read_bytes())
+        digest = hashlib.sha256(self.xpi.read_bytes()).hexdigest()
+        updates = json.loads((self.xpi.parent / 'updates.json').read_text())
+        self.assertEqual(updates['addons'][self.manifest['applications']['zotero']['id']]
+                         ['updates'][0]['update_hash'], f'sha256:{digest}')
+
+    def test_version_change_keeps_old_release_and_updates_download_target(self):
+        self.build()
+        before = self.xpi.read_bytes()
+        self.manifest['version'] = '9.9.9-test'
+        (self.root / 'plugin/manifest.json').write_text(json.dumps(self.manifest), encoding='utf-8')
+        self.build()
+        replacement = self.xpi.parent / 'westlaw-advantage-us-9.9.9-test.xpi'
+        self.assertEqual(self.xpi.read_bytes(), before)
+        with zipfile.ZipFile(replacement) as archive:
+            self.assertEqual(json.loads(archive.read('manifest.json'))['version'], '9.9.9-test')
+        updates = json.loads((self.xpi.parent / 'updates.json').read_text())
+        entry = updates['addons'][self.manifest['applications']['zotero']['id']]['updates'][0]
+        self.assertEqual(entry['version'], '9.9.9-test')
+        self.assertEqual(entry['update_link'],
+                         f'https://github.com/mkant18/zotero_law/releases/download/v9.9.9-test/{replacement.name}')
+        digest = hashlib.sha256(replacement.read_bytes()).hexdigest()
+        self.assertEqual(entry['update_hash'], f'sha256:{digest}')
+        self.assertEqual((replacement.parent / 'SHA256SUMS.txt').read_text(),
+                         f'{digest}  {replacement.name}\n')
+
+    def test_missing_probe_fails_before_creating_outputs(self):
+        (self.root / 'westlaw-us/m0/probe/Westlaw US M0 Probe.js').unlink()
+        self.assertIn('ENOENT', self.build(success=False).stderr)
+        self.assertFalse(self.xpi.parent.exists())
+        self.assertFalse((self.root / 'westlaw-us/dist').exists())
+
+    def test_invalid_manifest_preserves_existing_release_files(self):
+        self.build()
+        before = {path.name: path.read_bytes() for path in self.xpi.parent.iterdir()}
+        (self.root / 'plugin/manifest.json').write_text('{"version":', encoding='utf-8')
+        self.assertIn('JSONDecodeError', self.build(success=False).stderr)
+        self.assertEqual(before, {path.name: path.read_bytes() for path in self.xpi.parent.iterdir()})
+
 
 if __name__ == '__main__':
     unittest.main()
