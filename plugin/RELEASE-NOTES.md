@@ -1,3 +1,21 @@
+# Beta v.1 — Westlaw Advantage US
+
+Package version: **0.1.1beta1**. Bundles translator **0.3.5** with a source-derived build identifier and the local Bluebook Law Review CSL style. This version advances beyond all earlier 0.1.0 beta builds; no existing tag or versioned release is replaced.
+
+Merged main, release, and offline-prototype histories before packaging. Includes the reviewed required-metadata, Texas full-date, HTTP-status, staged-packaging/rollback, and browser-helper repairs. The main-branch parser, court-table, review-code, and fallback changes are integrated with the current repair behavior.
+
+Merge decisions: header authority wins ordinary court conflicts; Texas district completion and New York reporter-specific omissions remain supported. Conflicting docket sets are retained and flagged. Current required-metadata rejection and explicit majority-byline/profile evidence take precedence over older permissive validation and signature scanning. Unknown jurisdictions cannot inherit a court solely from an unrelated official reporter.
+
+Install the XPI through Zotero → Tools → Plugins → gear → Install Plugin From File. Refresh Westlaw and save with Zotero Connector while Zotero desktop runs. Choose **Bluebook Law Review (Westlaw US local)** for citations. Repository access is required for private downloads; manual updates may be necessary.
+
+Fresh verification is limited to bounded offline merge, metadata, built-translator, and packaging checks, plus inspection of the actual XPI/checksum/feed. The full suite was not rerun. Earlier native Zotero/Chrome/Word acceptance below is historical; the merged package has not been installed or freshly accepted through those apps. LibreOffice remains unverified. See [verification evidence](../reports/beta-v1/VERIFICATION.md).
+
+The translator saves metadata without opinion text or attachments. Previously saved items are not migrated. Review uncertainty flags and citation output. Compatibility is declared for Zotero 7–10; no claim of complete Bluebook compliance is made.
+
+---
+
+## Earlier repair build (historical evidence)
+
 Westlaw Advantage US 0.1.0beta4 (repair build)
 
 Local metadata-repair beta. Bundles the current Westlaw US translator
@@ -41,5 +59,4 @@ The translator targets US case documents at https://1.next.westlaw.com/ and save
 metadata rather than opinion text or attachments. No claim of complete Bluebook
 compliance. Previously saved items require manual review.
 
-The repair source is maintained on the release branch. The published beta1 XPI
-release and its update feed remain unchanged; build the current XPI locally.
+Historical note: the 0.1.0beta4 repair build preceded Beta v.1. Earlier releases remain available.

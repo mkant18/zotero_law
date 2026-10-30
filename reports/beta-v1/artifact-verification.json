@@ -1,0 +1,23 @@
+{
+  "version": "0.1.1beta1",
+  "sha256": "2bd664c6487dfb542728edfbab1ed2a0a65c0c516b1717f9331a1276f9fadd48",
+  "entries": [
+    "manifest.json",
+    "bootstrap.js",
+    "resources/Westlaw Advantage US.js",
+    "resources/bluebook-law-review-westlaw-us.csl",
+    "LICENSE.txt"
+  ],
+  "source_bytes_match": true,
+  "checksum_and_update_feed_match": true,
+  "branches_in_main": [
+    "backup/pre-beta-v1-main",
+    "backup/pre-beta-v1-release",
+    "main",
+    "release/westlaw-plugin-0.1.0beta1",
+    "origin",
+    "origin/feat/westlaw-offline-prototype",
+    "origin/main",
+    "origin/release/westlaw-plugin-0.1.0beta1"
+  ]
+}

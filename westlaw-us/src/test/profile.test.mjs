@@ -1157,4 +1157,3 @@ describe("Lane A - P2-12c NY Bluebook 10.4(b) court forms", function() {
     assert.equal(wlProfCourtForCitation(c, { reporter: "N.Y.S.2d" }, null).court, "N.Y.");
   });
 });
-

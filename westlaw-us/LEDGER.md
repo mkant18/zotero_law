@@ -46,7 +46,7 @@ Labels: **[V]** verified (command/evidence recorded) · **[I]** inferred · **[P
 | M0-L | **Live** connector request path, fallback/snapshot, installed-Zotero CSL proof | user + orchestrator | **[B] blocked on user authorization** | `m0/MANUAL-SPIKE.md` |
 | M0-G | M0 go/no-go | orchestrator + reviewer | [B] needs M0-L | — |
 | M1-A1 | `src/text.js`, `src/reporters.js` | Ling | [V] done, reviewed | tests text/reporters |
-| M1-A2 | `src/cite-parse.js` (standard/texas/westlaw-inventory, short names, R4 round-trip fix) | Sonnet worker | [V] done; R4 fixed (dateText + historySep + pinAfter; WL forms round-trip dockets and full dates); G7 validated-profile | tests cite-parse |  
+| M1-A2 | `src/cite-parse.js` (standard/texas/westlaw-inventory, short names, R4 round-trip fix) | Sonnet worker | [V] done; R4 fixed (dateText + historySep + pinAfter; WL forms round-trip dockets and full dates); G7 validated-profile | tests cite-parse |
 | M1-C | `src/dom.js` + fake DOM helper; W7 fallback selectors; W9 review reasons | Sonnet worker | [V] done; header-fallback + conflicting-header forwarded to rec.reviewReasons | tests dom |
 | M1-D | `src/map.js` | Sonnet worker | [V] done | tests map |
 | M1-E | `src/service.js` (requests, fetch/classify, envelope); W2 echo checks | Sonnet worker | [V] done; wlSvcReadEnvelope validates echo format options; malformed-envelope hardened | tests service |
