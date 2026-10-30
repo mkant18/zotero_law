@@ -6,6 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildTranslator } from "../../tools/build-translator.mjs";
 import { el, makeDoc } from "./helpers/fakedom.mjs";
+import { render } from "../../m0/csl/harness/render.mjs";
+import { G1, G2, G3, G4, G5, G7 } from "./fixtures/golden-inputs.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(__dirname, "..", "..", "dist");
@@ -214,6 +216,126 @@ async function runDoWeb(doc, mockA, mockB) {
 }
 
 // ---- Test suite ----
+
+describe("offline journey â€” built translator to real Zotero CSL renderer", function() {
+  const expected = JSON.parse(readFileSync(new URL('../../m0/csl/fixtures/expected.json', import.meta.url)));
+  const fields = JSON.parse(readFileSync(new URL('./fixtures/item-fields-expected.json', import.meta.url)));
+  const cases = [
+    ['G1', G1, expected.E1, '490', expected.E2, expected.E3],
+    ['G2', G2, expected.E17, '15', null, expected.E21],
+    ['G3', G3, 'Brown v. Bd. of Educ., 347 U.S. 483 (1954)', '495', expected.E18, 'Brown v. Bd. of Educ., 347 U.S. at 495'],
+    ['G4', G4, expected.E16, '390', null, 'Miele, 770 N.Y.S.2d at 390'],
+    ['G5', G5, expected.E8, '791', null, expected.E9],
+    ['G7', G7, expected.E11, '*4', expected.E10, expected.E12]
+  ];
+
+  function documentFor(input, withSecrets = true) {
+    const d = input.dom;
+    const [year, month, day] = d.date.split('-');
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const dateText = `${months[Number(month) - 1]} ${Number(day)}, ${year}`;
+    return makeDoc({
+      title: d.headerName + ' | Cases | Westlaw Advantage',
+      href: input.context.url,
+      body: el('body', {},
+        el('div', { id: 'co_docHeaderTitleLine' }, d.headerName),
+        el('div', { id: 'co_docHeaderCitation' },
+          ...[d.rawCourt, dateText, ...d.citations.map(c => c.raw)].map(text => el('li', {}, text))),
+        el('div', { class: 'co_docketBlock' }, d.dockets.join('; ')),
+        el('script', {}, 'var config = ' + JSON.stringify({
+          DocumentGuid: input.context.guid, ContentType: 'Cases',
+          ...(withSecrets ? { PageEventIdentifier: 'TEST-PEI-0001', ResourceToken: 'TEST-RT-0001' } : {}),
+          RelatedInfo: 'relatedinfo.next.westlaw.com'
+        }) + ';'))
+    });
+  }
+
+  function responseFor(envelope) {
+    return jsonResponse({ responses: Object.entries(envelope.styles).map(([styleId, style]) => ({
+      request: { styleId },
+      forms: [
+        ...['long', 'enhanced'].filter(name => style[name]).map(name => ({ name, text: { 'text/plain': style[name] } })),
+        ...(style.shorts || []).map(text => ({ name: 'short', text: { 'text/plain': text } }))
+      ]
+    })) });
+  }
+
+  async function save(input, { withSecrets = true, failure, requestCount = 2 } = {}) {
+    const zotero = makeFakeZotero();
+    const requests = [];
+    const request = async (url, options) => {
+      const parsed = new URL(url);
+      assert.equal(parsed.origin, 'https://1.next.westlaw.com');
+      assert.equal(parsed.pathname, '/RelatedInfo/v2/citestyles/' + input.context.guid);
+      assert.equal(options.responseType, 'text');
+      const recipe = parsed.searchParams.get('parallelCiteRule');
+      assert.ok(['westReporterOnly', 'allReporter'].includes(recipe), 'unexpected request recipe');
+      requests.push(recipe);
+      if (failure instanceof Error) throw failure;
+      return failure || responseFor(recipe === 'westReporterOnly' ? input.svcA.envelope : input.svcB.envelope);
+    };
+    // The VM has no fetch, XMLHttpRequest, require, browser, or live Zotero connection.
+    const context = loadBuiltFile(zotero, request);
+    const doc = documentFor(input, withSecrets);
+    assert.equal(context.detectWeb(doc, doc.location.href), 'case');
+    await context.doWeb(doc, doc.location.href);
+    assert.equal(zotero.items.length, 1, 'exactly one completed item');
+    assert.equal(requests.length, withSecrets ? requestCount : 0);
+    const item = JSON.parse(JSON.stringify(zotero.items[0]));
+    for (const key of ['attachments', 'notes']) assert.deepEqual(item[key], []);
+    assert.equal(item.url, input.context.url);
+    assert.match(item.extra, /Westlaw build: [a-f0-9]{64}/);
+    assert.match(item.extra, /Westlaw import run: [a-z0-9]+-[a-z0-9]+/);
+    assert.doesNotMatch(JSON.stringify([item, zotero.debugStrings]), /TEST-PEI|TEST-RT/);
+    return { ...item, uri: input.context.guid };
+  }
+
+  function assertCite(actual, wanted) {
+    assert.equal(actual.replace(/\u2019/g, "'").replace(/\.$/, ''), wanted.replace(/\.$/, ''));
+  }
+
+  for (const [id, input, first, pin, pinned, short] of cases) {
+    it(id + ' saves fields and renders first, pinpoint, short, and Id. citations', async function() {
+      const item = await save(input);
+      if (id === 'G2' || id === 'G3') {
+        // These golden inputs deliberately contain an empty Westlaw style.
+        assert.match(item.extra, /Westlaw status: unverified-profile/);
+        assert.match(item.extra, /Westlaw review: missing-form:westlaw:long/);
+      } else assert.match(item.extra, /Westlaw status: validated-profile/);
+      if (fields[id]) {
+        for (const key of ['itemType', 'caseName', 'court', 'dateDecided', 'reporter', 'reporterVolume', 'firstPage', 'history', 'shortTitle']) {
+          assert.equal(item[key] || '', fields[id][key], id + ' ' + key);
+        }
+      }
+      const other = await save(id === 'G1' ? G4 : G1);
+      const citations = render([item, other], [
+        [{ id: item.uri }], [{ id: other.uri }],
+        [{ id: item.uri, locator: pin }], [{ id: item.uri, locator: pin }]
+      ]);
+      assertCite(citations[0].text, first);
+      assertCite(citations[2].text, short);
+      assertCite(citations[3].text, 'Id.');
+      assert.ok(citations[0].html.length > 0);
+      if (pinned) assertCite(render([item], [[{ id: item.uri, locator: pin }]])[0].text, pinned);
+    });
+  }
+
+  for (const [name, options] of [
+    ['missing service credentials', { withSecrets: false }],
+    ['expired login', { failure: { status: 401, body: '', headers: {} }, requestCount: 1 }],
+    ['rate limit', { failure: { status: 429, body: '', headers: {} }, requestCount: 1 }],
+    ['network failure', { failure: new Error('offline'), requestCount: 1 }],
+    ['malformed JSON', { failure: { status: 200, body: '{', headers: { 'content-type': 'application/json' } } }]
+  ]) {
+    it(name + ' preserves a renderable DOM item with a review flag', async function() {
+      const item = await save(G1, options);
+      assert.doesNotMatch(item.extra, /Westlaw status: validated-profile/);
+      assert.ok(item.tags.some(t => t.tag === 'Westlaw: needs citation review'));
+      assert.equal(item.caseName, 'Sanchez v. Liggett & Myers, Inc.');
+      assertCite(render([item], [[{ id: item.uri }]])[0].text, expected.E1);
+    });
+  }
+});
 
 describe("translator - detectWeb", function() {
   it("returns 'case' for a ready case page", function() {
