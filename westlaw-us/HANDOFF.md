@@ -18,7 +18,7 @@ node --test "westlaw-us/src/test/*.test.mjs"        # 723/723 pass
 node --test "westlaw-us/m0/csl/test/*.test.mjs"     # 28/28 pass
 node --test "westlaw-us/m0/probe/test/*.test.mjs"   # 23/23 pass
 node --test "westlaw-us/tools/test/*.test.mjs"      # 50/50 pass
-node westlaw-us/tools/check-private-data.mjs        # fail=0 warn=6 (legacy tracked westlaw-samples JSON)
+node westlaw-us/tools/check-private-data.mjs        # scope to publication files; no sample-path exceptions
 node westlaw-us/tools/build-translator.mjs          # → westlaw-us/dist/Westlaw Advantage US.js (stable translatorID 9abca805-707d-4064-958f-e08ac37f0862)
 ```
 

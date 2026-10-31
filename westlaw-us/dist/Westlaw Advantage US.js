@@ -9,7 +9,7 @@
 	"inRepository": false,
 	"translatorType": 4,
 	"browserSupport": "gcsibv",
-	"lastUpdated": "2026-10-30 22:57:00"
+	"lastUpdated": "2026-10-31 00:10:00"
 }
 
 /*
@@ -2488,6 +2488,9 @@ function wlDomReadPageContext(doc, url) {
     ok: ok,
     config: config,
     secrets: secrets,
+    credentialValues: rtValues.concat(peiValues).filter(function(value, index, values) {
+      return value.length > 0 && values.indexOf(value) === index;
+    }),
     ambiguous: ambiguous,
     reviewReasons: reviewReasons
   };
@@ -3099,9 +3102,22 @@ function wlMapToZoteroFields(rec, opts) {
   return result;
 }
 
-function wlMapValidateOutgoing(fields) {
+function wlMapContainsCredential(value, credentialValues) {
+  if (typeof value === "string") {
+    return credentialValues.some(function(token) {
+      return typeof token === "string" && token.length > 0 && value.indexOf(token) !== -1;
+    });
+  }
+  if (!value || typeof value !== "object") return false;
+  return Object.keys(value).some(function(key) {
+    return wlMapContainsCredential(value[key], credentialValues);
+  });
+}
+
+function wlMapValidateOutgoing(fields, credentialValues) {
   var problems = [];
   if (!fields || typeof fields !== "object") return { ok: false, problems: ["bad-fields"] };
+  if (credentialValues && wlMapContainsCredential(fields, credentialValues)) problems.push("captured-credential");
   if (fields.itemType !== "case") problems.push("invalid-item-type:itemType");
   if (typeof fields.caseName !== "string" || !wlMapStripWatermark(fields.caseName)) problems.push("required:caseName");
   var scalarKeys = [
@@ -3890,8 +3906,8 @@ function wlRecReconcile(input) {
 }
 
 /* ---- translator.js ---- */
-var wlTrVersion = "0.3.5";
-var wlTrBuild = "5a44e640f478182dbe36d4cf8a3e5eaafb392bc63f4526f24a7506f767f19d0f";
+var wlTrVersion = "0.3.6";
+var wlTrBuild = "abfd44d133dac3f5b0f2481e1d8e4c65a2845f80ce94a6933e433ba6ec6af2dd";
 
 function wlTrDetectWeb(doc, url) {
   var readiness = wlDomInspectCaseReadiness(doc, url);
@@ -4099,7 +4115,8 @@ async function wlTrDoWeb(doc, url) {
   var fields = wlMapToZoteroFields(rec, { version: wlTrVersion, build: wlTrBuild, importRun: importRun });
 
   // 7. Reject unsafe values before they reach Zotero; retain bounded reason codes.
-  var validation = wlMapValidateOutgoing(fields);
+  var validation = wlMapValidateOutgoing(fields, frozenContext.credentialValues);
+  if (validation.problems.indexOf("captured-credential") !== -1) throw new Error("Westlaw: captured credential in outgoing metadata");
   if (!validation.ok) {
     for (var i = 0; i < validation.problems.length; i++) {
       var problem = validation.problems[i];
@@ -4120,7 +4137,7 @@ async function wlTrDoWeb(doc, url) {
     fields.extra = fields.extra.replace("Westlaw status: validated-profile", "Westlaw status: unverified-profile");
     rec.status = "unverified-profile";
     if (!fields.tags.some(function(t) { return t.tag === "Westlaw: needs citation review"; })) fields.tags.push({ tag: "Westlaw: needs citation review" });
-    if (!wlMapValidateOutgoing(fields).ok) throw new Error("Westlaw: invalid outgoing metadata");
+    if (!wlMapValidateOutgoing(fields, frozenContext.credentialValues).ok) throw new Error("Westlaw: invalid outgoing metadata");
   }
 
   // 8. Debug log (bounded codes only — no URLs, tokens, names, text)

@@ -1,6 +1,6 @@
 # Common rules for every Ling worker / reviewer (read first)
 
-Workspace root: `M:/Coding_Projects/_zotero-research/` (a Git repo, branch `main`). Run commands from this root.
+Run from the repository root.
 Plan: `reports/20-ASTRA-ARCHITECTURE.md` (read the sections named in your brief).
 
 HARD RULES
@@ -8,8 +8,7 @@ HARD RULES
    Never edit upstream clones (`zotero/`, `zotero-connectors/`, `translate/`, `utilities/`, `translators/`, `styles/`),
    `reports/`, `.gitignore`, `westlaw-us/LEDGER.md`, `westlaw-us/golden/`, `westlaw-us/tasks/`, or another worker's directory.
 2. Do NOT open, read, grep, copy, or quote `westlaw-samples/*.html`, `westlaw-samples/*.txt`, or anything under
-   `westlaw-us/.private/`. They contain private opinion text / account identifiers. `westlaw-samples/cite-matrix/*.json`
-   may be read ONLY if your brief allows it.
+   `westlaw-us/.private/`. They contain private opinion text / account identifiers. All real sample JSON remains private; use synthetic fixtures in `westlaw-us/src/test/fixtures/`.
 3. No network access (no fetch/curl/npm install/git fetch). No new npm dependencies. Node 22 built-ins only.
 4. No `git add`, `git commit`, `git stash`, `git reset`, `git checkout`, `git clean`, or any history/state mutation.
 5. Never contact Westlaw, Chrome, the installed Zotero app, or the user's Zotero data directory (`~/Zotero`, AppData).

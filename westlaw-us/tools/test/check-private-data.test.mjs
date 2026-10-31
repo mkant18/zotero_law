@@ -135,46 +135,46 @@ describe('R1 path-based rules', () => {
     assert(r.stdout.includes('FAIL R1 westlaw-samples/config.json'), r.stdout);
   });
 
-  test('WARN: legacy westlaw-samples/citations-settings.json', () => {
+  test('FAIL: formerly grandfathered westlaw-samples/citations-settings.json', () => {
     writeFile('westlaw-samples/citations-settings.json', '{}');
     const r = runChecker('--root', tmpDir);
-    assert(r.status === 0, `expected exit 0 got ${r.status}`);
-    assert(r.stdout.includes('WARN R1 westlaw-samples/citations-settings.json'), r.stdout);
+    assert(r.status === 1, `expected exit 1 got ${r.status}`);
+    assert(r.stdout.includes('FAIL R1 westlaw-samples/citations-settings.json'), r.stdout);
   });
 
-  test('WARN: legacy westlaw-samples/cite-matrix/5th-cir.json', () => {
+  test('FAIL: formerly grandfathered westlaw-samples/cite-matrix/5th-cir.json', () => {
     writeFile('westlaw-samples/cite-matrix/5th-cir.json', '{}');
     const r = runChecker('--root', tmpDir);
-    assert(r.status === 0, `expected exit 0 got ${r.status}`);
-    assert(r.stdout.includes('WARN R1 westlaw-samples/cite-matrix/5th-cir.json'), r.stdout);
+    assert(r.status === 1, `expected exit 1 got ${r.status}`);
+    assert(r.stdout.includes('FAIL R1 westlaw-samples/cite-matrix/5th-cir.json'), r.stdout);
   });
 
-  test('WARN: legacy westlaw-samples/cite-matrix/dc-cir.json', () => {
+  test('FAIL: formerly grandfathered westlaw-samples/cite-matrix/dc-cir.json', () => {
     writeFile('westlaw-samples/cite-matrix/dc-cir.json', '{}');
     const r = runChecker('--root', tmpDir);
-    assert(r.status === 0, `expected exit 0 got ${r.status}`);
-    assert(r.stdout.includes('WARN R1 westlaw-samples/cite-matrix/dc-cir.json'), r.stdout);
+    assert(r.status === 1, `expected exit 1 got ${r.status}`);
+    assert(r.stdout.includes('FAIL R1 westlaw-samples/cite-matrix/dc-cir.json'), r.stdout);
   });
 
-  test('WARN: legacy westlaw-samples/cite-matrix/ddc.json', () => {
+  test('FAIL: formerly grandfathered westlaw-samples/cite-matrix/ddc.json', () => {
     writeFile('westlaw-samples/cite-matrix/ddc.json', '{}');
     const r = runChecker('--root', tmpDir);
-    assert(r.status === 0, `expected exit 0 got ${r.status}`);
-    assert(r.stdout.includes('WARN R1 westlaw-samples/cite-matrix/ddc.json'), r.stdout);
+    assert(r.status === 1, `expected exit 1 got ${r.status}`);
+    assert(r.stdout.includes('FAIL R1 westlaw-samples/cite-matrix/ddc.json'), r.stdout);
   });
 
-  test('WARN: legacy westlaw-samples/cite-matrix/ny-appdiv.json', () => {
+  test('FAIL: formerly grandfathered westlaw-samples/cite-matrix/ny-appdiv.json', () => {
     writeFile('westlaw-samples/cite-matrix/ny-appdiv.json', '{}');
     const r = runChecker('--root', tmpDir);
-    assert(r.status === 0, `expected exit 0 got ${r.status}`);
-    assert(r.stdout.includes('WARN R1 westlaw-samples/cite-matrix/ny-appdiv.json'), r.stdout);
+    assert(r.status === 1, `expected exit 1 got ${r.status}`);
+    assert(r.stdout.includes('FAIL R1 westlaw-samples/cite-matrix/ny-appdiv.json'), r.stdout);
   });
 
-  test('WARN: legacy westlaw-samples/cite-matrix/tex-app.json', () => {
+  test('FAIL: formerly grandfathered westlaw-samples/cite-matrix/tex-app.json', () => {
     writeFile('westlaw-samples/cite-matrix/tex-app.json', '{}');
     const r = runChecker('--root', tmpDir);
-    assert(r.status === 0, `expected exit 0 got ${r.status}`);
-    assert(r.stdout.includes('WARN R1 westlaw-samples/cite-matrix/tex-app.json'), r.stdout);
+    assert(r.status === 1, `expected exit 1 got ${r.status}`);
+    assert(r.stdout.includes('FAIL R1 westlaw-samples/cite-matrix/tex-app.json'), r.stdout);
   });
 });
 

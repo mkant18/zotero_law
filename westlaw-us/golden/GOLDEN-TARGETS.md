@@ -3,7 +3,7 @@
 Source: `reports/20-ASTRA-ARCHITECTURE.md` §11 "Golden citation examples". Law-review CSL may add a terminal
 period; first full law-review case names remain roman, short names italicized. Strings below are citation bodies (plain text). G1/G4 received bounded independent review in [citation audit](../../reports/zotero-citation-audit-2026-10-11.md); direct Bluebook edition/table access remains unresolved.
 
-Status labels: **[V]** observed in a recorded service matrix (`westlaw-samples/cite-matrix/*.json`, private);
+Status labels: **[V]** observed in a recorded service matrix (historical private service matrix; current tests use synthetic fixtures in `westlaw-us/src/test/fixtures/`);
 **[P]** proposed/illustrative, not a Westlaw fixture; **[U]** unverified recipe; **[S]** synthetic/fictional.
 "Reviewed" = independently checked against Bluebook conventions by a reviewer who did not author it. Westlaw
 output alone is NOT correctness evidence.

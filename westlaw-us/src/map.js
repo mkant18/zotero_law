@@ -204,9 +204,22 @@ function wlMapToZoteroFields(rec, opts) {
   return result;
 }
 
-function wlMapValidateOutgoing(fields) {
+function wlMapContainsCredential(value, credentialValues) {
+  if (typeof value === "string") {
+    return credentialValues.some(function(token) {
+      return typeof token === "string" && token.length > 0 && value.indexOf(token) !== -1;
+    });
+  }
+  if (!value || typeof value !== "object") return false;
+  return Object.keys(value).some(function(key) {
+    return wlMapContainsCredential(value[key], credentialValues);
+  });
+}
+
+function wlMapValidateOutgoing(fields, credentialValues) {
   var problems = [];
   if (!fields || typeof fields !== "object") return { ok: false, problems: ["bad-fields"] };
+  if (credentialValues && wlMapContainsCredential(fields, credentialValues)) problems.push("captured-credential");
   if (fields.itemType !== "case") problems.push("invalid-item-type:itemType");
   if (typeof fields.caseName !== "string" || !wlMapStripWatermark(fields.caseName)) problems.push("required:caseName");
   var scalarKeys = [

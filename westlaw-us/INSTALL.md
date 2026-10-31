@@ -2,15 +2,17 @@
 
 ## Quick Start
 
-### Install the plugin beta (recommended)
+### Install v1.1 (recommended)
 
-Download the `.xpi` from https://github.com/mkant18/zotero_law/releases.
+Download [v1.1 (1.1.0)](https://github.com/mkant18/zotero_law/releases/download/v1.1.0/westlaw-advantage-us-1.1.0.xpi).
 In Zotero: Tools → Plugins → gear → Install Plugin From File. Select the XPI.
 The plugin installs the translator and citation style, backing up replaced files
 in `<datadir>/westlaw-us-plugin-backups/`. Refresh the Westlaw browser tab.
 Use Zotero Connector while Zotero desktop runs. Select **Bluebook Law Review
 (Westlaw US local)** in citation preferences. See `plugin/RELEASE-NOTES.md` for
 compatibility and known metadata defects. The repository and downloads are public.
+
+v1.1 blocks captured credentials in outgoing metadata and removes real samples from current source. Historical Git copies remain; see [privacy assessment](../reports/v1.1/HISTORY-PRIVACY.md). Existing items require manual review. Fresh native acceptance and LibreOffice remain unverified. The beta update URL continues to deliver current releases.
 
 Build the plugin with `python scripts/build-plugin.py`. The manual translator
 installation below remains available without the plugin.
@@ -22,7 +24,7 @@ From the workspace root:
 node westlaw-us/tools/build-translator.mjs
 ```
 
-Output: `westlaw-us/dist/Westlaw Advantage US.js` (single translator file, stable ID `9abca805-707d-4064-958f-e08ac37f0862`, translator version `0.3.5`).
+Output: `westlaw-us/dist/Westlaw Advantage US.js` (single translator file, stable ID `9abca805-707d-4064-958f-e08ac37f0862`, translator version `0.3.6`).
 
 ### 2. Locate Zotero data directory
 

@@ -10,7 +10,7 @@ You are Astra, the architecture advisor. Produce a PLAN / ARCHITECTURE (no imple
 ## Read these first (all evidence-backed)
 1. `M:/Coding_Projects/_zotero-research/reports/00-SYNTHESIS.md` — how Zotero, the connector, translators, the `case` schema → CSL mapping, and the Bluebook CSL styles work; comparable translators (Lexis+, CourtListener, Google Scholar, WestLaw UK).
 2. `M:/Coding_Projects/_zotero-research/reports/10-WESTLAW-LIVE-FINDINGS.md` — live Westlaw page anatomy and the Copy-with-Reference citation service, including the full option map and test matrix (§5–6).
-3. Raw evidence as needed: `westlaw-samples/*.html` (5 cases + 1 secondary source), `westlaw-samples/cite-matrix/*.json`, `westlaw-samples/citations-settings.json`; source clones `zotero/`, `zotero-connectors/`, `translate/`, `translators/`, `styles/`, `utilities/`.
+3. Synthetic test evidence: `westlaw-us/src/test/fixtures/`. Real page/sample/preference captures remain private and are not required; source clones `zotero/`, `zotero-connectors/`, `translate/`, `translators/`, `styles/`, `utilities/`.
 4. Supporting scout reports: `reports/A-*.md` (connector architecture), `E-*.md` (CSL/Bluebook + dev workflow), `D-*.md` (legal translators), `C1/C2` (Westlaw background, ToS history).
 
 ## Key facts you must design around

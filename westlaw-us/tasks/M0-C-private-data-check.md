@@ -20,8 +20,7 @@ commit-eligible (tracked or untracked-not-ignored) files. It must never print th
 
 ## Rules
 - R1 paths:
-  - FAIL: any candidate under `westlaw-us/.private/`, `westlaw-us/.cache/`, any `/out/` directory under `westlaw-us/`, `*.har`, `*.har.json`, `westlaw-samples/*.html`, `westlaw-samples/*.txt`, and any other `westlaw-samples/**` path EXCEPT the six legacy tracked files below.
-  - WARN (legacy, already tracked before the ignore rule): `westlaw-samples/citations-settings.json`, `westlaw-samples/cite-matrix/{5th-cir,dc-cir,ddc,ny-appdiv,tex-app}.json`.
+  - FAIL: any candidate under `westlaw-us/.private/`, `westlaw-us/.cache/`, any `/out/` directory under `westlaw-us/`, `*.har`, `*.har.json`, `westlaw-samples/*.html`, `westlaw-samples/*.txt`, and any other `westlaw-samples/**` path.
 - R2 zero-width watermark characters U+200B–U+200F, U+2060–U+2064, U+FEFF (literal characters, not `\u` escape text) in any text file → FAIL with line + code point. (A UTF-8 BOM at byte 0 of a file counts too.)
 - R3 secret-like values (text files):
   - JSON-ish `"ResourceToken"`/`"PageEventIdentifier"`/`"x-cobalt-rtid"`/`"x-cobalt-pcid"` followed by `:` and a quoted string literal value, or JS object literal `'x-cobalt-rtid': '<literal>'` / `x-cobalt-pcid: "<literal>"` forms → FAIL unless the value matches `^(PLACEHOLDER|TEST|FAKE|REDACTED|EXAMPLE)[A-Za-z0-9._-]*$` (case-insensitive) or is empty. Code that assigns a variable/expression (not a string literal) is fine.

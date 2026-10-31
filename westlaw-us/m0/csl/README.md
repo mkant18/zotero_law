@@ -42,7 +42,7 @@ python westlaw-us/m0/csl/harness/validate.py westlaw-us/m0/csl/bluebook-law-revi
 node --test "westlaw-us/m0/csl/test/*.test.mjs"
 ```
 
-Run from the workspace root (`C:/Users/micha/Documents/ChatGPT/Zotero_Law`). Python with `lxml` is required. The rendering harness validates the style before loading citeproc; malformed XML, official schema errors, and macro errors stop rendering. Set `CSL_PYTHON` to a Python executable when `python` on PATH is unavailable. The workspace's system Python has lxml 6.1.2; Codex's bundled Python has lxml 6.1.1.
+Run from the workspace root. Python with `lxml` is required. The rendering harness validates the style before loading citeproc; malformed XML, official schema errors, and macro errors stop rendering. Set `CSL_PYTHON` to a Python executable when `python` on PATH is unavailable. The workspace's system Python has lxml 6.1.2; Codex's bundled Python has lxml 6.1.1.
 
 ## Validation source and repair
 

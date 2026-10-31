@@ -1,4 +1,18 @@
-# Beta v.1 — Westlaw Advantage US
+# v1.1 — Westlaw Advantage US
+
+Package **1.1.0**, translator **0.3.6**. Michael Kanter / Harvard Law School attribution, AGPL notices and upstream CSL credits/licenses are preserved.
+
+All outgoing strings are checked against nonempty captured ResourceToken and PageEventIdentifier values before persistence, including required/optional metadata, Extra, creators and tags. Contaminated imports abort with a fixed error; valid imports remain supported. Partial and ambiguous credentials are protected during DOM fallback. Existing label-based checks remain. This prevents the reproduced conditional leak; it is not evidence of a prior credential incident, and does not repair already saved metadata or cover uncaptured credential forms.
+
+CI now pins supported security release Node.js 22.23.4, preserving SHA-pinned actions, read-only permissions and disabled persisted checkout credentials. The six real sample/preference JSON files are removed from current tracked source, with private local originals preserved. All sample paths fail privacy checks. Historical Git copies and potential external copies remain; see [assessment and unexecuted cleanup plan](../reports/v1.1/HISTORY-PRIVACY.md).
+
+[Download v1.1](https://github.com/mkant18/zotero_law/releases/download/v1.1.0/westlaw-advantage-us-1.1.0.xpi). Install through Zotero → Tools → Plugins → gear → Install Plugin From File. The existing moving beta update feed now points to this version; manual installation remains available. Earlier versioned releases and tags are preserved.
+
+Fresh verification covers focused synthetic entry-point/privacy tests, generated translator, extracted final XPI translator, archive allowlist/hashes, publication scans and independently downloaded assets/feed. The full suite, equivalent aggregate and manual CI were not run. No plugin install/reload, native library changes or authenticated Westlaw/browser session was used. Zotero 7–10 compatibility remains declared; this package has no fresh Westlaw → Connector → Zotero → Word acceptance, and LibreOffice remains unverified. Review citation output; complete Bluebook compliance is not claimed. See [verification](../reports/v1.1/VERIFICATION.md).
+
+---
+
+# Beta v.1 — historical release
 
 Package version: **0.1.1beta1**. Bundles translator **0.3.5** with a source-derived build identifier and the local Bluebook Law Review CSL style. This version advances beyond all earlier 0.1.0 beta builds; no existing tag or versioned release is replaced.
 

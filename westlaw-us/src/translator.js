@@ -1,4 +1,4 @@
-var wlTrVersion = "0.3.5";
+var wlTrVersion = "0.3.6";
 var wlTrBuild = "source-unbuilt";
 
 function wlTrDetectWeb(doc, url) {
@@ -207,7 +207,8 @@ async function wlTrDoWeb(doc, url) {
   var fields = wlMapToZoteroFields(rec, { version: wlTrVersion, build: wlTrBuild, importRun: importRun });
 
   // 7. Reject unsafe values before they reach Zotero; retain bounded reason codes.
-  var validation = wlMapValidateOutgoing(fields);
+  var validation = wlMapValidateOutgoing(fields, frozenContext.credentialValues);
+  if (validation.problems.indexOf("captured-credential") !== -1) throw new Error("Westlaw: captured credential in outgoing metadata");
   if (!validation.ok) {
     for (var i = 0; i < validation.problems.length; i++) {
       var problem = validation.problems[i];
@@ -228,7 +229,7 @@ async function wlTrDoWeb(doc, url) {
     fields.extra = fields.extra.replace("Westlaw status: validated-profile", "Westlaw status: unverified-profile");
     rec.status = "unverified-profile";
     if (!fields.tags.some(function(t) { return t.tag === "Westlaw: needs citation review"; })) fields.tags.push({ tag: "Westlaw: needs citation review" });
-    if (!wlMapValidateOutgoing(fields).ok) throw new Error("Westlaw: invalid outgoing metadata");
+    if (!wlMapValidateOutgoing(fields, frozenContext.credentialValues).ok) throw new Error("Westlaw: invalid outgoing metadata");
   }
 
   // 8. Debug log (bounded codes only — no URLs, tokens, names, text)

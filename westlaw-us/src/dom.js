@@ -334,6 +334,9 @@ function wlDomReadPageContext(doc, url) {
     ok: ok,
     config: config,
     secrets: secrets,
+    credentialValues: rtValues.concat(peiValues).filter(function(value, index, values) {
+      return value.length > 0 && values.indexOf(value) === index;
+    }),
     ambiguous: ambiguous,
     reviewReasons: reviewReasons
   };

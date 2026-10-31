@@ -1,0 +1,44 @@
+[
+  {
+    "ref": "refs/heads/feat/westlaw-offline-prototype",
+    "object": "b276471c16675b2d3a7c0680ead2d1f33a0eff61",
+    "sampleChangeCommits": [
+      "a96c117989ee280af149c5e392cef18b8b45cd12"
+    ]
+  },
+  {
+    "ref": "refs/heads/main",
+    "object": "f25b7faa7b12d228e7dfeb848799e637ad22c1e3",
+    "sampleChangeCommits": [
+      "a96c117989ee280af149c5e392cef18b8b45cd12"
+    ]
+  },
+  {
+    "ref": "refs/heads/release/westlaw-plugin-0.1.0beta1",
+    "object": "2062a770c959754527d432084d746a79b00e8e3e",
+    "sampleChangeCommits": [
+      "a96c117989ee280af149c5e392cef18b8b45cd12"
+    ]
+  },
+  {
+    "ref": "refs/tags/beta",
+    "object": "6bca2706ba7818688efb10c058e9886b77ce9eef",
+    "sampleChangeCommits": [
+      "a96c117989ee280af149c5e392cef18b8b45cd12"
+    ]
+  },
+  {
+    "ref": "refs/tags/v0.1.0beta1",
+    "object": "6bca2706ba7818688efb10c058e9886b77ce9eef",
+    "sampleChangeCommits": [
+      "a96c117989ee280af149c5e392cef18b8b45cd12"
+    ]
+  },
+  {
+    "ref": "refs/tags/v0.1.1beta1",
+    "object": "1f13fb6dd571ea4175af8a77ca49ef064db9abdb",
+    "sampleChangeCommits": [
+      "a96c117989ee280af149c5e392cef18b8b45cd12"
+    ]
+  }
+]

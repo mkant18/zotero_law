@@ -11,15 +11,6 @@ const ZERO_WIDTH_RANGES = [
 ];
 const BOM_CODE_POINT = 0xfeff;
 
-const LEGACY_WARN_FILES = new Set([
-  'westlaw-samples/citations-settings.json',
-  'westlaw-samples/cite-matrix/5th-cir.json',
-  'westlaw-samples/cite-matrix/dc-cir.json',
-  'westlaw-samples/cite-matrix/ddc.json',
-  'westlaw-samples/cite-matrix/ny-appdiv.json',
-  'westlaw-samples/cite-matrix/tex-app.json',
-]);
-
 const SECRET_KEYS = ['ResourceToken', 'PageEventIdentifier', 'x-cobalt-rtid', 'x-cobalt-pcid'];
 
 function parseArgs(argv) {
@@ -116,15 +107,7 @@ function checkR1(filePath) {
   }
 
   if (norm.startsWith('westlaw-samples/')) {
-    if (LEGACY_WARN_FILES.has(norm)) {
-      warnings.push({ path: norm, reason: 'legacy tracked file (pre-ignore-rule)' });
-    } else {
-      let reason;
-      if (norm.endsWith('.html')) reason = 'westlaw-samples HTML file';
-      else if (norm.endsWith('.txt')) reason = 'westlaw-samples text file';
-      else reason = 'westlaw-samples path (not legacy)';
-      failures.push({ path: norm, reason });
-    }
+    failures.push({ path: norm, reason: 'private westlaw-samples path' });
   }
 
   return { failures, warnings };

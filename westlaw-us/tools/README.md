@@ -41,13 +41,7 @@ FAIL for any candidate under:
 - `*.har` and `*.har.json` files
 - `westlaw-samples/*.html`, `westlaw-samples/*.txt`, and any other `westlaw-samples/**` path
 
-WARN (legacy, pre-ignore-rule) for the six tracked files:
-- `westlaw-samples/citations-settings.json`
-- `westlaw-samples/cite-matrix/5th-cir.json`
-- `westlaw-samples/cite-matrix/dc-cir.json`
-- `westlaw-samples/cite-matrix/ddc.json`
-- `westlaw-samples/cite-matrix/ny-appdiv.json`
-- `westlaw-samples/cite-matrix/tex-app.json`
+No sample paths are grandfathered. Keep local originals ignored.
 
 ### R2 — Zero-width watermark characters
 
@@ -76,4 +70,4 @@ FAIL for any candidate under `westlaw-us/` exceeding 1 000 000 bytes.
 
 ## Limitations
 
-This checker is a heuristic tool, not a DLP guarantee. It does not inspect Git history (only working-tree and index content). It may produce false positives or miss subtle data exfiltration patterns. The `westlaw-samples/` legacy WARN files are tracked before the ignore rule and will remain flagged as WARN until they are untracked or removed.
+This checker is a heuristic tool, not a DLP guarantee. It does not inspect Git history (only working-tree and index content). It may produce false positives or miss subtle data exfiltration patterns. All `westlaw-samples/` paths fail, including the six formerly grandfathered JSON files.

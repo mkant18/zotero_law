@@ -1,0 +1,14 @@
+{
+  "version": "1.1.0",
+  "sha256": "50551883b0952e215d238b33888ed55fc22664e17069ad8bd078013c8cb0dfd4",
+  "members": {
+    "LICENSE.txt": "17dce97378c8400b012d9b1b24de0b16262e840fcd57d5914d9b4d195fd51fee",
+    "bootstrap.js": "8349db7336b09bb9552b7185e73acc2048413bfe55333062de035af5dd0037d4",
+    "manifest.json": "965072d73cc96d27e503584836c9058bcedfb5df7af00fa768dc9fe752451eca",
+    "resources/Westlaw Advantage US.js": "c3e8f2fe1141962bf00c386406924c70bde734dd1f96973f8d0063f05005efed",
+    "resources/bluebook-law-review-westlaw-us.csl": "984b1d4f45bdfd1a8ef8474266c595aa94b3b7961317d6e7f3fbdc2314d57bd9"
+  },
+  "crc": "pass",
+  "feed": "pass",
+  "samplesAndPriorArchivesUnchanged": true
+}

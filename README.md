@@ -9,11 +9,11 @@ Cite with the bundled Bluebook Law Review style.
 
 By **[Michael Kanter](https://www.linkedin.com/in/michael-kanter) at Harvard Law School**.
 
-[![Release: Beta v.1](https://img.shields.io/badge/release-Beta_v.1-6D5EF5?style=flat-square)](https://github.com/mkant18/zotero_law/releases/tag/v0.1.1beta1)
+[![Release: v1.1](https://img.shields.io/badge/release-v1.1-6D5EF5?style=flat-square)](https://github.com/mkant18/zotero_law/releases/tag/v1.1.0)
 [![Declared compatibility: Zotero 7–10](https://img.shields.io/badge/Zotero-7%E2%80%9310-CC2936?style=flat-square)](#compatibility-and-beta-limits)
 [![Capture: metadata only](https://img.shields.io/badge/capture-metadata_only-167D7F?style=flat-square)](#privacy)
 
-**[Download Beta v.1](https://github.com/mkant18/zotero_law/releases/download/v0.1.1beta1/westlaw-advantage-us-0.1.1beta1.xpi)** · **[Installation guide](westlaw-us/INSTALL.md)** · **[Report an issue](https://github.com/mkant18/zotero_law/issues)**
+**[Download v1.1](https://github.com/mkant18/zotero_law/releases/download/v1.1.0/westlaw-advantage-us-1.1.0.xpi)** · **[Installation guide](westlaw-us/INSTALL.md)** · **[Report an issue](https://github.com/mkant18/zotero_law/issues)**
 
 [Features](#features) · [Quick start](#quick-start) · [What’s new](#whats-new) · [Compatibility](#compatibility-and-beta-limits) · [Development](#development)
 
@@ -39,7 +39,7 @@ One Zotero plugin bundles a Westlaw case translator and a local Bluebook CSL sty
 
 **You’ll need:** Zotero desktop, Zotero Connector in your browser, and an active Westlaw subscription.
 
-1. **[Download the Beta v.1 plugin](https://github.com/mkant18/zotero_law/releases/download/v0.1.1beta1/westlaw-advantage-us-0.1.1beta1.xpi)** (`.xpi`).
+1. **[Download the v1.1 plugin](https://github.com/mkant18/zotero_law/releases/download/v1.1.0/westlaw-advantage-us-1.1.0.xpi)** (`.xpi`).
 2. In Zotero, open **Tools → Plugins → gear → Install Plugin From File** and select the downloaded file.
 3. Keep Zotero desktop running, refresh a Westlaw US case page, and save it with **Zotero Connector**.
 4. Select **Bluebook Law Review (Westlaw US local)** when citing.
@@ -51,22 +51,21 @@ The plugin backs up replaced translator/style files. Disabling or removing it re
 
 ## What’s new
 
-**Beta v.1** · Package `0.1.1beta1` · Translator `0.3.5`
+**v1.1** · Package `1.1.0` · Translator `0.3.6`
 
-- **Better author metadata:** structured majority authors, verified linked-profile enrichment, and unambiguous surname-only bylines.
-- **More precise case fields:** improved official-reporter selection, docket retention, court conflict checks, and full decision dates for Texas WL citations.
-- **Stronger validation:** required-metadata checks and useful fallback metadata when citation-service requests fail.
-- **Safer packaging:** staged builds, checksums, and rollback of partial output replacement.
+- **Credential persistence guard:** every outgoing item string is checked against captured ResourceToken and PageEventIdentifier values, including Extra, creators and tags. A contaminated import stops before an item is created.
+- **Patched CI runtime:** Node.js is pinned to supported security release `22.23.4`; action SHA pins and read-only permissions remain.
+- **Private samples removed:** six real sample/preference files are no longer tracked. Privacy checks reject every sample path.
 
-This release combines the main, release, and offline-prototype histories with the latest reviewed repairs. The translator carries a source-derived build identifier; the package advances beyond `0.1.0beta4`. Earlier published releases remain available.
+Earlier versioned releases remain available. Removing samples from current source does not erase Git history, old tags or external copies. See the [historical privacy assessment](reports/v1.1/HISTORY-PRIVACY.md). Previously saved metadata is not repaired automatically.
 
 [Read the release notes →](plugin/RELEASE-NOTES.md)
 
 ## Compatibility and beta limits
 
-**Zotero 7–10 compatibility is declared. This merged package has not had a fresh native Westlaw → Connector → Zotero → Word acceptance run.**
+**Zotero 7–10 compatibility is declared. This package has not had a fresh native Westlaw → Connector → Zotero → Word acceptance run.**
 
-Earlier native acceptance used Zotero **10.0.6**, Chrome Connector, and a Word save/reopen/refresh journey. That evidence predates this package. Fresh checks cover bounded offline merge, built-translator, metadata, and packaging behavior. **LibreOffice remains unverified.** See the [release verification record](reports/beta-v1/VERIFICATION.md).
+Earlier native acceptance used Zotero **10.0.6**, Chrome Connector, and a Word save/reopen/refresh journey. That evidence predates this package. Fresh checks cover focused synthetic credential-persistence and privacy regressions, the generated translator, and the actual XPI. **LibreOffice remains unverified.** See the [release verification record](reports/v1.1/VERIFICATION.md).
 
 - Coverage is incomplete; complete Bluebook compliance is not claimed.
 - Changes to Westlaw pages may require translator updates.
@@ -75,9 +74,9 @@ Earlier native acceptance used Zotero **10.0.6**, Chrome Connector, and a Word s
 
 ## Privacy
 
-The translator saves **case metadata**, without opinion text, PDFs, snapshots, or attachments. User-triggered requests use the current Westlaw session to retrieve citation metadata and, when needed, a bounded number of linked judge profiles. Credentials are not bundled, persisted, or logged by the translator. Review and redact diagnostic logs before sharing them.
+The translator saves **case metadata**, without opinion text, PDFs, snapshots, or attachments. User-triggered requests use the current Westlaw session to retrieve citation metadata and, when needed, a bounded number of linked judge profiles. Captured credential values are blocked at the persistence boundary; diagnostics use bounded codes. This does not audit previously saved items or protect against credential forms that were not captured from the page. Review and redact diagnostic logs before sharing them.
 
-Private page captures, upstream clones, and generated release archives stay outside tracked source.
+Private page captures, sample originals, upstream clones, and generated release archives stay outside current tracked source. Historical sample exposure remains; see the assessment above.
 
 ## Development
 
@@ -87,7 +86,7 @@ Build requirements: **Python 3** and **Node.js**. No package installation is nee
 python scripts/build-plugin.py
 ```
 
-Build outputs in `dist/`: `westlaw-advantage-us-0.1.1beta1.xpi`, `updates.json`, and `SHA256SUMS.txt`.
+Build outputs in `dist/`: `westlaw-advantage-us-1.1.0.xpi`, `updates.json`, and `SHA256SUMS.txt`.
 
 <details>
 <summary><strong>Offline verification and prerequisites</strong></summary>
@@ -100,7 +99,7 @@ python scripts/test.py
 
 It runs translator, citation/schema, privacy, probe, plugin lifecycle, packaging, and runner checks. Citation tests need the upstream `zotero/` and `utilities/` clones from [clone-upstream.sh](scripts/clone-upstream.sh), Python `lxml`, and the pinned CSL locale described in the [ledger](westlaw-us/LEDGER.md). Tests use synthetic DOM fixtures and local response stubs; they do not establish native browser or word-processor compatibility. GitHub Actions is configured for Windows and Linux. A configured workflow does not establish a passing run.
 
-For this release, the previously recorded restriction against rerunning the full suite remains in force. See [release verification](reports/beta-v1/VERIFICATION.md) for the bounded checks actually performed.
+For this release, the previously recorded restriction against rerunning the full suite remains in force. See [release verification](reports/v1.1/VERIFICATION.md) for the bounded checks actually performed.
 
 </details>
 

@@ -103,3 +103,5 @@ Full suite (session 3 end): `node --test "westlaw-us/src/test/*.test.mjs"` → 7
    - M0-L live spike (`m0/MANUAL-SPIKE.md`): connector origin/cookie acceptance, fallback/snapshot behavior, installed-Zotero CSL proof.
    - Real fixtures for G3 (SCOTUS), G6 (state high court), G7 (real WL-only opinion).
    - Plan §14 questions.
+
+- Security release v1.1: six sample/preference JSON files untracked with local originals preserved. All sample paths now fail privacy checks. Historical copies remain in published refs; see reports/v1.1/HISTORY-PRIVACY.md. Runtime tests use synthetic fixtures and require none of these files.

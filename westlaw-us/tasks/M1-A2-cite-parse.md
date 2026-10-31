@@ -8,7 +8,7 @@ Read `westlaw-us/tasks/COMMON.md`, `westlaw-us/src/CONTRACT.md` first. Plan §4 
 ## Read-only inputs
 - `westlaw-us/src/text.js`, `westlaw-us/src/reporters.js` (use `wlTextClean`, `wlTextParseUSDate`, `wlRepFindCitations`, `wlRepCanonical`, `wlRepLookup` as GLOBALS — do not copy them).
 - `westlaw-us/src/test/helpers/load.mjs` — load with `loadModules(['text.js','reporters.js','cite-parse.js'])`.
-- **Allowed exception to COMMON rule 2:** you MAY read `westlaw-samples/cite-matrix/*.json` (and nothing else under `westlaw-samples/`). Use ONLY the `text` strings of `long`, `short1`, `short2`, `id`, and `enhancedDiffers` (citation text). Do NOT copy `guid`, `title`, or `html` values anywhere.
+Use synthetic service/citation fixtures under `westlaw-us/src/test/fixtures/`; real sample JSON is private and not required.
 
 ## Deliverables — `cite-parse.js` (prefix `wlCite`)
 1. `wlCiteParseStandardForm(text)` and `wlCiteParseTexasForm(text)` → `ParsedLongForm` (CONTRACT). Algorithm per plan §4:
